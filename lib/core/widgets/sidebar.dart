@@ -13,6 +13,7 @@ import '../constants/constants.dart';
 import '../theme/colors.dart';
 import '../theme/neumorphic.dart';
 import 'account_switcher.dart';
+import 'bnx_calculator.dart';
 
 class Sidebar extends ConsumerStatefulWidget {
   const Sidebar({super.key});
@@ -28,8 +29,15 @@ class _SidebarState extends ConsumerState<Sidebar> {
   Set<String> _pinnedUtilityNames = {'Calculator', 'Calendar', 'Contacts', 'Shortcuts', 'Translate', 'Lens OCR', 'Weather', 'News'};
 
   // Expanded sliding tab states
-  String? _expandedUtilityTab;
+  String? get _expandedUtilityTab => ref.watch(appUiProvider).activeLeftUtility;
+  set _expandedUtilityTab(String? val) {
+    ref.read(appUiProvider.notifier).setActiveLeftUtility(val);
+  }
   DateTime _selectedCalendarDate = DateTime.now();
+  final Map<String, List<String>> _calendarEvents = {
+    "2026-07-15": ["Meeting with Q3 Launch Team @ 2:30 PM"],
+    "2026-07-20": ["Project design review"],
+  };
 
   final List<String> _keepNotes = ['Buy groceries', 'Review Flutter PR', 'Gym at 6 PM'];
   final List<Map<String, String>> _contacts = [
@@ -63,6 +71,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
   late final TextEditingController _noteInputController;
   late final TextEditingController _chatInputController;
   late final TextEditingController _translateInputController;
+  late final TextEditingController _eventInputController;
 
   @override
   void initState() {
@@ -70,6 +79,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
     _noteInputController = TextEditingController();
     _chatInputController = TextEditingController();
     _translateInputController = TextEditingController();
+    _eventInputController = TextEditingController();
   }
 
   @override
@@ -77,6 +87,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
     _noteInputController.dispose();
     _chatInputController.dispose();
     _translateInputController.dispose();
+    _eventInputController.dispose();
     super.dispose();
   }
 
@@ -200,30 +211,19 @@ class _SidebarState extends ConsumerState<Sidebar> {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: isDark 
-                      ? [BNXColors.darkPrimary, Colors.blueAccent] 
-                      : [BNXColors.lightPrimary, Colors.blue],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: BNXColors.lightPrimary.withValues(alpha: 0.3),
+                    color: Colors.black.withValues(alpha: 0.15),
                     blurRadius: 4,
                     offset: const Offset(0, 2),
                   )
                 ],
               ),
-              alignment: Alignment.center,
-              child: const Text(
-                'B',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                  fontFamily: 'Montserrat',
+              child: ClipOval(
+                child: Image.asset(
+                  'assets/bit_tool_logo.png',
+                  fit: BoxFit.cover,
                 ),
               ),
             ),
@@ -954,163 +954,179 @@ class _SidebarState extends ConsumerState<Sidebar> {
       backgroundColor: isDark ? BNXColors.darkBg : BNXColors.lightSidebarBg,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       child: SafeArea(
-        child: Column(
+        child: Stack(
+          clipBehavior: Clip.none,
           children: [
-            buildLogo(),
-            buildUtilityIcons(),
-            _buildSlidingTabPanel(isDark),
-            buildComposeButton(),
-            Expanded(
-              child: ListView(
-                padding: EdgeInsets.zero,
-                children: [
-                  ...importantFolderTiles,
-                  
-                  if (!_isMoreExpanded)
-                    SidebarTile(
-                      icon: Icons.keyboard_arrow_down_rounded,
-                      selectedIcon: Icons.keyboard_arrow_down_rounded,
-                      title: 'Show more',
-                      isSelected: false,
-                      isCollapsed: isCollapsed,
-                      onTap: () {
-                        setState(() {
-                          _isMoreExpanded = true;
-                        });
-                      },
-                    )
-                  else ...[
-                    ...otherFolderTiles,
-                    SidebarTile(
-                      icon: Icons.keyboard_arrow_up_rounded,
-                      selectedIcon: Icons.keyboard_arrow_up_rounded,
-                      title: 'Show less',
-                      isSelected: false,
-                      isCollapsed: isCollapsed,
-                      onTap: () {
-                        setState(() {
-                          _isMoreExpanded = false;
-                        });
-                      },
+            Scrollbar(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: Column(
+                  children: [
+                    buildLogo(),
+                    buildUtilityIcons(),
+                    if (!isCollapsed) _buildSlidingTabPanel(isDark),
+                    buildComposeButton(),
+                    ...importantFolderTiles,
+                    
+                    if (!_isMoreExpanded)
+                      SidebarTile(
+                        icon: Icons.keyboard_arrow_down_rounded,
+                        selectedIcon: Icons.keyboard_arrow_down_rounded,
+                        title: 'Show more',
+                        isSelected: false,
+                        isCollapsed: isCollapsed,
+                        onTap: () {
+                          setState(() {
+                            _isMoreExpanded = true;
+                          });
+                        },
+                      )
+                    else ...[
+                      ...otherFolderTiles,
+                      SidebarTile(
+                        icon: Icons.keyboard_arrow_up_rounded,
+                        selectedIcon: Icons.keyboard_arrow_up_rounded,
+                        title: 'Show less',
+                        isSelected: false,
+                        isCollapsed: isCollapsed,
+                        onTap: () {
+                          setState(() {
+                            _isMoreExpanded = false;
+                          });
+                        },
+                      ),
+                    ],
+
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Divider(),
                     ),
-                  ],
 
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16.0),
-                    child: Divider(),
-                  ),
-
-                  // Chat Section Header
-                  if (!isCollapsed)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
-                      child: Text(
-                        'CHAT',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.white54 : BNXColors.lightTextSecondary,
-                          letterSpacing: 1.0,
+                    // Chat Section Header
+                    if (!isCollapsed)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
+                        child: Text(
+                          'CHAT',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.white54 : BNXColors.lightTextSecondary,
+                            letterSpacing: 1.0,
+                          ),
                         ),
                       ),
-                    ),
 
-                  // Colab special button (now in CHAT section)
-                  SidebarTile(
-                    icon: Icons.people_outline_rounded,
-                    selectedIcon: Icons.people_rounded,
-                    title: 'Colab',
-                    isSelected: uiState.activeFolder == 'Colab',
-                    isCollapsed: isCollapsed,
-                    onTap: () => navigateToFolder('Colab', '/colab'),
-                  ),
-
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16.0),
-                    child: Divider(),
-                  ),
-
-                  // Labels Section Header
-                  if (!isCollapsed)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'CUSTOM LABELS',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: isDark ? Colors.white54 : BNXColors.lightTextSecondary,
-                              letterSpacing: 1.0,
-                            ),
-                          ),
-                          GestureDetector(
-                            onTap: () => _showCreateLabelDialog(context),
-                            child: Icon(
-                              Icons.add,
-                              size: 16,
-                              color: isDark ? Colors.white54 : BNXColors.lightTextSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                  // List Labels
-                  ...customLabels.map((l) {
-                    final isSelected = uiState.activeLabel == l.name;
-                    return SidebarTile(
-                      icon: isSelected ? Icons.label_rounded : Icons.label_outline_rounded,
-                      title: l.name,
-                      isSelected: isSelected,
+                    // Colab special button (now in CHAT section)
+                    SidebarTile(
+                      icon: Icons.people_outline_rounded,
+                      selectedIcon: Icons.people_rounded,
+                      title: 'Colab',
+                      isSelected: uiState.activeFolder == 'Colab',
                       isCollapsed: isCollapsed,
-                      // Wrap in customized icon color
-                      selectedIcon: Icons.label_rounded,
-                      onTap: () {
-                        ref.read(appUiProvider.notifier).selectLabel(l.name);
-                        ref.read(appUiProvider.notifier).selectEmail(null); // Clear selected email!
-                        
-                        // Close drawer if open
-                        final scaffold = Scaffold.maybeOf(context);
-                        if (scaffold != null && scaffold.isDrawerOpen) {
-                          Navigator.pop(context);
-                        }
+                      onTap: () => navigateToFolder('Colab', '/colab'),
+                    ),
 
-                        if (GoRouterState.of(context).uri.toString() != '/') {
-                          context.go('/');
-                        }
-                      },
-                    );
-                  }),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Divider(),
+                    ),
 
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16.0),
-                    child: Divider(),
-                  ),
+                    // Labels Section Header
+                    if (!isCollapsed)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'CUSTOM LABELS',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: isDark ? Colors.white54 : BNXColors.lightTextSecondary,
+                                letterSpacing: 1.0,
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: () => _showCreateLabelDialog(context),
+                              child: Icon(
+                                Icons.add,
+                                size: 16,
+                                color: isDark ? Colors.white54 : BNXColors.lightTextSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
 
-                  // Settings and support at the bottom
-                  SidebarTile(
-                    icon: Icons.settings_outlined,
-                    selectedIcon: Icons.settings,
-                    title: 'Settings',
-                    isSelected: uiState.activeFolder == 'Settings',
-                    isCollapsed: isCollapsed,
-                    onTap: () => navigateToFolder('Settings', '/settings'),
-                  ),
-                  SidebarTile(
-                    icon: Icons.help_outline_rounded,
-                    selectedIcon: Icons.help_rounded,
-                    title: 'Help & Support',
-                    isSelected: uiState.activeFolder == 'Help',
-                    isCollapsed: isCollapsed,
-                    onTap: () => navigateToFolder('Help', '/help'),
-                  ),
-                  const SizedBox(height: 24),
-                ],
+                    // List Labels
+                    ...customLabels.map((l) {
+                      final isSelected = uiState.activeLabel == l.name;
+                      return SidebarTile(
+                        icon: isSelected ? Icons.label_rounded : Icons.label_outline_rounded,
+                        title: l.name,
+                        isSelected: isSelected,
+                        isCollapsed: isCollapsed,
+                        // Wrap in customized icon color
+                        selectedIcon: Icons.label_rounded,
+                        onTap: () {
+                          ref.read(appUiProvider.notifier).selectLabel(l.name);
+                          ref.read(appUiProvider.notifier).selectEmail(null); // Clear selected email!
+                          
+                          // Close drawer if open
+                          final scaffold = Scaffold.maybeOf(context);
+                          if (scaffold != null && scaffold.isDrawerOpen) {
+                            Navigator.pop(context);
+                          }
+
+                          if (GoRouterState.of(context).uri.toString() != '/') {
+                            context.go('/');
+                          }
+                        },
+                      );
+                    }),
+
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Divider(),
+                    ),
+
+                    // Settings and support at the bottom
+                    SidebarTile(
+                      icon: Icons.settings_outlined,
+                      selectedIcon: Icons.settings,
+                      title: 'Settings',
+                      isSelected: uiState.activeFolder == 'Settings',
+                      isCollapsed: isCollapsed,
+                      onTap: () => navigateToFolder('Settings', '/settings'),
+                    ),
+                    SidebarTile(
+                      icon: Icons.help_outline_rounded,
+                      selectedIcon: Icons.help_rounded,
+                      title: 'Help & Support',
+                      isSelected: uiState.activeFolder == 'Help',
+                      isCollapsed: isCollapsed,
+                      onTap: () => navigateToFolder('Help', '/help'),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                ),
               ),
             ),
+            // Floating utility panel when collapsed
+            if (isCollapsed && _expandedUtilityTab != null)
+              Positioned(
+                left: BNXConstants.sidebarCollapsedWidth - 12,
+                top: 60,
+                width: 280,
+                child: Material(
+                  elevation: 8,
+                  borderRadius: BorderRadius.circular(16),
+                  color: Colors.transparent,
+                  child: _buildSlidingTabPanel(isDark, forceShow: true),
+                ),
+              ),
           ],
         ),
       ),
@@ -1118,25 +1134,72 @@ class _SidebarState extends ConsumerState<Sidebar> {
   }
 
   Widget _buildCalendarTab(bool isDark) {
-    final now = DateTime.now();
-    final monthLabel = "July ${now.year}";
+    final selectedYear = _selectedCalendarDate.year;
+    final selectedMonth = _selectedCalendarDate.month;
+    final selectedDay = _selectedCalendarDate.day;
+
+    const monthNames = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    final monthLabel = monthNames[selectedMonth - 1];
+
+    final firstDayOfMonth = DateTime(selectedYear, selectedMonth, 1);
+    final totalDaysInMonth = DateTime(selectedYear, selectedMonth + 1, 0).day;
+    final startOffset = firstDayOfMonth.weekday - 1; 
+
     final weekdays = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
+    final dateKey = "$selectedYear-${selectedMonth.toString().padLeft(2, '0')}-${selectedDay.toString().padLeft(2, '0')}";
+    final dayEvents = _calendarEvents[dateKey] ?? [];
+
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              monthLabel,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+            DropdownButtonHideUnderline(
+              child: DropdownButton<int>(
+                value: selectedMonth,
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87),
+                dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+                isDense: true,
+                onChanged: (val) {
+                  if (val != null) {
+                    setState(() {
+                      final nextDays = DateTime(selectedYear, val + 1, 0).day;
+                      final d = selectedDay > nextDays ? nextDays : selectedDay;
+                      _selectedCalendarDate = DateTime(selectedYear, val, d);
+                    });
+                  }
+                },
+                items: List.generate(12, (index) => DropdownMenuItem(
+                  value: index + 1,
+                  child: Text(monthNames[index]),
+                )),
+              ),
             ),
-            Row(
-              children: [
-                Icon(Icons.chevron_left_rounded, size: 16, color: isDark ? Colors.white54 : Colors.black54),
-                const SizedBox(width: 8),
-                Icon(Icons.chevron_right_rounded, size: 16, color: isDark ? Colors.white54 : Colors.black54),
-              ],
+            DropdownButtonHideUnderline(
+              child: DropdownButton<int>(
+                value: selectedYear >= 2000 && selectedYear <= 2035 ? selectedYear : 2026,
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87),
+                dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+                isDense: true,
+                onChanged: (val) {
+                  if (val != null) {
+                    setState(() {
+                      final nextDays = DateTime(val, selectedMonth + 1, 0).day;
+                      final d = selectedDay > nextDays ? nextDays : selectedDay;
+                      _selectedCalendarDate = DateTime(val, selectedMonth, d);
+                    });
+                  }
+                },
+                items: List.generate(36, (index) => DropdownMenuItem(
+                  value: 2000 + index,
+                  child: Text('${2000 + index}'),
+                )),
+              ),
             ),
           ],
         ),
@@ -1148,75 +1211,195 @@ class _SidebarState extends ConsumerState<Sidebar> {
             child: Text(w, textAlign: TextAlign.center, style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
           )).toList(),
         ),
-        const SizedBox(height: 6),
-        Column(
-          children: List.generate(4, (weekIndex) {
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 2.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: List.generate(7, (dayIndex) {
-                  final dayNumber = weekIndex * 7 + dayIndex + 1;
-                  final isSelected = _selectedCalendarDate.day == dayNumber;
-                  if (dayNumber > 31) return const SizedBox(width: 24);
+        const SizedBox(height: 4),
+        Builder(
+          builder: (context) {
+            final List<Widget> dayWidgets = [];
+            
+            for (int i = 0; i < startOffset; i++) {
+              dayWidgets.add(const SizedBox(width: 24, height: 24));
+            }
 
-                  return GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _selectedCalendarDate = DateTime(now.year, now.month, dayNumber);
-                      });
-                    },
-                    child: Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: isSelected 
-                            ? (isDark ? BNXColors.darkPrimary : BNXColors.lightPrimary) 
-                            : Colors.transparent,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: isSelected ? Colors.transparent : (isDark ? Colors.white10 : Colors.grey.shade200),
-                          width: 0.8,
-                        ),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        '$dayNumber',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                          color: isSelected 
-                              ? Colors.white 
-                              : (isDark ? Colors.white70 : Colors.black87),
-                        ),
+            for (int d = 1; d <= totalDaysInMonth; d++) {
+              final isCurrentSelected = selectedDay == d;
+              final isToday = DateTime.now().year == selectedYear &&
+                  DateTime.now().month == selectedMonth &&
+                  DateTime.now().day == d;
+
+              final currentKey = "$selectedYear-${selectedMonth.toString().padLeft(2, '0')}-${d.toString().padLeft(2, '0')}";
+              final hasEvent = _calendarEvents.containsKey(currentKey) && _calendarEvents[currentKey]!.isNotEmpty;
+
+              dayWidgets.add(
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _selectedCalendarDate = DateTime(selectedYear, selectedMonth, d);
+                    });
+                  },
+                  child: Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: isCurrentSelected 
+                          ? (isDark ? BNXColors.darkPrimary : BNXColors.lightPrimary) 
+                          : Colors.transparent,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isCurrentSelected 
+                            ? Colors.transparent 
+                            : (isToday ? Colors.amber.withOpacity(0.5) : (isDark ? Colors.white10 : Colors.grey.shade200)),
+                        width: isToday ? 1.5 : 0.8,
                       ),
                     ),
-                  );
-                }),
-              ),
-            );
-          }),
+                    alignment: Alignment.center,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Text(
+                          '$d',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: isCurrentSelected ? FontWeight.bold : FontWeight.normal,
+                            color: isCurrentSelected 
+                                ? Colors.white 
+                                : (isDark ? Colors.white70 : Colors.black87),
+                          ),
+                        ),
+                        if (hasEvent && !isCurrentSelected)
+                          Positioned(
+                            bottom: 2,
+                            child: Container(
+                              width: 3,
+                              height: 3,
+                              decoration: const BoxDecoration(
+                                color: Colors.amber,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          )
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }
+
+            final totalGridItems = dayWidgets.length;
+            final remaining = totalGridItems % 7 == 0 ? 0 : 7 - (totalGridItems % 7);
+            for (int i = 0; i < remaining; i++) {
+              dayWidgets.add(const SizedBox(width: 24, height: 24));
+            }
+
+            final List<Widget> weekRows = [];
+            for (int i = 0; i < dayWidgets.length; i += 7) {
+              weekRows.add(
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: dayWidgets.sublist(i, i + 7),
+                  ),
+                ),
+              );
+            }
+
+            return Column(children: weekRows);
+          },
         ),
-        const SizedBox(height: 8),
-        const Divider(height: 8),
-        Padding(
-          padding: const EdgeInsets.only(top: 4.0),
-          child: Row(
-            children: [
-              const Icon(Icons.circle, size: 8, color: Colors.amber),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  _selectedCalendarDate.day % 2 == 0 
-                      ? 'No events scheduled for today.' 
-                      : 'Meeting with Q3 Launch Team @ 2:30 PM',
-                  style: const TextStyle(fontSize: 10, color: Colors.grey),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+        const Divider(height: 16),
+        Text(
+          'Events for $monthLabel $selectedDay, $selectedYear',
+          style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 4),
+        if (dayEvents.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8.0),
+            child: Text(
+              'No events recorded for this date.',
+              style: TextStyle(fontSize: 10, color: Colors.grey, fontStyle: FontStyle.italic),
+            ),
+          )
+        else
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 80),
+            child: Scrollbar(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: dayEvents.length,
+                itemBuilder: (context, idx) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2.0),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.lens, size: 6, color: Colors.amber),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            dayEvents[idx],
+                            style: TextStyle(fontSize: 10.5, color: isDark ? Colors.white70 : Colors.black87),
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _calendarEvents[dateKey]!.removeAt(idx);
+                              if (_calendarEvents[dateKey]!.isEmpty) {
+                                _calendarEvents.remove(dateKey);
+                              }
+                            });
+                          },
+                          child: const Icon(Icons.close_rounded, size: 12, color: Colors.redAccent),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            Expanded(
+              child: NeumorphicContainer(
+                height: 28,
+                shape: NeumorphicShape.pressed,
+                borderRadius: 6,
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF4F7FB),
+                child: TextField(
+                  controller: _eventInputController,
+                  style: const TextStyle(fontSize: 10),
+                  decoration: const InputDecoration(
+                    hintText: 'Record new event...',
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(vertical: 6),
+                  ),
                 ),
               ),
-            ],
-          ),
+            ),
+            const SizedBox(width: 6),
+            NeumorphicButton(
+              onPressed: () {
+                final txt = _eventInputController.text.trim();
+                if (txt.isNotEmpty) {
+                  setState(() {
+                    if (!_calendarEvents.containsKey(dateKey)) {
+                      _calendarEvents[dateKey] = [];
+                    }
+                    _calendarEvents[dateKey]!.add(txt);
+                    _eventInputController.clear();
+                  });
+                }
+              },
+              borderRadius: 6,
+              padding: const EdgeInsets.all(6),
+              color: isDark ? BNXColors.darkPrimary : BNXColors.lightPrimary,
+              child: const Icon(Icons.add, size: 14, color: Colors.white),
+            ),
+          ],
         ),
       ],
     );
@@ -1654,8 +1837,8 @@ class _SidebarState extends ConsumerState<Sidebar> {
     );
   }
 
-  Widget _buildSlidingTabPanel(bool isDark) {
-    if (_expandedUtilityTab == null || ref.read(appUiProvider).isSidebarCollapsed) {
+  Widget _buildSlidingTabPanel(bool isDark, {bool forceShow = false}) {
+    if (_expandedUtilityTab == null || (!forceShow && ref.read(appUiProvider).isSidebarCollapsed)) {
       return const SizedBox.shrink();
     }
 
@@ -1729,55 +1912,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
   }
 
   Widget _buildCalculatorTab(bool isDark) {
-    return Column(
-      children: [
-        Container(
-          alignment: Alignment.centerRight,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: isDark ? Colors.black26 : Colors.grey.shade100,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Text(
-            '120 + 240 = 360',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-          ),
-        ),
-        const SizedBox(height: 8),
-        GridView.count(
-          shrinkWrap: true,
-          crossAxisCount: 4,
-          mainAxisSpacing: 4,
-          crossAxisSpacing: 4,
-          childAspectRatio: 1.5,
-          children: [
-            '7', '8', '9', '/',
-            '4', '5', '6', '*',
-            '1', '2', '3', '-',
-            'C', '0', '=', '+'
-          ].map((char) {
-            return NeumorphicButton(
-              onPressed: () {},
-              borderRadius: 6,
-              padding: EdgeInsets.zero,
-              color: isDark ? BNXColors.darkSurface : Colors.white,
-              child: Center(
-                child: Text(
-                  char,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                    color: ['/', '*', '-', '+', '='].contains(char) 
-                        ? BNXColors.lightPrimary 
-                        : (isDark ? Colors.white : Colors.black87)
-                  ),
-                ),
-              ),
-            );
-          }).toList(),
-        ),
-      ],
-    );
+    return BNXCalculatorWidget(isDark: isDark);
   }
 
   Widget _buildWeatherTab(bool isDark) {

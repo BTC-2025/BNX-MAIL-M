@@ -97,61 +97,65 @@ class _TemplatesViewState extends ConsumerState<TemplatesView> {
       }).toList();
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // 1. Header Row
-        Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: isMobile
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildHeaderTitle(isDark),
-                    const SizedBox(height: 16),
-                    _buildAddTemplateButton(context, isDark),
-                  ],
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 1. Header Row
+          Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: isMobile
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildHeaderTitle(isDark),
+                      const SizedBox(height: 16),
+                      _buildAddTemplateButton(context, isDark),
+                    ],
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(child: _buildHeaderTitle(isDark)),
+                      const SizedBox(width: 16),
+                      _buildAddTemplateButton(context, isDark),
+                    ],
+                  ),
+          ),
+  
+          const Divider(height: 1),
+  
+          // 2. Filter tabs and search bar row
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+            child: isMobile
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildTabsRow(isDark),
+                      const SizedBox(height: 16),
+                      _buildSearchBar(isDark),
+                    ],
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _buildTabsRow(isDark),
+                      SizedBox(
+                        width: 300,
+                        child: _buildSearchBar(isDark),
+                      ),
+                    ],
+                  ),
+          ),
+  
+          // 3. Grid area
+          filtered.isEmpty
+              ? SizedBox(
+                  height: 300,
+                  child: _buildEmptyState(isDark),
                 )
-              : Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(child: _buildHeaderTitle(isDark)),
-                    const SizedBox(width: 16),
-                    _buildAddTemplateButton(context, isDark),
-                  ],
-                ),
-        ),
-
-        const Divider(height: 1),
-
-        // 2. Filter tabs and search bar row
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-          child: isMobile
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildTabsRow(isDark),
-                    const SizedBox(height: 16),
-                    _buildSearchBar(isDark),
-                  ],
-                )
-              : Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    _buildTabsRow(isDark),
-                    SizedBox(
-                      width: 300,
-                      child: _buildSearchBar(isDark),
-                    ),
-                  ],
-                ),
-        ),
-
-        // 3. Grid area
-        Expanded(
-          child: filtered.isEmpty
-              ? _buildEmptyState(isDark)
               : LayoutBuilder(
                   builder: (context, constraints) {
                     int crossAxisCount = 3;
@@ -162,6 +166,8 @@ class _TemplatesViewState extends ConsumerState<TemplatesView> {
                     }
                     
                     return GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
                       padding: const EdgeInsets.only(left: 24.0, right: 24.0, bottom: 24.0),
                       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: crossAxisCount,
@@ -176,8 +182,8 @@ class _TemplatesViewState extends ConsumerState<TemplatesView> {
                     );
                   },
                 ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -243,8 +249,8 @@ class _TemplatesViewState extends ConsumerState<TemplatesView> {
       return GestureDetector(
         onTap: () => setState(() => _activeTab = name),
         child: NeumorphicContainer(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-          borderRadius: 16,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+          borderRadius: 18,
           depth: isSelected ? 2.0 : 0.0,
           shape: isSelected ? NeumorphicShape.convex : NeumorphicShape.flat,
           color: isSelected 
@@ -265,15 +271,17 @@ class _TemplatesViewState extends ConsumerState<TemplatesView> {
     }
 
     return NeumorphicContainer(
-      padding: const EdgeInsets.all(4),
-      borderRadius: 20,
+      padding: const EdgeInsets.all(6),
+      borderRadius: 24,
       shape: NeumorphicShape.pressed,
       color: isDark ? const Color(0xFF0F172A) : const Color(0xFFEAF1FB),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           tabButton('All'),
+          const SizedBox(width: 8),
           tabButton('Default'),
+          const SizedBox(width: 8),
           tabButton('Custom'),
         ],
       ),

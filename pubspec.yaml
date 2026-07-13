@@ -24,3 +24,4 @@ flutter:
   uses-material-design: true
   assets:
     - assets/logo.jpg
+    - assets/bit_tool_logo.png

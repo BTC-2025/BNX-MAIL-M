@@ -18,6 +18,7 @@ class AppUiState {
   final bool isSidebarCollapsed;
   final ComposeStatus composeStatus;
   final String activeRightUtility; // 'Calendar', 'Keep', 'Tasks', or 'none'
+  final String? activeLeftUtility;
 
   // Compose dialog fields for state persistence when resizing / switching views
   final String composeTo;
@@ -34,6 +35,7 @@ class AppUiState {
     required this.isSidebarCollapsed,
     required this.composeStatus,
     required this.activeRightUtility,
+    this.activeLeftUtility,
     this.composeTo = '',
     this.composeSubject = '',
     this.composeBody = '',
@@ -50,6 +52,7 @@ class AppUiState {
     bool? isSidebarCollapsed,
     ComposeStatus? composeStatus,
     String? activeRightUtility,
+    Object? activeLeftUtility = _absent,
     String? composeTo,
     String? composeSubject,
     String? composeBody,
@@ -68,6 +71,9 @@ class AppUiState {
       isSidebarCollapsed: isSidebarCollapsed ?? this.isSidebarCollapsed,
       composeStatus: composeStatus ?? this.composeStatus,
       activeRightUtility: activeRightUtility ?? this.activeRightUtility,
+      activeLeftUtility: identical(activeLeftUtility, _absent)
+          ? this.activeLeftUtility
+          : activeLeftUtility as String?,
       composeTo: composeTo ?? this.composeTo,
       composeSubject: composeSubject ?? this.composeSubject,
       composeBody: composeBody ?? this.composeBody,
@@ -87,6 +93,7 @@ class AppUiNotifier extends StateNotifier<AppUiState> {
           isSidebarCollapsed: false,
           composeStatus: ComposeStatus.closed,
           activeRightUtility: 'Calendar', // Calendar open initially by default
+          activeLeftUtility: null,
         ));
 
   void selectFolder(String folder) {
@@ -176,6 +183,14 @@ class AppUiNotifier extends StateNotifier<AppUiState> {
       state = state.copyWith(activeRightUtility: 'none');
     } else {
       state = state.copyWith(activeRightUtility: utility);
+    }
+  }
+
+  void setActiveLeftUtility(String? utility) {
+    if (state.activeLeftUtility == utility) {
+      state = state.copyWith(activeLeftUtility: null);
+    } else {
+      state = state.copyWith(activeLeftUtility: utility);
     }
   }
 }

@@ -41,7 +41,9 @@ class DashboardShell extends ConsumerWidget {
     final double activeSidebarWidth = isMobile
         ? 0.0
         : (uiState.isSidebarCollapsed
-            ? BNXConstants.sidebarCollapsedWidth
+            ? (uiState.activeLeftUtility != null
+                ? BNXConstants.sidebarCollapsedWidth + 280.0
+                : BNXConstants.sidebarCollapsedWidth)
             : BNXConstants.sidebarExpandedWidth);
 
     final bool showRightPanel = uiState.activeRightUtility != 'none' && !isMobile && screenWidth > 950;
