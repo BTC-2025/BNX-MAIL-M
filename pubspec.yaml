@@ -19,9 +19,23 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.4.0
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/bnx_mail_logo.png"
+
+flutter_native_splash:
+  color: "#ffffff"
+  image: "assets/bnx_mail_logo.png"
+  android: true
+  ios: true
 
 flutter:
   uses-material-design: true
   assets:
     - assets/logo.jpg
     - assets/bit_tool_logo.png
+    - assets/bnx_mail_logo.png
