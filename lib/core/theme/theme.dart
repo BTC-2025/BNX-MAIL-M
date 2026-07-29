@@ -18,26 +18,27 @@ class BNXTheme {
         onSurface: BNXColors.lightTextPrimary,
         outline: BNXColors.lightBorder,
       ),
-      textTheme: GoogleFonts.interTextTheme(ThemeData.light().textTheme).copyWith(
-        titleLarge: GoogleFonts.outfit(
-          fontSize: 22,
-          fontWeight: FontWeight.w600,
-          color: BNXColors.lightTextPrimary,
-        ),
-        titleMedium: GoogleFonts.outfit(
-          fontSize: 16,
-          fontWeight: FontWeight.w600,
-          color: BNXColors.lightTextPrimary,
-        ),
-        bodyLarge: GoogleFonts.inter(
-          fontSize: 14,
-          color: BNXColors.lightTextPrimary,
-        ),
-        bodyMedium: GoogleFonts.inter(
-          fontSize: 13,
-          color: BNXColors.lightTextSecondary,
-        ),
-      ),
+      textTheme: GoogleFonts.interTextTheme(ThemeData.light().textTheme)
+          .copyWith(
+            titleLarge: GoogleFonts.outfit(
+              fontSize: 22,
+              fontWeight: FontWeight.w600,
+              color: BNXColors.lightTextPrimary,
+            ),
+            titleMedium: GoogleFonts.outfit(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: BNXColors.lightTextPrimary,
+            ),
+            bodyLarge: GoogleFonts.inter(
+              fontSize: 14,
+              color: BNXColors.lightTextPrimary,
+            ),
+            bodyMedium: GoogleFonts.inter(
+              fontSize: 13,
+              color: BNXColors.lightTextSecondary,
+            ),
+          ),
       cardTheme: CardThemeData(
         color: BNXColors.lightSurface,
         elevation: 0,
@@ -75,26 +76,27 @@ class BNXTheme {
         onSurface: BNXColors.darkTextPrimary,
         outline: BNXColors.darkBorder,
       ),
-      textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme).copyWith(
-        titleLarge: GoogleFonts.outfit(
-          fontSize: 22,
-          fontWeight: FontWeight.w600,
-          color: BNXColors.darkTextPrimary,
-        ),
-        titleMedium: GoogleFonts.outfit(
-          fontSize: 16,
-          fontWeight: FontWeight.w600,
-          color: BNXColors.darkTextPrimary,
-        ),
-        bodyLarge: GoogleFonts.inter(
-          fontSize: 14,
-          color: BNXColors.darkTextPrimary,
-        ),
-        bodyMedium: GoogleFonts.inter(
-          fontSize: 13,
-          color: BNXColors.darkTextSecondary,
-        ),
-      ),
+      textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme)
+          .copyWith(
+            titleLarge: GoogleFonts.outfit(
+              fontSize: 22,
+              fontWeight: FontWeight.w600,
+              color: BNXColors.darkTextPrimary,
+            ),
+            titleMedium: GoogleFonts.outfit(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: BNXColors.darkTextPrimary,
+            ),
+            bodyLarge: GoogleFonts.inter(
+              fontSize: 14,
+              color: BNXColors.darkTextPrimary,
+            ),
+            bodyMedium: GoogleFonts.inter(
+              fontSize: 13,
+              color: BNXColors.darkTextSecondary,
+            ),
+          ),
       cardTheme: CardThemeData(
         color: BNXColors.darkSurface,
         elevation: 0,

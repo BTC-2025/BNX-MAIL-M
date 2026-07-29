@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../constants/constants.dart';
 import '../theme/colors.dart';
 import '../theme/neumorphic.dart';
 
@@ -27,21 +26,26 @@ class SidebarTile extends StatefulWidget {
   State<SidebarTile> createState() => _SidebarTileState();
 }
 
-class _SidebarTileState extends State<SidebarTile> with SingleTickerProviderStateMixin {
+class _SidebarTileState extends State<SidebarTile>
+    with SingleTickerProviderStateMixin {
   bool _isHovered = false;
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     // Determine colors based on states
     final Color iconColor = widget.isSelected
-        ? (isDark ? const Color.fromARGB(255, 54, 129, 250) : BNXColors.lightPrimary)
+        ? (isDark
+              ? const Color.fromARGB(255, 54, 129, 250)
+              : BNXColors.lightPrimary)
         : (isDark ? BNXColors.darkTextSecondary : BNXColors.lightTextSecondary);
     final Color textColor = widget.isSelected
         ? (isDark ? Colors.white : BNXColors.lightTextPrimary)
         : (isDark ? BNXColors.darkTextSecondary : BNXColors.lightTextSecondary);
-    final FontWeight fontWeight = widget.isSelected ? FontWeight.w700 : FontWeight.w500;
+    final FontWeight fontWeight = widget.isSelected
+        ? FontWeight.w700
+        : FontWeight.w500;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
@@ -50,8 +54,8 @@ class _SidebarTileState extends State<SidebarTile> with SingleTickerProviderStat
       child: GestureDetector(
         onTap: widget.onTap,
         child: NeumorphicContainer(
-          shape: widget.isSelected 
-              ? NeumorphicShape.pressed 
+          shape: widget.isSelected
+              ? NeumorphicShape.pressed
               : (_isHovered ? NeumorphicShape.convex : NeumorphicShape.flat),
           borderRadius: 24,
           depth: widget.isSelected ? 0 : (_isHovered ? 3.0 : 0.0),
@@ -86,7 +90,9 @@ class _SidebarTileState extends State<SidebarTile> with SingleTickerProviderStat
         alignment: Alignment.center,
         children: [
           Icon(
-            widget.isSelected ? (widget.selectedIcon ?? widget.icon) : widget.icon,
+            widget.isSelected
+                ? (widget.selectedIcon ?? widget.icon)
+                : widget.icon,
             color: iconColor,
             size: 22,
           ),
@@ -100,10 +106,7 @@ class _SidebarTileState extends State<SidebarTile> with SingleTickerProviderStat
                   color: Colors.red,
                   shape: BoxShape.circle,
                 ),
-                constraints: const BoxConstraints(
-                  minWidth: 8,
-                  minHeight: 8,
-                ),
+                constraints: const BoxConstraints(minWidth: 8, minHeight: 8),
               ),
             ),
         ],
@@ -111,11 +114,18 @@ class _SidebarTileState extends State<SidebarTile> with SingleTickerProviderStat
     );
   }
 
-  Widget _buildExpanded(Color iconColor, Color textColor, FontWeight fontWeight, bool isDark) {
+  Widget _buildExpanded(
+    Color iconColor,
+    Color textColor,
+    FontWeight fontWeight,
+    bool isDark,
+  ) {
     return Row(
       children: [
         Icon(
-          widget.isSelected ? (widget.selectedIcon ?? widget.icon) : widget.icon,
+          widget.isSelected
+              ? (widget.selectedIcon ?? widget.icon)
+              : widget.icon,
           color: iconColor,
           size: 20,
         ),
@@ -136,7 +146,7 @@ class _SidebarTileState extends State<SidebarTile> with SingleTickerProviderStat
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: widget.isSelected 
+              color: widget.isSelected
                   ? (isDark ? Colors.black26 : Colors.white24)
                   : Colors.transparent,
               borderRadius: BorderRadius.circular(10),
@@ -144,8 +154,8 @@ class _SidebarTileState extends State<SidebarTile> with SingleTickerProviderStat
             child: Text(
               widget.badgeText!,
               style: TextStyle(
-                color: widget.isSelected 
-                    ? (isDark ? Colors.white : BNXColors.lightPrimary) 
+                color: widget.isSelected
+                    ? (isDark ? Colors.white : BNXColors.lightPrimary)
                     : textColor,
                 fontWeight: FontWeight.bold,
                 fontSize: 12,

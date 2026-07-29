@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../data/email_provider.dart';
-import '../../../core/theme/colors.dart';
 import '../../../core/theme/neumorphic.dart';
 
 class SnoozeSchedulerDialog extends ConsumerStatefulWidget {
@@ -23,10 +22,8 @@ class SnoozeSchedulerDialog extends ConsumerStatefulWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => SnoozeSchedulerDialog(
-        emailId: emailId,
-        emailSubject: emailSubject,
-      ),
+      builder: (_) =>
+          SnoozeSchedulerDialog(emailId: emailId, emailSubject: emailSubject),
     );
   }
 
@@ -35,15 +32,23 @@ class SnoozeSchedulerDialog extends ConsumerStatefulWidget {
       _SnoozeSchedulerDialogState();
 }
 
-class _SnoozeSchedulerDialogState
-    extends ConsumerState<SnoozeSchedulerDialog> {
-  DateTime? _customDate;
-  TimeOfDay? _customTime;
-  bool _showCustomPicker = false;
-
+class _SnoozeSchedulerDialogState extends ConsumerState<SnoozeSchedulerDialog> {
   String _formatSnoozeTime(DateTime dt) {
     final now = DateTime.now();
-    final months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    final months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
     final period = dt.hour >= 12 ? 'PM' : 'AM';
     final min = dt.minute.toString().padLeft(2, '0');
@@ -54,13 +59,19 @@ class _SnoozeSchedulerDialogState
   }
 
   void _snoozeUntil(DateTime until) {
-    ref.read(emailProvider.notifier).snoozeEmail(widget.emailId, until);
+    ref
+        .read(emailProvider.notifier)
+        .snoozeEmail(widget.emailId, until, 'Inbox');
     Navigator.pop(context);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
           children: [
-            const Icon(Icons.access_time_rounded, color: Colors.white, size: 18),
+            const Icon(
+              Icons.access_time_rounded,
+              color: Colors.white,
+              size: 18,
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
@@ -88,7 +99,9 @@ class _SnoozeSchedulerDialogState
         icon: Icons.wb_sunny_outlined,
         color: const Color(0xFFF59E0B),
         label: 'Later Today',
-        subtitle: _formatSnoozeTime(DateTime(now.year, now.month, now.day, 18, 0)),
+        subtitle: _formatSnoozeTime(
+          DateTime(now.year, now.month, now.day, 18, 0),
+        ),
         time: DateTime(now.year, now.month, now.day, 18, 0),
       ),
       _SnoozeOption(
@@ -96,7 +109,8 @@ class _SnoozeSchedulerDialogState
         color: const Color(0xFFEF4444),
         label: 'Tomorrow Morning',
         subtitle: _formatSnoozeTime(
-            DateTime(now.year, now.month, now.day + 1, 8, 0)),
+          DateTime(now.year, now.month, now.day + 1, 8, 0),
+        ),
         time: DateTime(now.year, now.month, now.day + 1, 8, 0),
       ),
       _SnoozeOption(
@@ -111,7 +125,8 @@ class _SnoozeSchedulerDialogState
         color: const Color(0xFF3B82F6),
         label: 'Next Week',
         subtitle: _formatSnoozeTime(
-            now.add(const Duration(days: 7)).copyWith(hour: 9, minute: 0)),
+          now.add(const Duration(days: 7)).copyWith(hour: 9, minute: 0),
+        ),
         time: now.add(const Duration(days: 7)).copyWith(hour: 9, minute: 0),
       ),
     ];
@@ -146,8 +161,11 @@ class _SnoozeSchedulerDialogState
                   color: const Color(0xFF3B82F6).withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.access_time_rounded,
-                    color: Color(0xFF3B82F6), size: 20),
+                child: const Icon(
+                  Icons.access_time_rounded,
+                  color: Color(0xFF3B82F6),
+                  size: 20,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -276,8 +294,11 @@ class _SnoozeSchedulerDialogState
               borderRadius: 12,
               color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF4F7FB),
               child: const Center(
-                child: Icon(Icons.edit_calendar_outlined,
-                    color: Color(0xFF8B5CF6), size: 20),
+                child: Icon(
+                  Icons.edit_calendar_outlined,
+                  color: Color(0xFF8B5CF6),
+                  size: 20,
+                ),
               ),
             ),
             const SizedBox(width: 14),

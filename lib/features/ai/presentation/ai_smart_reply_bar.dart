@@ -11,28 +11,36 @@ List<String> _generateReplies(EmailModel email) {
   final subject = email.subject.toLowerCase();
 
   // Check for common email scenarios and generate relevant replies
-  if (body.contains('meeting') || body.contains('schedule') || subject.contains('meeting')) {
+  if (body.contains('meeting') ||
+      body.contains('schedule') ||
+      subject.contains('meeting')) {
     return [
       'Sounds great! I\'ll be there.',
       'Can we reschedule to next week?',
       'Thanks for the invite — confirmed!',
     ];
   }
-  if (body.contains('review') || body.contains('pull request') || body.contains('feedback')) {
+  if (body.contains('review') ||
+      body.contains('pull request') ||
+      body.contains('feedback')) {
     return [
       'I\'ll review it today.',
       'Looks good! Approved ✅',
       'A few comments — let\'s discuss.',
     ];
   }
-  if (body.contains('deadline') || body.contains('urgent') || body.contains('asap')) {
+  if (body.contains('deadline') ||
+      body.contains('urgent') ||
+      body.contains('asap')) {
     return [
       'On it! Will update you shortly.',
       'Working on it now.',
       'Can we extend the deadline by a day?',
     ];
   }
-  if (body.contains('invoice') || body.contains('payment') || body.contains('billing')) {
+  if (body.contains('invoice') ||
+      body.contains('payment') ||
+      body.contains('billing')) {
     return [
       'Payment confirmed. Thank you!',
       'I\'ll process this by EOD.',
@@ -46,14 +54,18 @@ List<String> _generateReplies(EmailModel email) {
       'Glad it worked out!',
     ];
   }
-  if (body.contains('question') || body.contains('clarif') || body.contains('?')) {
+  if (body.contains('question') ||
+      body.contains('clarif') ||
+      body.contains('?')) {
     return [
       'Great question! Let me check.',
       'Sure, happy to clarify.',
       'I\'ll get back to you shortly.',
     ];
   }
-  if (body.contains('launch') || body.contains('release') || body.contains('deploy')) {
+  if (body.contains('launch') ||
+      body.contains('release') ||
+      body.contains('deploy')) {
     return [
       'Exciting! Looking forward to it.',
       'Ready on our end!',
@@ -131,11 +143,15 @@ class _AiSmartReplyBarState extends ConsumerState<AiSmartReplyBar>
                 padding: const EdgeInsets.all(6),
                 borderRadius: 8,
                 shape: NeumorphicShape.pressed,
-                color: isDark ? const Color(0xFF0F172A) : const Color(0xFFEAF1FB),
+                color: isDark
+                    ? const Color(0xFF0F172A)
+                    : const Color(0xFFEAF1FB),
                 child: Icon(
                   Icons.auto_awesome_rounded,
                   size: 14,
-                  color: isDark ? BNXColors.darkPrimary : BNXColors.lightPrimary,
+                  color: isDark
+                      ? BNXColors.darkPrimary
+                      : BNXColors.lightPrimary,
                 ),
               ),
               const SizedBox(width: 8),
@@ -144,7 +160,9 @@ class _AiSmartReplyBarState extends ConsumerState<AiSmartReplyBar>
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
-                  color: isDark ? BNXColors.darkPrimary : BNXColors.lightPrimary,
+                  color: isDark
+                      ? BNXColors.darkPrimary
+                      : BNXColors.lightPrimary,
                   letterSpacing: 0.5,
                 ),
               ),
@@ -155,7 +173,9 @@ class _AiSmartReplyBarState extends ConsumerState<AiSmartReplyBar>
                   height: 14,
                   child: CircularProgressIndicator(
                     strokeWidth: 1.5,
-                    color: isDark ? BNXColors.darkPrimary : BNXColors.lightPrimary,
+                    color: isDark
+                        ? BNXColors.darkPrimary
+                        : BNXColors.lightPrimary,
                   ),
                 ),
             ],
@@ -198,9 +218,14 @@ class _SmartReplyChip extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return NeumorphicButton(
       onPressed: () {
+        final replyTo = (email.isSent && email.recipient.isNotEmpty)
+            ? email.recipient
+            : email.senderEmail;
         // Pre-fill compose with this smart reply
-        ref.read(appUiProvider.notifier).updateComposeDraft(
-              to: email.senderEmail,
+        ref
+            .read(appUiProvider.notifier)
+            .updateComposeDraft(
+              to: replyTo,
               subject: 'Re: ${email.subject}',
               body: label,
             );

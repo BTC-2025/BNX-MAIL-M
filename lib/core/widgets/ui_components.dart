@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../theme/colors.dart';
-import '../theme/neumorphic.dart';
 import '../constants/constants.dart';
 
 class PrimaryButton extends StatefulWidget {
@@ -28,14 +27,18 @@ class _PrimaryButtonState extends State<PrimaryButton> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final defaultColor = widget.backgroundColor ?? (isDark ? BNXColors.darkPrimary : BNXColors.lightPrimary);
-    
+    final defaultColor =
+        widget.backgroundColor ??
+        (isDark ? BNXColors.darkPrimary : BNXColors.lightPrimary);
+
     // Colored Neumorphism shadow styling
     final List<BoxShadow> shadows = _isPressed
         ? []
         : [
             BoxShadow(
-              color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.4),
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.1)
+                  : Colors.white.withValues(alpha: 0.4),
               offset: const Offset(-4, -4),
               blurRadius: 8,
             ),
@@ -64,13 +67,18 @@ class _PrimaryButtonState extends State<PrimaryButton> {
           duration: BNXConstants.animationDurationFast,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           decoration: BoxDecoration(
-            color: _isPressed 
-                ? defaultColor.withValues(alpha: 0.85) 
-                : (_isHovered ? defaultColor.withValues(alpha: 0.95) : defaultColor),
+            color: _isPressed
+                ? defaultColor.withValues(alpha: 0.85)
+                : (_isHovered
+                      ? defaultColor.withValues(alpha: 0.95)
+                      : defaultColor),
             borderRadius: BorderRadius.circular(24),
             boxShadow: shadows,
-            border: _isPressed 
-                ? Border.all(color: Colors.black.withValues(alpha: 0.1), width: 1.5)
+            border: _isPressed
+                ? Border.all(
+                    color: Colors.black.withValues(alpha: 0.1),
+                    width: 1.5,
+                  )
                 : null,
           ),
           child: Row(
@@ -112,11 +120,17 @@ class SearchBox extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return NeumorphicContainer(
+    return Container(
       height: 44,
-      shape: NeumorphicShape.pressed,
-      borderRadius: 22,
       padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: isDark ? BNXColors.darkSurface : Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: isDark ? BNXColors.darkBorder : BNXColors.lightBorder,
+          width: 1,
+        ),
+      ),
       child: Row(
         children: [
           const Icon(Icons.search, size: 18, color: Colors.grey),
@@ -144,10 +158,7 @@ class SearchBox extends StatelessWidget {
 class SectionHeader extends StatelessWidget {
   final String title;
 
-  const SectionHeader({
-    super.key,
-    required this.title,
-  });
+  const SectionHeader({super.key, required this.title});
 
   @override
   Widget build(BuildContext context) {

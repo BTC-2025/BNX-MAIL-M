@@ -67,11 +67,18 @@ class NotificationCentrePanel extends ConsumerWidget {
                 onPressed: () =>
                     ref.read(notificationsProvider.notifier).markAllRead(),
                 icon: const Icon(Icons.done_all_rounded, size: 14),
-                label: const Text('Mark all read', style: TextStyle(fontSize: 12)),
+                label: const Text(
+                  'Mark all read',
+                  style: TextStyle(fontSize: 12),
+                ),
                 style: TextButton.styleFrom(
-                  foregroundColor:
-                      isDark ? BNXColors.darkPrimary : BNXColors.lightPrimary,
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  foregroundColor: isDark
+                      ? BNXColors.darkPrimary
+                      : BNXColors.lightPrimary,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                 ),
               ),
             ],
@@ -159,8 +166,11 @@ class _NotificationCard extends ConsumerWidget {
           color: Colors.red.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: const Icon(Icons.delete_outline_rounded,
-            color: Colors.red, size: 20),
+        child: const Icon(
+          Icons.delete_outline_rounded,
+          color: Colors.red,
+          size: 20,
+        ),
       ),
       onDismissed: (_) =>
           ref.read(notificationsProvider.notifier).dismiss(notification.id),
@@ -175,14 +185,12 @@ class _NotificationCard extends ConsumerWidget {
             color: notification.isRead
                 ? Colors.transparent
                 : (isDark
-                    ? color.withValues(alpha: 0.08)
-                    : color.withValues(alpha: 0.05)),
+                      ? color.withValues(alpha: 0.08)
+                      : color.withValues(alpha: 0.05)),
             borderRadius: BorderRadius.circular(12),
             border: Border(
               left: BorderSide(
-                color: notification.isRead
-                    ? Colors.transparent
-                    : color,
+                color: notification.isRead ? Colors.transparent : color,
                 width: 3,
               ),
             ),
@@ -216,7 +224,9 @@ class _NotificationCard extends ConsumerWidget {
                               fontWeight: notification.isRead
                                   ? FontWeight.normal
                                   : FontWeight.bold,
-                              color: isDark ? Colors.white : const Color(0xFF1E293B),
+                              color: isDark
+                                  ? Colors.white
+                                  : const Color(0xFF1E293B),
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -227,8 +237,9 @@ class _NotificationCard extends ConsumerWidget {
                           timeAgo,
                           style: TextStyle(
                             fontSize: 10,
-                            color:
-                                isDark ? Colors.white38 : Colors.grey.shade500,
+                            color: isDark
+                                ? Colors.white38
+                                : Colors.grey.shade500,
                           ),
                         ),
                       ],
@@ -238,9 +249,7 @@ class _NotificationCard extends ConsumerWidget {
                       notification.subtitle,
                       style: TextStyle(
                         fontSize: 12,
-                        color: isDark
-                            ? Colors.white54
-                            : Colors.grey.shade600,
+                        color: isDark ? Colors.white54 : Colors.grey.shade600,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,

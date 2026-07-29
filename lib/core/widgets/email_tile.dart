@@ -3,11 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'avatar_widget.dart';
 import 'label_chip.dart';
 import '../../models/email_model.dart';
+import '../../models/label_model.dart';
 import '../../data/email_provider.dart';
 import '../../data/app_state_provider.dart';
 import '../constants/constants.dart';
 import '../theme/colors.dart';
-import '../theme/neumorphic.dart';
 
 class EmailTile extends ConsumerStatefulWidget {
   final EmailModel email;
@@ -30,27 +30,43 @@ class _EmailTileState extends ConsumerState<EmailTile> {
 
   String _formatDate(DateTime date) {
     final now = DateTime.now();
-    if (date.year == now.year && date.month == now.month && date.day == now.day) {
-      final hour = date.hour > 12 ? date.hour - 12 : (date.hour == 0 ? 12 : date.hour);
+    final today = DateTime(now.year, now.month, now.day);
+    final emailDate = DateTime(date.year, date.month, date.day);
+    final diffDays = today.difference(emailDate).inDays;
+
+    if (diffDays == 0) {
+      final hour = date.hour > 12
+          ? date.hour - 12
+          : (date.hour == 0 ? 12 : date.hour);
       final period = date.hour >= 12 ? 'PM' : 'AM';
       final min = date.minute.toString().padLeft(2, '0');
       return '$hour:$min $period';
+    } else if (diffDays == 1) {
+      return 'Yesterday';
+    } else if (diffDays > 1 && diffDays < 7) {
+      const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      return weekdays[date.weekday - 1];
     } else {
-      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      return '${months[date.month - 1]} ${date.day}';
-    }
-  }
-
-  String _formatSnoozeDate(DateTime date) {
-    final now = DateTime.now();
-    final hour = date.hour > 12 ? date.hour - 12 : (date.hour == 0 ? 12 : date.hour);
-    final period = date.hour >= 12 ? 'PM' : 'AM';
-    final min = date.minute.toString().padLeft(2, '0');
-    if (date.year == now.year && date.month == now.month && date.day == now.day) {
-      return '$hour:$min $period';
-    } else {
-      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      return '${months[date.month - 1]} ${date.day}';
+      const months = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+      ];
+      final monthStr = months[date.month - 1];
+      if (date.year == now.year) {
+        return '$monthStr ${date.day}';
+      } else {
+        return '$monthStr ${date.day}, ${date.year}';
+      }
     }
   }
 
@@ -61,19 +77,42 @@ class _EmailTileState extends ConsumerState<EmailTile> {
     final email = widget.email;
     final isSelectedForBulk = uiState.selectedEmailIds.contains(email.id);
 
-    final Color bgColor = widget.isSelected
-        ? (isDark ? BNXColors.darkSidebarSelected : BNXColors.lightSidebarSelected)
-        : (_isHovered
-            ? (isDark ? BNXColors.darkSidebarHover.withValues(alpha: 0.5) : BNXColors.lightSidebarHover.withValues(alpha: 0.5))
-            : Colors.transparent);
-
-    final FontWeight textWeight = email.isRead ? FontWeight.normal : FontWeight.bold;
-    final Color textColor = email.isRead 
+    final FontWeight textWeight = email.isRead
+        ? FontWeight.normal
+        : FontWeight.bold;
+    final Color textColor = email.isRead
         ? (isDark ? BNXColors.darkTextSecondary : BNXColors.lightTextSecondary)
         : (isDark ? Colors.white : BNXColors.lightTextPrimary);
 
     final double screenWidth = MediaQuery.of(context).size.width;
     final bool isMobile = screenWidth < 600;
+
+    final bool isDraftItem = email.isDraft || email.memberOfFolders.contains('Draft');
+    final bool isScheduledItem = email.isScheduled || email.memberOfFolders.contains('Scheduled');
+
+    final String tileSenderName = isScheduledItem
+        ? (email.recipient.trim().isNotEmpty
+            ? 'Scheduled: ${email.recipient.trim()}'
+            : 'Scheduled Mail')
+        : isDraftItem
+            ? (email.recipient.trim().isNotEmpty
+                ? 'Draft: ${email.recipient.trim()}'
+                : 'Draft')
+            : email.isSent
+                ? (email.recipient.isNotEmpty ? 'To: ${email.recipient}' : email.senderName)
+                : (email.senderName.isNotEmpty && email.senderName != 'BNX Mail'
+                    ? email.senderName
+                    : (email.senderEmail.isNotEmpty ? email.senderEmail : 'BNX Mail'));
+
+    final String avatarName = isScheduledItem
+        ? (email.recipient.trim().isNotEmpty ? email.recipient.trim() : 'Scheduled')
+        : isDraftItem
+            ? (email.recipient.trim().isNotEmpty ? email.recipient.trim() : 'Draft')
+            : email.isSent
+                ? (email.recipient.isNotEmpty ? email.recipient : email.senderName)
+                : (email.senderName.isNotEmpty && email.senderName != 'BNX Mail'
+                    ? email.senderName
+                    : (email.senderEmail.isNotEmpty ? email.senderEmail : 'BNX Mail'));
 
     if (isMobile) {
       return MouseRegion(
@@ -81,46 +120,62 @@ class _EmailTileState extends ConsumerState<EmailTile> {
         onExit: (_) => setState(() => _isHovered = false),
         cursor: SystemMouseCursors.click,
         child: GestureDetector(
-          onTap: widget.onTap,
-          child: NeumorphicContainer(
-            shape: widget.isSelected 
-                ? NeumorphicShape.pressed 
-                : (_isHovered ? NeumorphicShape.convex : NeumorphicShape.flat),
-            borderRadius: 14,
-            depth: widget.isSelected ? 0 : (_isHovered ? 3.0 : 1.5),
-            color: widget.isSelected
-                ? (isDark ? const Color(0xFF0F172A) : const Color(0xFFF4F7FB))
-                : (isDark ? const Color(0xFF1E293B) : Colors.white),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          onTap: () {
+            if (uiState.selectedEmailIds.isNotEmpty) {
+              ref.read(appUiProvider.notifier).toggleEmailSelection(email.id);
+            } else {
+              widget.onTap();
+            }
+          },
+          onLongPress: () {
+            ref.read(appUiProvider.notifier).toggleEmailSelection(email.id);
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            decoration: BoxDecoration(
+              color: widget.isSelected
+                  ? (isDark ? const Color(0xFF1E293B) : const Color(0xFFEAF1FB))
+                  : (_isHovered
+                        ? (isDark
+                              ? const Color(0xFF334155)
+                              : const Color(0xFFF1F5F9))
+                        : Colors.transparent),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // 1. LEFT SIDE: AVATAR
                 GestureDetector(
                   onTap: () {
-                    ref.read(appUiProvider.notifier).toggleEmailSelection(email.id);
+                    ref
+                        .read(appUiProvider.notifier)
+                        .toggleEmailSelection(email.id);
                   },
                   child: SizedBox(
-                    width: 40,
-                    height: 40,
+                    width: 36,
+                    height: 36,
                     child: isSelectedForBulk
                         ? Container(
                             decoration: const BoxDecoration(
                               color: BNXColors.lightPrimary,
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(Icons.check, color: Colors.white, size: 20),
+                            child: const Icon(
+                              Icons.check,
+                              color: Colors.white,
+                              size: 18,
+                            ),
                           )
                         : AvatarWidget(
-                            name: email.senderName,
-                            size: 40,
-                            fontSize: 15,
+                            name: avatarName,
+                            size: 36,
+                            fontSize: 13,
                           ),
                   ),
                 ),
-                const SizedBox(width: 16),
-                
+                const SizedBox(width: 14),
+
                 // 2. CENTER: EMAIL CONTENTS
                 Expanded(
                   child: Column(
@@ -134,9 +189,9 @@ class _EmailTileState extends ConsumerState<EmailTile> {
                         children: [
                           Expanded(
                             child: Text(
-                              email.senderName,
+                              tileSenderName,
                               style: TextStyle(
-                                fontSize: 15,
+                                fontSize: 14,
                                 fontWeight: textWeight,
                                 color: textColor,
                               ),
@@ -148,28 +203,32 @@ class _EmailTileState extends ConsumerState<EmailTile> {
                           Text(
                             _formatDate(email.date),
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: 11,
                               fontWeight: textWeight,
-                              color: isDark ? BNXColors.darkTextSecondary : BNXColors.lightTextSecondary,
+                              color: isDark
+                                  ? BNXColors.darkTextSecondary
+                                  : BNXColors.lightTextSecondary,
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 4),
-                      
+                      const SizedBox(height: 3),
+
                       // Subject
                       Text(
                         email.subject,
                         style: TextStyle(
-                          fontSize: 14,
+                          fontSize: 13,
                           fontWeight: textWeight,
-                          color: isDark ? Colors.white : BNXColors.lightTextPrimary,
+                          color: isDark
+                              ? Colors.white
+                              : BNXColors.lightTextPrimary,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 2),
-                      
+
                       // Body / Snippet + Labels + Star / Unread dot
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.center,
@@ -181,37 +240,85 @@ class _EmailTileState extends ConsumerState<EmailTile> {
                                 Text(
                                   email.body,
                                   style: TextStyle(
-                                    fontSize: 13,
-                                    color: isDark ? BNXColors.darkTextSecondary : BNXColors.lightTextSecondary,
+                                    fontSize: 12,
+                                    color: isDark
+                                        ? BNXColors.darkTextSecondary
+                                        : BNXColors.lightTextSecondary,
                                   ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 if (email.labels.isNotEmpty) ...[
-                                  const SizedBox(height: 6),
-                                  Wrap(
-                                    spacing: 4,
-                                    runSpacing: 4,
-                                    children: email.labels.map((l) => LabelChip(labelName: l)).toList(),
-                                  ),
+                                  () {
+                                    final customLabels = ref.watch(customLabelsProvider);
+                                    final activeChips = email.labels.where((l) {
+                                      final norm = l.trim().toLowerCase();
+                                      const system = {
+                                        'work',
+                                        'personal',
+                                        'important',
+                                        'promotions',
+                                        'social',
+                                        'updates',
+                                        'purchases',
+                                      };
+                                      if (system.contains(norm)) return true;
+                                      return customLabels.any(
+                                        (cl) =>
+                                            cl.name.trim().toLowerCase() == norm ||
+                                            cl.id.trim().toLowerCase() == norm,
+                                      );
+                                    }).map((l) {
+                                      final matched = customLabels.firstWhere(
+                                        (cl) =>
+                                            cl.name.trim().toLowerCase() ==
+                                                l.trim().toLowerCase() ||
+                                            cl.id.trim().toLowerCase() ==
+                                                l.trim().toLowerCase(),
+                                        orElse: () => LabelModel(
+                                          id: l,
+                                          name: l,
+                                          color: Colors.blueGrey,
+                                        ),
+                                      );
+                                      return LabelChip(
+                                        labelName: matched.name,
+                                        customColor: matched.color,
+                                      );
+                                    }).toList();
+
+                                    if (activeChips.isEmpty) {
+                                      return const SizedBox.shrink();
+                                    }
+                                    return Padding(
+                                      padding: const EdgeInsets.only(top: 4),
+                                      child: Wrap(
+                                        spacing: 4,
+                                        runSpacing: 4,
+                                        children: activeChips,
+                                      ),
+                                    );
+                                  }(),
                                 ],
                               ],
                             ),
                           ),
                           const SizedBox(width: 8),
-                          
+
                           // Attachment Icon
                           if (email.hasAttachment) ...[
                             Icon(
                               Icons.attachment_rounded,
-                              size: 16,
-                              color: isDark ? BNXColors.darkTextSecondary : BNXColors.lightTextSecondary,
+                              size: 15,
+                              color: isDark
+                                  ? BNXColors.darkTextSecondary
+                                  : BNXColors.lightTextSecondary,
                             ),
                             const SizedBox(width: 8),
                           ],
-                          
-                          // Unread Dot
-                          if (!email.isRead) ...[
+
+                          // Unread Dot (never show for Drafts or Scheduled items)
+                          if (!email.isRead && !isDraftItem && !isScheduledItem) ...[
                             Container(
                               width: 8,
                               height: 8,
@@ -222,16 +329,48 @@ class _EmailTileState extends ConsumerState<EmailTile> {
                             ),
                             const SizedBox(width: 8),
                           ],
-                          
+
+                          // Open Button (Only visible if selected for bulk / selection mode active)
+                          if (isSelectedForBulk) ...[
+                            GestureDetector(
+                              onTap: widget.onTap,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF195BAC),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Text(
+                                  'Open',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+
                           // Star Icon
                           GestureDetector(
                             onTap: () {
-                              ref.read(emailProvider.notifier).toggleStar(email.id);
+                              ref
+                                  .read(emailProvider.notifier)
+                                  .toggleStar(email.id, 'Inbox');
                             },
                             child: Icon(
-                              email.isStarred ? Icons.star_rounded : Icons.star_border_rounded,
-                              color: email.isStarred ? BNXColors.starActive : BNXColors.starInactive,
-                              size: 22,
+                              email.isStarred
+                                  ? Icons.star_rounded
+                                  : Icons.star_border_rounded,
+                              color: email.isStarred
+                                  ? BNXColors.starActive
+                                  : BNXColors.starInactive,
+                              size: 20,
                             ),
                           ),
                         ],
@@ -251,18 +390,45 @@ class _EmailTileState extends ConsumerState<EmailTile> {
       onExit: (_) => setState(() => _isHovered = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: widget.onTap,
-        child: NeumorphicContainer(
-          shape: widget.isSelected 
-              ? NeumorphicShape.pressed 
-              : (_isHovered ? NeumorphicShape.convex : NeumorphicShape.flat),
-          borderRadius: 14,
-          depth: widget.isSelected ? 0 : (_isHovered ? 3.0 : 1.5),
-          color: widget.isSelected
-              ? (isDark ? const Color(0xFF0F172A) : const Color(0xFFF4F7FB))
-              : (isDark ? const Color(0xFF1E293B) : Colors.white),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        onTap: () {
+          if (uiState.selectedEmailIds.isNotEmpty) {
+            ref.read(appUiProvider.notifier).toggleEmailSelection(email.id);
+          } else {
+            widget.onTap();
+          }
+        },
+        onLongPress: () {
+          ref.read(appUiProvider.notifier).toggleEmailSelection(email.id);
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          decoration: BoxDecoration(
+            color: widget.isSelected
+                ? (isDark ? const Color(0xFF1E293B) : const Color(0xFFEAF1FB))
+                : (_isHovered
+                      ? (isDark
+                            ? const Color(0xFF334155)
+                            : const Color(0xFFF1F5F9))
+                      : (isDark ? const Color(0xFF0F172A) : Colors.white)),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: widget.isSelected
+                  ? BNXColors.lightPrimary.withValues(alpha: 0.4)
+                  : (isDark
+                        ? Colors.white.withValues(alpha: 0.05)
+                        : Colors.grey.shade200),
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+                blurRadius: 4,
+                offset: const Offset(0, 1),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
           child: Row(
             children: [
               Container(
@@ -272,18 +438,26 @@ class _EmailTileState extends ConsumerState<EmailTile> {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: !email.isRead
-                      ? (isDark ? BNXColors.darkPrimary : BNXColors.lightPrimary)
+                      ? (isDark
+                            ? BNXColors.darkPrimary
+                            : BNXColors.lightPrimary)
                       : Colors.transparent,
                 ),
               ),
               IconButton(
                 icon: Icon(
-                  email.isStarred ? Icons.star_rounded : Icons.star_border_rounded,
-                  color: email.isStarred ? BNXColors.starActive : BNXColors.starInactive,
-                  size: 22,
+                  email.isStarred
+                      ? Icons.star_rounded
+                      : Icons.star_border_rounded,
+                  color: email.isStarred
+                      ? BNXColors.starActive
+                      : BNXColors.starInactive,
+                  size: 20,
                 ),
                 onPressed: () {
-                  ref.read(emailProvider.notifier).toggleStar(email.id);
+                  ref
+                      .read(emailProvider.notifier)
+                      .toggleStar(email.id, 'Inbox');
                 },
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
@@ -291,12 +465,14 @@ class _EmailTileState extends ConsumerState<EmailTile> {
               const SizedBox(width: 12),
               GestureDetector(
                 onTap: () {
-                  ref.read(appUiProvider.notifier).toggleEmailSelection(email.id);
+                  ref
+                      .read(appUiProvider.notifier)
+                      .toggleEmailSelection(email.id);
                 },
                 child: MouseRegion(
                   child: Container(
-                    width: 32,
-                    height: 32,
+                    width: 28,
+                    height: 28,
                     decoration: isSelectedForBulk
                         ? const BoxDecoration(
                             color: BNXColors.lightPrimary,
@@ -305,153 +481,244 @@ class _EmailTileState extends ConsumerState<EmailTile> {
                         : null,
                     alignment: Alignment.center,
                     child: isSelectedForBulk
-                        ? const Icon(Icons.check, color: Colors.white, size: 18)
+                        ? const Icon(Icons.check, color: Colors.white, size: 14)
                         : (_isHovered
-                            ? Transform.scale(
-                                scale: 0.85,
-                                child: Checkbox(
-                                  value: isSelectedForBulk,
-                                  activeColor: BNXColors.lightPrimary,
-                                  onChanged: (val) {
-                                    ref.read(appUiProvider.notifier).toggleEmailSelection(email.id);
-                                  },
-                                ),
-                              )
-                            : AvatarWidget(
-                                name: email.senderName,
-                                size: 32,
-                                fontSize: 13,
-                              )),
+                              ? Transform.scale(
+                                  scale: 0.7,
+                                  child: Checkbox(
+                                    value: isSelectedForBulk,
+                                    activeColor: BNXColors.lightPrimary,
+                                    onChanged: (val) {
+                                      ref
+                                          .read(appUiProvider.notifier)
+                                          .toggleEmailSelection(email.id);
+                                    },
+                                  ),
+                                )
+                              : AvatarWidget(
+                                  name: email.senderName,
+                                  size: 28,
+                                  fontSize: 11,
+                                )),
                   ),
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 12),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Row(
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            email.senderName,
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: textWeight,
-                              color: textColor,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                    Expanded(
+                      flex: 3,
+                      child: Text(
+                        tileSenderName,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: textWeight,
+                          color: textColor,
                         ),
-                        const SizedBox(width: 8),
-                        if (email.labels.isNotEmpty) ...[
-                          Wrap(
-                            spacing: 4,
-                            children: email.labels.map((l) => LabelChip(labelName: l)).toList(),
-                          ),
-                          const SizedBox(width: 8),
-                        ],
-                        if (email.isSnoozed && email.snoozeUntil != null) ...[
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: isDark ? Colors.amber.withOpacity(0.15) : Colors.amber.shade50,
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: Colors.amber.withOpacity(0.3)),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.access_time_rounded, size: 10, color: Colors.amber),
-                                const SizedBox(width: 4),
-                                Text(
-                                  _formatSnoozeDate(email.snoozeUntil!),
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: isDark ? Colors.amber : Colors.amber.shade800,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      email.subject,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: textWeight,
-                        color: isDark ? Colors.white : BNXColors.lightTextPrimary,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      email.body,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark ? BNXColors.darkTextSecondary : BNXColors.lightTextSecondary,
+                    const SizedBox(width: 16),
+                    Expanded(
+                      flex: 7,
+                      child: RichText(
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        text: TextSpan(
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isDark
+                                ? Colors.white
+                                : BNXColors.lightTextPrimary,
+                          ),
+                          children: [
+                            TextSpan(
+                              text: email.subject,
+                              style: TextStyle(fontWeight: textWeight),
+                            ),
+                            TextSpan(
+                              text: ' — ${email.body}',
+                              style: TextStyle(
+                                color: isDark
+                                    ? BNXColors.darkTextSecondary
+                                    : BNXColors.lightTextSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 14),
               if (email.hasAttachment)
                 Icon(
                   Icons.attachment_rounded,
-                  size: 16,
-                  color: isDark ? BNXColors.darkTextSecondary : BNXColors.lightTextSecondary,
+                  size: 15,
+                  color: isDark
+                      ? BNXColors.darkTextSecondary
+                      : BNXColors.lightTextSecondary,
                 ),
               const SizedBox(width: 12),
+              if (isSelectedForBulk) ...[
+                GestureDetector(
+                  onTap: widget.onTap,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF195BAC),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      'Open',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+              ],
               Container(
-                width: 100,
+                width: 90,
                 alignment: Alignment.centerRight,
                 child: AnimatedCrossFade(
                   duration: BNXConstants.animationDurationFast,
-                  crossFadeState: _isHovered ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+                  crossFadeState: _isHovered
+                      ? CrossFadeState.showSecond
+                      : CrossFadeState.showFirst,
                   firstChild: Text(
                     _formatDate(email.date),
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 11,
                       fontWeight: textWeight,
-                      color: isDark ? BNXColors.darkTextSecondary : BNXColors.lightTextSecondary,
+                      color: isDark
+                          ? BNXColors.darkTextSecondary
+                          : BNXColors.lightTextSecondary,
                     ),
                   ),
                   secondChild: Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _buildQuickAction(
-                        icon: Icons.archive_outlined,
-                        tooltip: 'Archive',
-                        onTap: () {
-                          ref.read(emailProvider.notifier).archiveEmail(email.id);
-                        },
-                      ),
-                      _buildQuickAction(
-                        icon: Icons.delete_outline_rounded,
-                        tooltip: 'Delete',
-                        onTap: () {
-                          ref.read(emailProvider.notifier).deleteEmail(email.id);
-                        },
-                      ),
-                      _buildQuickAction(
-                        icon: email.isRead ? Icons.mark_email_unread_outlined : Icons.mark_email_read_outlined,
-                        tooltip: email.isRead ? 'Mark as unread' : 'Mark as read',
-                        onTap: () {
-                          ref.read(emailProvider.notifier).toggleRead(email.id);
-                        },
-                      ),
-                    ],
+                    children: isScheduledItem
+                        ? [
+                            _buildQuickAction(
+                              icon: Icons.send_rounded,
+                              tooltip: 'Send now',
+                              onTap: () {
+                                ref
+                                    .read(emailProvider.notifier)
+                                    .sendScheduledEmailNow(email);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Sending scheduled mail now...'),
+                                  ),
+                                );
+                              },
+                            ),
+                            _buildQuickAction(
+                              icon: Icons.delete_outline_rounded,
+                              tooltip: 'Cancel schedule',
+                              onTap: () {
+                                ref
+                                    .read(emailProvider.notifier)
+                                    .cancelScheduledEmail(email.id);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Schedule cancelled.'),
+                                  ),
+                                );
+                              },
+                            ),
+                          ]
+                        : (email.isTrash || email.memberOfFolders.contains('Trash') || uiState.activeFolder == 'Trash')
+                            ? [
+                                _buildQuickAction(
+                                  icon: Icons.restore_from_trash_outlined,
+                                  tooltip: 'Restore',
+                                  onTap: () {
+                                    ref
+                                        .read(emailProvider.notifier)
+                                        .restoreEmail(email.id);
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Restored email to Inbox.'),
+                                      ),
+                                    );
+                                  },
+                                ),
+                                _buildQuickAction(
+                                  icon: Icons.delete_forever_outlined,
+                                  tooltip: 'Delete permanently',
+                                  onTap: () {
+                                    ref
+                                        .read(emailProvider.notifier)
+                                        .permanentlyDeleteEmail(email.id, folder: uiState.activeFolder);
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Permanently deleted.'),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ]
+                            : [
+                                _buildQuickAction(
+                                  icon: (email.isArchive ||
+                                          email.memberOfFolders.contains('Archive'))
+                                      ? Icons.unarchive_outlined
+                                      : Icons.archive_outlined,
+                                  tooltip: (email.isArchive ||
+                                          email.memberOfFolders.contains('Archive'))
+                                      ? 'Unarchive'
+                                      : 'Archive',
+                                  onTap: () {
+                                    if (email.isArchive ||
+                                        email.memberOfFolders.contains('Archive')) {
+                                      ref
+                                          .read(emailProvider.notifier)
+                                          .unarchiveEmail(email.id);
+                                    } else {
+                                      ref
+                                          .read(emailProvider.notifier)
+                                          .archiveEmail(email.id, uiState.activeFolder);
+                                    }
+                                  },
+                                ),
+                                _buildQuickAction(
+                                  icon: Icons.delete_outline_rounded,
+                                  tooltip: 'Delete',
+                                  onTap: () {
+                                    ref
+                                        .read(emailProvider.notifier)
+                                        .deleteEmail(
+                                          email.id,
+                                          uiState.activeFolder,
+                                        );
+                                  },
+                                ),
+                                _buildQuickAction(
+                                  icon: email.isRead
+                                      ? Icons.mark_email_unread_outlined
+                                      : Icons.mark_email_read_outlined,
+                                  tooltip: email.isRead
+                                      ? 'Mark as unread'
+                                      : 'Mark as read',
+                                  onTap: () {
+                                    ref
+                                        .read(emailProvider.notifier)
+                                        .toggleRead(email.id, uiState.activeFolder);
+                                  },
+                                ),
+                              ],
                   ),
                 ),
               ),
@@ -474,11 +741,7 @@ class _EmailTileState extends ConsumerState<EmailTile> {
         borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.all(6.0),
-          child: Icon(
-            icon,
-            size: 18,
-            color: Colors.grey,
-          ),
+          child: Icon(icon, size: 18, color: Colors.grey),
         ),
       ),
     );

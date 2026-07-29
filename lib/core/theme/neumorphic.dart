@@ -1,11 +1,6 @@
 import 'package:flutter/material.dart';
 
-enum NeumorphicShape {
-  flat,
-  concave,
-  convex,
-  pressed,
-}
+enum NeumorphicShape { flat, concave, convex, pressed }
 
 class NeumorphicDecoration {
   static Decoration getDecoration({
@@ -17,14 +12,15 @@ class NeumorphicDecoration {
     BoxShape boxShape = BoxShape.rectangle,
   }) {
     // Base colors matching standard project backgrounds
-    final Color baseColor = color ?? (isDark ? const Color(0xFF0F172A) : const Color(0xFFF4F7FB));
-    
+    final Color baseColor =
+        color ?? (isDark ? const Color(0xFF0F172A) : const Color(0xFFF4F7FB));
+
     // Light highlight and dark shadow colors
-    final Color lightShadow = isDark 
+    final Color lightShadow = isDark
         ? const Color(0xFF1E293B) // Slate 800
         : const Color(0xFFFFFFFF); // Pure white
-        
-    final Color darkShadow = isDark 
+
+    final Color darkShadow = isDark
         ? const Color(0xFF070B14) // Deep pitch black/blue
         : const Color(0xFFD1D9E6); // Light soft grey-blue
 
@@ -32,11 +28,13 @@ class NeumorphicDecoration {
       // Sunken pressed look using linear gradient simulation + inner highlight borders
       return BoxDecoration(
         shape: boxShape,
-        borderRadius: boxShape == BoxShape.circle ? null : BorderRadius.circular(borderRadius),
+        borderRadius: boxShape == BoxShape.circle
+            ? null
+            : BorderRadius.circular(borderRadius),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: isDark 
+          colors: isDark
               ? [const Color(0xFF090E1A), const Color(0xFF162035)]
               : [const Color(0xFFE2EAF4), const Color(0xFFFFFFFF)],
         ),
@@ -48,7 +46,9 @@ class NeumorphicDecoration {
     } else if (shape == NeumorphicShape.concave) {
       return BoxDecoration(
         shape: boxShape,
-        borderRadius: boxShape == BoxShape.circle ? null : BorderRadius.circular(borderRadius),
+        borderRadius: boxShape == BoxShape.circle
+            ? null
+            : BorderRadius.circular(borderRadius),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -72,7 +72,9 @@ class NeumorphicDecoration {
     } else if (shape == NeumorphicShape.convex) {
       return BoxDecoration(
         shape: boxShape,
-        borderRadius: boxShape == BoxShape.circle ? null : BorderRadius.circular(borderRadius),
+        borderRadius: boxShape == BoxShape.circle
+            ? null
+            : BorderRadius.circular(borderRadius),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -98,7 +100,9 @@ class NeumorphicDecoration {
       return BoxDecoration(
         shape: boxShape,
         color: baseColor,
-        borderRadius: boxShape == BoxShape.circle ? null : BorderRadius.circular(borderRadius),
+        borderRadius: boxShape == BoxShape.circle
+            ? null
+            : BorderRadius.circular(borderRadius),
         boxShadow: [
           BoxShadow(
             color: lightShadow,

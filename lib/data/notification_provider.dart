@@ -40,62 +40,63 @@ class NotificationModel {
 
 class NotificationsNotifier extends StateNotifier<List<NotificationModel>> {
   NotificationsNotifier()
-      : super([
-          NotificationModel(
-            id: 'notif_1',
-            title: 'New email from Sarah Chen',
-            subtitle: '🚀 BNXMail Platform Launch Roadmap 2026',
-            time: DateTime.now().subtract(const Duration(minutes: 3)),
-            type: NotificationType.email,
-            isRead: false,
-          ),
-          NotificationModel(
-            id: 'notif_2',
-            title: 'GitHub Security Alert',
-            subtitle: '3 vulnerabilities found in npm dependencies',
-            time: DateTime.now().subtract(const Duration(minutes: 18)),
-            type: NotificationType.alert,
-            isRead: false,
-          ),
-          NotificationModel(
-            id: 'notif_3',
-            title: 'Deployment Successful',
-            subtitle: 'bnxmail-frontend-web is live on Vercel',
-            time: DateTime.now().subtract(const Duration(hours: 1)),
-            type: NotificationType.system,
-            isRead: false,
-          ),
-          NotificationModel(
-            id: 'notif_4',
-            title: 'Code review request',
-            subtitle: 'Alex Rivera requested your review on PR #42',
-            time: DateTime.now().subtract(const Duration(hours: 2)),
-            type: NotificationType.email,
-            isRead: true,
-          ),
-          NotificationModel(
-            id: 'notif_5',
-            title: 'Security scan complete',
-            subtitle: 'No threats detected. Your account is secure.',
-            time: DateTime.now().subtract(const Duration(hours: 5)),
-            type: NotificationType.security,
-            isRead: true,
-          ),
-          NotificationModel(
-            id: 'notif_6',
-            title: 'New message in #bnxmail-design',
-            subtitle: 'James Wilson: Updated icons for Compose, Starred...',
-            time: DateTime.now().subtract(const Duration(hours: 8)),
-            type: NotificationType.email,
-            isRead: true,
-          ),
-        ]);
+    : super([
+        NotificationModel(
+          id: 'notif_1',
+          title: 'New email from Sarah Chen',
+          subtitle: '🚀 BNXMail Platform Launch Roadmap 2026',
+          time: DateTime.now().subtract(const Duration(minutes: 3)),
+          type: NotificationType.email,
+          isRead: false,
+        ),
+        NotificationModel(
+          id: 'notif_2',
+          title: 'GitHub Security Alert',
+          subtitle: '3 vulnerabilities found in npm dependencies',
+          time: DateTime.now().subtract(const Duration(minutes: 18)),
+          type: NotificationType.alert,
+          isRead: false,
+        ),
+        NotificationModel(
+          id: 'notif_3',
+          title: 'Deployment Successful',
+          subtitle: 'bnxmail-frontend-web is live on Vercel',
+          time: DateTime.now().subtract(const Duration(hours: 1)),
+          type: NotificationType.system,
+          isRead: false,
+        ),
+        NotificationModel(
+          id: 'notif_4',
+          title: 'Code review request',
+          subtitle: 'Alex Rivera requested your review on PR #42',
+          time: DateTime.now().subtract(const Duration(hours: 2)),
+          type: NotificationType.email,
+          isRead: true,
+        ),
+        NotificationModel(
+          id: 'notif_5',
+          title: 'Security scan complete',
+          subtitle: 'No threats detected. Your account is secure.',
+          time: DateTime.now().subtract(const Duration(hours: 5)),
+          type: NotificationType.security,
+          isRead: true,
+        ),
+        NotificationModel(
+          id: 'notif_6',
+          title: 'New message in #bnxmail-design',
+          subtitle: 'James Wilson: Updated icons for Compose, Starred...',
+          time: DateTime.now().subtract(const Duration(hours: 8)),
+          type: NotificationType.email,
+          isRead: true,
+        ),
+      ]);
 
   int get unreadCount => state.where((n) => !n.isRead).length;
 
   void markRead(String id) {
-    state =
-        state.map((n) => n.id == id ? n.copyWith(isRead: true) : n).toList();
+    state = state
+        .map((n) => n.id == id ? n.copyWith(isRead: true) : n)
+        .toList();
   }
 
   void markAllRead() {
@@ -109,7 +110,8 @@ class NotificationsNotifier extends StateNotifier<List<NotificationModel>> {
 
 final notificationsProvider =
     StateNotifierProvider<NotificationsNotifier, List<NotificationModel>>(
-        (ref) => NotificationsNotifier());
+      (ref) => NotificationsNotifier(),
+    );
 
 final unreadNotificationsCountProvider = Provider<int>((ref) {
   return ref.watch(notificationsProvider).where((n) => !n.isRead).length;

@@ -5,7 +5,9 @@ import '../theme/colors.dart';
 import '../theme/neumorphic.dart';
 
 enum CalcMode { gst, discount, currency, compare }
+
 enum CurrencyType { inr, usd }
+
 enum CalculationType { tape, comparison }
 
 class TapeEntry {
@@ -104,7 +106,7 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
 
   List<TapeEntry> _tapeEntries = [];
   List<ComparisonRow> _comparisonRows = [];
-  List<HistorySection> _historySections = [];
+  final List<HistorySection> _historySections = [];
 
   String _currentInput = '0';
   String _pendingOperator = '';
@@ -196,13 +198,15 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
 
       if (!_hasBase) {
         // Set Base amount
-        _tapeEntries.add(TapeEntry(
-          id: DateTime.now().toString(),
-          operator: '=',
-          value: inputVal,
-          runningTotal: inputVal,
-          isBase: true,
-        ));
+        _tapeEntries.add(
+          TapeEntry(
+            id: DateTime.now().toString(),
+            operator: '=',
+            value: inputVal,
+            runningTotal: inputVal,
+            isBase: true,
+          ),
+        );
         _currentInput = '0';
         _pendingOperator = op;
       } else {
@@ -237,12 +241,14 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
         break;
     }
 
-    _tapeEntries.add(TapeEntry(
-      id: DateTime.now().toString(),
-      operator: _pendingOperator,
-      value: inputVal,
-      runningTotal: newTotal,
-    ));
+    _tapeEntries.add(
+      TapeEntry(
+        id: DateTime.now().toString(),
+        operator: _pendingOperator,
+        value: inputVal,
+        runningTotal: newTotal,
+      ),
+    );
 
     _currentInput = '0';
   }
@@ -265,13 +271,15 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
       final gstVal = base * (percent / 100.0);
       final newTotal = base + gstVal;
 
-      _tapeEntries.add(TapeEntry(
-        id: DateTime.now().toString(),
-        operator: '+GST',
-        value: gstVal,
-        runningTotal: newTotal,
-        presetTag: '${percent.toInt()}% GST',
-      ));
+      _tapeEntries.add(
+        TapeEntry(
+          id: DateTime.now().toString(),
+          operator: '+GST',
+          value: gstVal,
+          runningTotal: newTotal,
+          presetTag: '${percent.toInt()}% GST',
+        ),
+      );
     });
     _scrollTapeToBottom();
   }
@@ -284,13 +292,15 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
       final discVal = base * (percent / 100.0);
       final newTotal = base - discVal;
 
-      _tapeEntries.add(TapeEntry(
-        id: DateTime.now().toString(),
-        operator: '-DISC',
-        value: discVal,
-        runningTotal: newTotal,
-        presetTag: '${percent.toInt()}% Disc',
-      ));
+      _tapeEntries.add(
+        TapeEntry(
+          id: DateTime.now().toString(),
+          operator: '-DISC',
+          value: discVal,
+          runningTotal: newTotal,
+          presetTag: '${percent.toInt()}% Disc',
+        ),
+      );
     });
     _scrollTapeToBottom();
   }
@@ -303,24 +313,28 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
         if (r.valueA != null) totalA += r.finalA;
       }
       setState(() {
-        _historySections.add(HistorySection(
-          id: DateTime.now().toString(),
-          timestamp: DateTime.now(),
-          comparisonRows: List.from(_comparisonRows),
-          type: CalculationType.comparison,
-          totalValue: totalA,
-        ));
+        _historySections.add(
+          HistorySection(
+            id: DateTime.now().toString(),
+            timestamp: DateTime.now(),
+            comparisonRows: List.from(_comparisonRows),
+            type: CalculationType.comparison,
+            totalValue: totalA,
+          ),
+        );
       });
     } else {
       if (_tapeEntries.isEmpty) return;
       setState(() {
-        _historySections.add(HistorySection(
-          id: DateTime.now().toString(),
-          timestamp: DateTime.now(),
-          tapeEntries: List.from(_tapeEntries),
-          type: CalculationType.tape,
-          totalValue: _currentRunningTotal,
-        ));
+        _historySections.add(
+          HistorySection(
+            id: DateTime.now().toString(),
+            timestamp: DateTime.now(),
+            tapeEntries: List.from(_tapeEntries),
+            type: CalculationType.tape,
+            totalValue: _currentRunningTotal,
+          ),
+        );
       });
     }
   }
@@ -358,7 +372,9 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
       if (entry.isBase) {
         buffer.writeln('BASE: ${_formatNumber(entry.value)}');
       } else {
-        buffer.writeln('${entry.operator} ${_formatNumber(entry.value)} (Total: ${_formatNumber(entry.runningTotal)})');
+        buffer.writeln(
+          '${entry.operator} ${_formatNumber(entry.value)} (Total: ${_formatNumber(entry.runningTotal)})',
+        );
       }
       if (entry.label != null && entry.label!.isNotEmpty) {
         buffer.writeln('   [Label: ${entry.label}]');
@@ -368,7 +384,12 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
     return buffer.toString();
   }
 
-  Widget _headerAction(IconData icon, String tooltip, VoidCallback onTap, bool isDark) {
+  Widget _headerAction(
+    IconData icon,
+    String tooltip,
+    VoidCallback onTap,
+    bool isDark,
+  ) {
     return Tooltip(
       message: tooltip,
       child: InkWell(
@@ -376,7 +397,11 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
         borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.all(4.0),
-          child: Icon(icon, size: 15, color: isDark ? Colors.white60 : Colors.black54),
+          child: Icon(
+            icon,
+            size: 15,
+            color: isDark ? Colors.white60 : Colors.black54,
+          ),
         ),
       ),
     );
@@ -385,7 +410,9 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
   @override
   Widget build(BuildContext context) {
     final isDark = widget.isDark;
-    final primaryColor = isDark ? BNXColors.darkPrimary : BNXColors.lightPrimary;
+    final primaryColor = isDark
+        ? BNXColors.darkPrimary
+        : BNXColors.lightPrimary;
     final onSurface = isDark ? Colors.white : BNXColors.lightTextPrimary;
 
     return Column(
@@ -402,27 +429,46 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
                 const SizedBox(width: 4),
                 Text(
                   'BETA CALC',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: onSurface),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: onSurface,
+                  ),
                 ),
               ],
             ),
             Row(
               children: [
-                _headerAction(Icons.save_alt_rounded, 'Save Session', _saveCurrentToHistory, isDark),
+                _headerAction(
+                  Icons.save_alt_rounded,
+                  'Save Session',
+                  _saveCurrentToHistory,
+                  isDark,
+                ),
                 const SizedBox(width: 4),
-                _headerAction(_showLogs ? Icons.history_toggle_off_rounded : Icons.history_rounded, 'Logs', () => setState(() => _showLogs = !_showLogs), isDark),
+                _headerAction(
+                  _showLogs
+                      ? Icons.history_toggle_off_rounded
+                      : Icons.history_rounded,
+                  'Logs',
+                  () => setState(() => _showLogs = !_showLogs),
+                  isDark,
+                ),
                 const SizedBox(width: 4),
                 _headerAction(Icons.share_outlined, 'Share logs', () {
                   final summary = _getTapeSummaryText();
                   Clipboard.setData(ClipboardData(text: summary));
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Logs copied to clipboard'), duration: Duration(seconds: 1)),
+                    const SnackBar(
+                      content: Text('Logs copied to clipboard'),
+                      duration: Duration(seconds: 1),
+                    ),
                   );
                 }, isDark),
                 const SizedBox(width: 4),
                 _headerAction(Icons.delete_outline, 'Clear', _clearAll, isDark),
               ],
-            )
+            ),
           ],
         ),
 
@@ -435,7 +481,11 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
               padding: EdgeInsets.symmetric(vertical: 12),
               child: Text(
                 'No logs saved yet.',
-                style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.grey),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontStyle: FontStyle.italic,
+                  color: Colors.grey,
+                ),
                 textAlign: TextAlign.center,
               ),
             )
@@ -458,22 +508,41 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  sec.type == CalculationType.comparison ? 'Comparison Log' : 'Calculated Log',
-                                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                                  sec.type == CalculationType.comparison
+                                      ? 'Comparison Log'
+                                      : 'Calculated Log',
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                                 Text(
                                   '${_currencyType == CurrencyType.usd ? "\$" : "₹"}${_formatNumber(sec.totalValue)}',
-                                  style: TextStyle(fontSize: 11, color: primaryColor, fontWeight: FontWeight.bold),
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: primaryColor,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                               ],
                             ),
                           ),
                           TextButton(
                             onPressed: () => _restoreHistory(sec),
-                            child: const Text('RESTORE', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold)),
+                            child: const Text(
+                              'RESTORE',
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.delete_outline, size: 14, color: Colors.redAccent),
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              size: 14,
+                              color: Colors.redAccent,
+                            ),
                             onPressed: () => _deleteHistory(sec.id),
                           ),
                         ],
@@ -502,7 +571,14 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
               color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF4F7FB),
               child: Row(
                 children: [
-                  const Text('SET BASE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+                  const Text(
+                    'SET BASE',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey,
+                    ),
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Align(
@@ -512,7 +588,11 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
                         reverse: true,
                         child: Text(
                           _currentInput,
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: onSurface),
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: onSurface,
+                          ),
                         ),
                       ),
                     ),
@@ -528,8 +608,14 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
               color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF4F7FB),
               child: Row(
                 children: [
-                  Text(_pendingOperator.isEmpty ? 'CONTINUE' : _pendingOperator,
-                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+                  Text(
+                    _pendingOperator.isEmpty ? 'CONTINUE' : _pendingOperator,
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey,
+                    ),
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Align(
@@ -539,7 +625,11 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
                         reverse: true,
                         child: Text(
                           _currentInput,
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: onSurface),
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: onSurface,
+                          ),
                         ),
                       ),
                     ),
@@ -555,9 +645,19 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
           children: [
             _modeButton('GST', CalcMode.gst, isDark, primaryColor),
             const SizedBox(width: 4),
-            _modeButton('Disc', CalcMode.discount, isDark, const Color(0xFFEA580C)),
+            _modeButton(
+              'Disc',
+              CalcMode.discount,
+              isDark,
+              const Color(0xFFEA580C),
+            ),
             const SizedBox(width: 4),
-            _modeButton(_currencyType == CurrencyType.inr ? 'INR' : 'USD', CalcMode.currency, isDark, primaryColor),
+            _modeButton(
+              _currencyType == CurrencyType.inr ? 'INR' : 'USD',
+              CalcMode.currency,
+              isDark,
+              primaryColor,
+            ),
             const SizedBox(width: 4),
             _modeButton('Comp', CalcMode.compare, isDark, primaryColor),
           ],
@@ -594,7 +694,11 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
               children: [
                 const Text(
                   'TOTAL',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -605,7 +709,11 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
                       reverse: true,
                       child: Text(
                         '${_currencyType == CurrencyType.usd ? "\$" : "₹"}${_formatNumber(_currencyType == CurrencyType.usd ? _currentRunningTotal / _usdRate : _currentRunningTotal)}',
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
                       ),
                     ),
                   ),
@@ -613,19 +721,26 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
               ],
             ),
           ),
-        ]
+        ],
       ],
     );
   }
 
-  Widget _modeButton(String label, CalcMode mode, bool isDark, Color activeColor) {
+  Widget _modeButton(
+    String label,
+    CalcMode mode,
+    bool isDark,
+    Color activeColor,
+  ) {
     final isActive = _activeMode == mode;
     return Expanded(
       child: GestureDetector(
         onTap: () {
           if (mode == CalcMode.currency) {
             setState(() {
-              _currencyType = _currencyType == CurrencyType.inr ? CurrencyType.usd : CurrencyType.inr;
+              _currencyType = _currencyType == CurrencyType.inr
+                  ? CurrencyType.usd
+                  : CurrencyType.inr;
             });
           } else {
             setState(() {
@@ -636,7 +751,9 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 6),
           decoration: BoxDecoration(
-            color: isActive ? activeColor : (isDark ? Colors.white10 : Colors.grey.shade200),
+            color: isActive
+                ? activeColor
+                : (isDark ? Colors.white10 : Colors.grey.shade200),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Center(
@@ -645,7 +762,9 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.bold,
-                color: isActive ? Colors.white : (isDark ? Colors.white60 : Colors.black87),
+                color: isActive
+                    ? Colors.white
+                    : (isDark ? Colors.white60 : Colors.black87),
               ),
             ),
           ),
@@ -671,14 +790,18 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 6),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.12),
+                  color: color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: color.withOpacity(0.25)),
+                  border: Border.all(color: color.withValues(alpha: 0.25)),
                 ),
                 child: Center(
                   child: Text(
                     isGst ? '+$v%' : '-$v%',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: color),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: color,
+                    ),
                   ),
                 ),
               ),
@@ -713,31 +836,64 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
           itemCount: _tapeEntries.length,
           itemBuilder: (context, i) {
             final entry = _tapeEntries[i];
-            final val = _currencyType == CurrencyType.usd ? entry.value / _usdRate : entry.value;
-            final runTot = _currencyType == CurrencyType.usd ? entry.runningTotal / _usdRate : entry.runningTotal;
+            final val = _currencyType == CurrencyType.usd
+                ? entry.value / _usdRate
+                : entry.value;
+            final runTot = _currencyType == CurrencyType.usd
+                ? entry.runningTotal / _usdRate
+                : entry.runningTotal;
             final symbol = _currencyType == CurrencyType.usd ? r'$' : '₹';
-  
+
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 2.0),
               child: Row(
                 children: [
                   if (entry.isBase)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                      decoration: BoxDecoration(color: Colors.green, borderRadius: BorderRadius.circular(4)),
-                      child: const Text('BASE', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 1,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.green,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text(
+                        'BASE',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 8,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     )
                   else
                     Text(
                       '${entry.operator} ',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
                     ),
                   const SizedBox(width: 4),
                   if (entry.presetTag != null)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                      decoration: BoxDecoration(color: Colors.blue.withOpacity(0.12), borderRadius: BorderRadius.circular(4)),
-                      child: Text(entry.presetTag!, style: const TextStyle(color: Colors.blue, fontSize: 8, fontWeight: FontWeight.bold)),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 1,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        entry.presetTag!,
+                        style: const TextStyle(
+                          color: Colors.blue,
+                          fontSize: 8,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                   const SizedBox(width: 4),
                   Expanded(
@@ -748,7 +904,10 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
                         reverse: true,
                         child: Text(
                           _formatNumber(val),
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
                     ),
@@ -762,13 +921,21 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
                         reverse: true,
                         child: Text(
                           '$symbol${_formatNumber(runTot)}',
-                          style: TextStyle(fontSize: 12, color: primaryColor, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: primaryColor,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close_rounded, size: 12, color: Colors.grey),
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      size: 12,
+                      color: Colors.grey,
+                    ),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                     onPressed: () {
@@ -776,7 +943,7 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
                         _tapeEntries.removeAt(i);
                       });
                     },
-                  )
+                  ),
                 ],
               ),
             );
@@ -803,7 +970,11 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
               child: Center(
                 child: Text(
                   label,
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: primaryColor),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: primaryColor,
+                  ),
                 ),
               ),
             ),
@@ -881,10 +1052,18 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
       children: [
         Row(
           children: [
-            numButton('C', textColor: const Color(0xFFEA580C), onTap: _clearAll),
+            numButton(
+              'C',
+              textColor: const Color(0xFFEA580C),
+              onTap: _clearAll,
+            ),
             numButton('⌫', textColor: Colors.grey, onTap: _backspace),
             numButton('/', textColor: primary, onTap: () => _setOperator('÷')),
-            numButton('×', textColor: Colors.redAccent, onTap: () => _setOperator('×')),
+            numButton(
+              '×',
+              textColor: Colors.redAccent,
+              onTap: () => _setOperator('×'),
+            ),
           ],
         ),
         Row(
@@ -900,7 +1079,11 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
             numButton('4'),
             numButton('5'),
             numButton('6'),
-            numButton('+', textColor: const Color(0xFF16A34A), onTap: () => _setOperator('+')),
+            numButton(
+              '+',
+              textColor: const Color(0xFF16A34A),
+              onTap: () => _setOperator('+'),
+            ),
           ],
         ),
         Row(
@@ -908,11 +1091,15 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
             numButton('1'),
             numButton('2'),
             numButton('3'),
-            numButton('SCI', textColor: primary, onTap: () {
-              setState(() {
-                _showScientific = !_showScientific;
-              });
-            }),
+            numButton(
+              'SCI',
+              textColor: primary,
+              onTap: () {
+                setState(() {
+                  _showScientific = !_showScientific;
+                });
+              },
+            ),
           ],
         ),
         Row(
@@ -962,11 +1149,13 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
     if (_comparisonRows.isNotEmpty) {
       if (totalA < totalB) {
         final pct = totalB > 0 ? (diff / totalB * 100).toStringAsFixed(0) : '0';
-        analysis = 'Side A is cheaper by $pct% (A: ₹${_formatNumber(totalA)} vs B: ₹${_formatNumber(totalB)})';
+        analysis =
+            'Side A is cheaper by $pct% (A: ₹${_formatNumber(totalA)} vs B: ₹${_formatNumber(totalB)})';
         bannerColor = const Color(0xFF16A34A);
       } else if (totalB < totalA) {
         final pct = totalA > 0 ? (diff / totalA * 100).toStringAsFixed(0) : '0';
-        analysis = 'Side B is cheaper by $pct% (B: ₹${_formatNumber(totalB)} vs A: ₹${_formatNumber(totalA)})';
+        analysis =
+            'Side B is cheaper by $pct% (B: ₹${_formatNumber(totalB)} vs A: ₹${_formatNumber(totalA)})';
         bannerColor = const Color(0xFF16A34A);
       } else {
         analysis = 'Side A and Side B are equal';
@@ -981,13 +1170,17 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
         Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: bannerColor.withOpacity(0.12),
+            color: bannerColor.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: bannerColor.withOpacity(0.2)),
+            border: Border.all(color: bannerColor.withValues(alpha: 0.2)),
           ),
           child: Text(
             analysis,
-            style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: bannerColor),
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: bannerColor,
+            ),
             textAlign: TextAlign.center,
           ),
         ),
@@ -1006,8 +1199,10 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
                   final r = _comparisonRows[idx];
                   final finalA = r.finalA;
                   final finalB = r.finalB;
-                  final isACheaper = r.valueA != null && r.valueB != null && finalA < finalB;
-                  final isBCheaper = r.valueA != null && r.valueB != null && finalB < finalA;
+                  final isACheaper =
+                      r.valueA != null && r.valueB != null && finalA < finalB;
+                  final isBCheaper =
+                      r.valueA != null && r.valueB != null && finalB < finalA;
 
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 2.0),
@@ -1019,11 +1214,17 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
                             children: [
                               Text(
                                 r.description.isEmpty ? 'Item' : r.description,
-                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                               Text(
                                 'Qty: A:${r.qtyA.toInt()} B:${r.qtyB.toInt()} | Disc: A:${r.discountA.toInt()}% B:${r.discountB.toInt()}%',
-                                style: const TextStyle(fontSize: 8.5, color: Colors.grey),
+                                style: const TextStyle(
+                                  fontSize: 8.5,
+                                  color: Colors.grey,
+                                ),
                               ),
                             ],
                           ),
@@ -1032,7 +1233,9 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
                           'A: ₹${_formatNumber(finalA)}',
                           style: TextStyle(
                             fontSize: 10,
-                            fontWeight: isACheaper ? FontWeight.bold : FontWeight.normal,
+                            fontWeight: isACheaper
+                                ? FontWeight.bold
+                                : FontWeight.normal,
                             color: isACheaper ? const Color(0xFF16A34A) : null,
                           ),
                         ),
@@ -1041,12 +1244,18 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
                           'B: ₹${_formatNumber(finalB)}',
                           style: TextStyle(
                             fontSize: 10,
-                            fontWeight: isBCheaper ? FontWeight.bold : FontWeight.normal,
+                            fontWeight: isBCheaper
+                                ? FontWeight.bold
+                                : FontWeight.normal,
                             color: isBCheaper ? const Color(0xFF16A34A) : null,
                           ),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.close_rounded, size: 12, color: Colors.redAccent),
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            size: 12,
+                            color: Colors.redAccent,
+                          ),
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
                           onPressed: () {
@@ -1054,7 +1263,7 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
                               _comparisonRows.removeAt(idx);
                             });
                           },
-                        )
+                        ),
                       ],
                     ),
                   );
@@ -1124,15 +1333,17 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
 
                 if (a != null || b != null) {
                   setState(() {
-                    _comparisonRows.add(ComparisonRow(
-                      description: d,
-                      valueA: a,
-                      valueB: b,
-                      qtyA: qA,
-                      qtyB: qB,
-                      discountA: dA,
-                      discountB: dB,
-                    ));
+                    _comparisonRows.add(
+                      ComparisonRow(
+                        description: d,
+                        valueA: a,
+                        valueB: b,
+                        qtyA: qA,
+                        qtyB: qB,
+                        discountA: dA,
+                        discountB: dB,
+                      ),
+                    );
                   });
                   _compDescController.clear();
                   _compValAController.clear();
@@ -1147,7 +1358,7 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
               padding: const EdgeInsets.all(6),
               color: primaryColor,
               child: const Icon(Icons.add, size: 14, color: Colors.white),
-            )
+            ),
           ],
         ),
         const SizedBox(height: 6),
@@ -1164,7 +1375,10 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
                   decoration: const InputDecoration(
                     labelText: 'Qty A',
                     labelStyle: TextStyle(fontSize: 8),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 2,
+                    ),
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
@@ -1182,7 +1396,10 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
                   decoration: const InputDecoration(
                     labelText: 'Disc A %',
                     labelStyle: TextStyle(fontSize: 8),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 2,
+                    ),
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
@@ -1200,7 +1417,10 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
                   decoration: const InputDecoration(
                     labelText: 'Qty B',
                     labelStyle: TextStyle(fontSize: 8),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 2,
+                    ),
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
@@ -1218,7 +1438,10 @@ class _BNXCalculatorWidgetState extends State<BNXCalculatorWidget> {
                   decoration: const InputDecoration(
                     labelText: 'Disc B %',
                     labelStyle: TextStyle(fontSize: 8),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 2,
+                    ),
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),

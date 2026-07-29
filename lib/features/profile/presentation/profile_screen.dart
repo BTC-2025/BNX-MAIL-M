@@ -1,346 +1,519 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/neumorphic.dart';
 import '../../../core/widgets/avatar_widget.dart';
 import '../../../data/app_state_provider.dart';
 import '../../../data/account_provider.dart';
+import '../../auth/presentation/notifiers/auth_notifier.dart';
 import '../../../models/account_model.dart';
-import '../../../dummy/dummy_data.dart';
+import '../../../data/email_provider.dart';
+import '../../../data/all_inboxes_provider.dart';
+import '../../../data/repositories/auth_repository.dart';
 
-class ProfileScreen extends ConsumerWidget {
+class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends ConsumerState<ProfileScreen> {
+  bool _isExpanded = false;
+
+  Future<void> _pickAndUploadPhoto() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+      );
+      if (result != null && result.files.single.path != null) {
+        final filePath = result.files.single.path!;
+        final file = File(filePath);
+        if (await file.exists()) {
+          final bytes = await file.readAsBytes();
+          final ext = filePath.split('.').last.toLowerCase();
+          final mime = (ext == 'png') ? 'image/png' : 'image/jpeg';
+          final base64String = 'data:$mime;base64,${base64Encode(bytes)}';
+
+          final activeAccount = ref.read(activeAccountProvider);
+          
+          // Update Riverpod account state immediately (handles server upload & settings synchronization)
+          await ref
+              .read(accountsProvider.notifier)
+              .updateAvatar(activeAccount.id, base64String);
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Profile photo updated successfully!'),
+                backgroundColor: Color(0xFF195bac),
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to pick image: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final uiState = ref.watch(appUiProvider);
     final isDark = uiState.isDarkMode;
     final activeAccount = ref.watch(activeAccountProvider);
     final accounts = ref.watch(accountsProvider);
 
-    return Scaffold(
-      backgroundColor: isDark ? BNXColors.darkBg : BNXColors.lightBg,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // Large Avatar
-                Center(
-                  child: Hero(
-                    tag: 'profile-avatar',
-                    child: CircleAvatar(
-                      radius: 40,
-                      backgroundColor: activeAccount.avatarColor,
-                      child: Text(
-                        activeAccount.avatarLetter,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Color(0xFF195bac),
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+      ),
+      child: Scaffold(
+        backgroundColor: isDark ? BNXColors.darkBg : const Color(0xFFE9F4FF),
+        body: CustomScrollView(
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
+          ),
+          slivers: [
+            // Header Section
+            SliverToBoxAdapter(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut,
+                width: double.infinity,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF195bac),
+                  borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(32),
+                    bottomRight: Radius.circular(32),
                   ),
                 ),
-                const SizedBox(height: 16),
-                
-                // Name & Email
-                Text(
-                  activeAccount.name,
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : BNXColors.lightTextPrimary,
-                  ),
+                padding: EdgeInsets.fromLTRB(
+                  8,
+                  MediaQuery.of(context).padding.top + 4,
+                  8,
+                  24,
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  activeAccount.email,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey,
-                  ),
-                ),
-                if (activeAccount.designation.isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: (isDark ? BNXColors.darkPrimary : BNXColors.lightPrimary).withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      activeAccount.designation,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: isDark ? BNXColors.darkPrimary : BNXColors.lightPrimary,
-                      ),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 24),
-
-                // Feature 5: Linked Accounts Switcher using ExpansionTile
-                NeumorphicContainer(
-                  borderRadius: 16,
-                  color: isDark ? const Color(0xFF1E293B) : Colors.white,
-                  child: Theme(
-                    data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-                    child: ExpansionTile(
-                      key: GlobalKey(), // Ensures rebuild when switching active accounts
-                      leading: CircleAvatar(
-                        radius: 18,
-                        backgroundColor: activeAccount.avatarColor,
-                        child: Text(
-                          activeAccount.avatarLetter,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      title: Text(
-                        activeAccount.name,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.white : BNXColors.lightTextPrimary,
-                        ),
-                      ),
-                      subtitle: Text(
-                        activeAccount.email,
-                        style: const TextStyle(fontSize: 11, color: Colors.grey),
-                      ),
-                      trailing: Icon(
-                        Icons.expand_more_rounded,
-                        color: isDark ? Colors.white54 : Colors.grey.shade600,
-                      ),
-                      childrenPadding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Divider(),
-                        ...accounts.where((acc) => acc.id != activeAccount.id).map((acc) {
-                          return ListTile(
-                            onTap: () {
-                              ref.read(accountsProvider.notifier).switchAccount(acc.id);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Row(
-                                    children: [
-                                      CircleAvatar(
-                                        radius: 12,
-                                        backgroundColor: acc.avatarColor,
-                                        child: Text(
-                                          acc.avatarLetter,
-                                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Text('Switched to ${acc.email}'),
-                                    ],
-                                  ),
-                                  behavior: SnackBarBehavior.floating,
-                                  backgroundColor: acc.avatarColor,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                  duration: const Duration(seconds: 2),
-                                ),
-                              );
-                            },
-                            contentPadding: EdgeInsets.zero,
-                            leading: Stack(
-                              children: [
-                                CircleAvatar(
-                                  radius: 18,
-                                  backgroundColor: acc.avatarColor,
-                                  child: Text(
-                                    acc.avatarLetter,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                if (acc.unreadCount > 0)
-                                  Positioned(
-                                    right: 0,
-                                    top: 0,
-                                    child: Container(
-                                      padding: const EdgeInsets.all(2),
-                                      decoration: const BoxDecoration(
-                                        color: Colors.red,
-                                        shape: BoxShape.circle,
-                                      ),
-                                      constraints: const BoxConstraints(
-                                        minWidth: 12,
-                                        minHeight: 12,
-                                      ),
-                                      child: Text(
-                                        '${acc.unreadCount}',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 7,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                            title: Text(
-                              acc.name,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: isDark ? Colors.white : BNXColors.lightTextPrimary,
-                              ),
-                            ),
-                            subtitle: Text(
-                              acc.email,
-                              style: const TextStyle(fontSize: 11, color: Colors.grey),
-                            ),
-                            trailing: Icon(
-                              Icons.chevron_right_rounded,
-                              size: 16,
-                              color: isDark ? Colors.white24 : Colors.grey.shade400,
-                            ),
-                          );
-                        }),
-                        const Divider(),
-                        ListTile(
-                          onTap: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: const Text('Add Account feature coming soon!'),
-                                behavior: SnackBarBehavior.floating,
-                                backgroundColor: isDark ? BNXColors.darkPrimary : BNXColors.lightPrimary,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              ),
-                            );
+                        IconButton(
+                          icon: const Icon(
+                            Icons.settings_outlined,
+                            color: Colors.white,
+                            size: 22,
+                          ),
+                          onPressed: () {
+                            ref.read(appUiProvider.notifier).selectFolder('Settings');
+                            context.go('/settings');
                           },
-                          contentPadding: EdgeInsets.zero,
-                          leading: Container(
-                            width: 36,
-                            height: 36,
+                          tooltip: 'Settings',
+                        ),
+                        IconButton(
+                          icon: const Icon(
+                            Icons.manage_accounts_outlined,
+                            color: Colors.white,
+                            size: 22,
+                          ),
+                          onPressed: () {
+                            context.push('/manage-account');
+                          },
+                          tooltip: 'Manage Account',
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    // Large circular profile/avatar with R logo / custom photo & camera upload icon
+                    Stack(
+                      children: [
+                        GestureDetector(
+                          onTap: _pickAndUploadPhoto,
+                          child: Container(
+                            width: 94,
+                            height: 94,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               border: Border.all(
-                                color: isDark ? Colors.white24 : Colors.grey.shade300,
-                                width: 1.5,
+                                color: Colors.white.withValues(alpha: 0.5),
+                                width: 3,
                               ),
                             ),
-                            child: Icon(
-                              Icons.add_rounded,
-                              color: isDark ? Colors.white54 : Colors.grey.shade600,
-                              size: 18,
+                            padding: const EdgeInsets.all(3),
+                            child: AvatarWidget(
+                              name: activeAccount.name,
+                              avatarUrl: activeAccount.avatarUrl,
+                              size: 82,
+                              fontSize: 34,
                             ),
                           ),
-                          title: Text(
-                            'Add another account',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              color: isDark ? Colors.white70 : Colors.grey.shade700,
+                        ),
+                        Positioned(
+                          right: 0,
+                          bottom: 0,
+                          child: GestureDetector(
+                            onTap: _pickAndUploadPhoto,
+                            child: Container(
+                              padding: const EdgeInsets.all(7),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: const Color(0xFF195bac),
+                                  width: 2,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.25),
+                                    blurRadius: 6,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(
+                                Icons.camera_alt_rounded,
+                                color: Color(0xFF195bac),
+                                size: 16,
+                              ),
                             ),
                           ),
                         ),
                       ],
                     ),
-                  ),
-                ),
-                
-                const Divider(),
-                const SizedBox(height: 16),
-                
-                // Profile Actions List
-                _buildActionTile(
-                  icon: Icons.manage_accounts_outlined,
-                  title: 'Manage Account',
-                  isDark: isDark,
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Manage Account clicked.')),
-                    );
-                  },
-                ),
-                _buildActionTile(
-                  icon: Icons.person_pin_outlined,
-                  title: 'My Profile',
-                  isDark: isDark,
-                  onTap: () {
-                    _showEditProfileDialog(context, ref, activeAccount, isDark);
-                  },
-                ),
-                _buildActionTile(
-                  icon: Icons.settings_outlined,
-                  title: 'Settings',
-                  isDark: isDark,
-                  onTap: () {
-                    ref.read(appUiProvider.notifier).selectFolder('Settings');
-                    context.go('/settings');
-                  },
-                ),
-                
-                // Dark Mode Switch Tile
-                NeumorphicContainer(
-                  margin: const EdgeInsets.symmetric(vertical: 6),
-                  borderRadius: 12,
-                  color: isDark ? const Color(0xFF1E293B) : Colors.white,
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                    leading: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: (isDark ? BNXColors.darkPrimary : BNXColors.lightPrimary).withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(
-                        Icons.dark_mode_outlined,
-                        color: isDark ? BNXColors.darkPrimary : BNXColors.lightPrimary,
-                        size: 20,
+                    const SizedBox(height: 16),
+                    // Username with dropdown arrow — tap to expand inline
+                    GestureDetector(
+                      onTap: () => setState(() => _isExpanded = !_isExpanded),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            activeAccount.name,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          AnimatedRotation(
+                            turns: _isExpanded ? 0.5 : 0,
+                            duration: const Duration(milliseconds: 250),
+                            child: const Icon(
+                              Icons.keyboard_arrow_down_rounded,
+                              color: Colors.white,
+                              size: 22,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    title: const Text(
-                      'Dark Mode',
+                    const SizedBox(height: 6),
+                    // Email Address
+                    Text(
+                      activeAccount.email,
                       style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
+                        fontSize: 13,
+                        color: Colors.white.withValues(alpha: 0.7),
                       ),
                     ),
-                    trailing: Switch(
-                      value: isDark,
-                      onChanged: (val) {
-                        ref.read(appUiProvider.notifier).toggleDarkMode();
-                      },
+                    // Inline expandable account switcher
+                    AnimatedCrossFade(
+                      duration: const Duration(milliseconds: 280),
+                      crossFadeState: _isExpanded
+                          ? CrossFadeState.showSecond
+                          : CrossFadeState.showFirst,
+                      firstChild: const SizedBox.shrink(),
+                      secondChild: Padding(
+                        padding: const EdgeInsets.only(top: 18),
+                        child: Column(
+                          children: [
+                            // Divider
+                            Divider(
+                              color: Colors.white.withValues(alpha: 0.2),
+                              height: 1,
+                            ),
+                            const SizedBox(height: 12),
+                            // Account rows
+                            ...accounts.map((acc) {
+                              final isSelected = acc.id == activeAccount.id;
+                              return GestureDetector(
+                                onTap: () async {
+                                  if (!isSelected) {
+                                    final targetId = acc.email.isNotEmpty ? acc.email : acc.id;
+                                    await ref
+                                        .read(accountsProvider.notifier)
+                                        .switchAccount(targetId, ref);
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text('Switched to ${acc.email.isNotEmpty ? acc.email : acc.name}... Reloading'),
+                                          duration: const Duration(seconds: 1),
+                                        ),
+                                      );
+                                      context.go('/');
+                                    }
+                                  }
+                                  setState(() => _isExpanded = false);
+                                },
+                                child: Container(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 10,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? Colors.white.withValues(alpha: 0.20)
+                                        : Colors.white.withValues(alpha: 0.10),
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: isSelected
+                                          ? Colors.white.withValues(alpha: 0.45)
+                                          : Colors.white.withValues(
+                                              alpha: 0.12,
+                                            ),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      AvatarWidget(
+                                        name: acc.name,
+                                        avatarUrl: acc.avatarUrl,
+                                        size: 32,
+                                        fontSize: 13,
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              acc.name,
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: isSelected
+                                                    ? FontWeight.bold
+                                                    : FontWeight.w500,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                            Text(
+                                              acc.email,
+                                              style: TextStyle(
+                                                color: Colors.white.withValues(
+                                                  alpha: 0.65,
+                                                ),
+                                                fontSize: 11,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      if (isSelected)
+                                        const Icon(
+                                          Icons.check_circle_rounded,
+                                          color: Colors.white,
+                                          size: 18,
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }),
+                            // Add another account
+                            GestureDetector(
+                              onTap: () {
+                                setState(() => _isExpanded = false);
+                                context.push('/login');
+                              },
+                              child: Container(
+                                margin: const EdgeInsets.only(top: 4),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.15),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 32,
+                                      height: 32,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: Colors.white.withValues(
+                                            alpha: 0.5,
+                                          ),
+                                        ),
+                                      ),
+                                      child: const Icon(
+                                        Icons.add_rounded,
+                                        color: Colors.white,
+                                        size: 16,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    const Text(
+                                      'Add another account',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
+                    // Location badge — only when collapsed
+                    if (!_isExpanded) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.location_on_outlined,
+                              color: Colors.white,
+                              size: 14,
+                            ),
+                            SizedBox(width: 4),
+                            Text(
+                              'IN India',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-                
-                const SizedBox(height: 16),
-                const Divider(),
-                const SizedBox(height: 16),
-                
-                // Logout Button
-                _buildActionTile(
-                  icon: Icons.logout_rounded,
-                  title: 'Logout',
-                  color: Colors.redAccent,
-                  isDark: isDark,
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Logout clicked (Mock).')),
-                    );
-                  },
-                ),
-              ],
+              ),
             ),
-          ),
+
+            // Profile Actions List
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 24.0,
+                vertical: 16.0,
+              ),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate([
+                  // Add another account
+                  _buildActionTile(
+                    icon: Icons.person_add_alt_1_outlined,
+                    title: 'Add another account',
+                    isDark: isDark,
+                    onTap: () {
+                      context.push('/login');
+                    },
+                  ),
+
+                  // Sign out of this account
+                  _buildActionTile(
+                    icon: Icons.logout_rounded,
+                    title: 'Sign out of this account',
+                    color: Colors.orangeAccent,
+                    isDark: isDark,
+                    onTap: () async {
+                      final activeEmail = activeAccount.email.isNotEmpty ? activeAccount.email : activeAccount.id;
+
+                      // Clear local state providers
+                      ref.read(emailProvider.notifier).clear();
+                      ref.read(accountsProvider.notifier).clear();
+                      ref.read(allInboxesProvider.notifier).clear();
+
+                      // Remove specific account from registry & clear active tokens
+                      await AuthRepository.logoutSpecificAccount(activeEmail);
+                      ref.read(authProvider.notifier).logout();
+
+                      if (context.mounted) {
+                        context.go('/login');
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Signed out of $activeEmail'),
+                            backgroundColor: Colors.orangeAccent,
+                          ),
+                        );
+                      }
+                    },
+                  ),
+
+                  // Sign out of all accounts
+                  _buildActionTile(
+                    icon: Icons.power_settings_new_rounded,
+                    title: 'Sign out of all accounts',
+                    color: Colors.redAccent,
+                    isDark: isDark,
+                    onTap: () async {
+                      // Clear local state providers
+                      ref.read(emailProvider.notifier).clear();
+                      ref.read(accountsProvider.notifier).clear();
+                      ref.read(allInboxesProvider.notifier).clear();
+
+                      // Wipe all session tokens & saved account registries completely
+                      await AuthRepository.logout();
+                      ref.read(authProvider.notifier).logout();
+
+                      if (context.mounted) {
+                        context.go('/login');
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Logged out of all accounts successfully.'),
+                            backgroundColor: Colors.redAccent,
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 100),
+                ]),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -350,10 +523,12 @@ class ProfileScreen extends ConsumerWidget {
     required IconData icon,
     required String title,
     required bool isDark,
-    required VoidCallback onTap,
+    VoidCallback? onTap,
     Color? color,
+    Widget? trailing,
   }) {
-    final themeColor = color ?? (isDark ? BNXColors.darkPrimary : BNXColors.lightPrimary);
+    final themeColor =
+        color ?? (isDark ? BNXColors.darkPrimary : BNXColors.lightPrimary);
     return NeumorphicContainer(
       margin: const EdgeInsets.symmetric(vertical: 6),
       borderRadius: 12,
@@ -367,11 +542,7 @@ class ProfileScreen extends ConsumerWidget {
             color: themeColor.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(
-            icon,
-            color: themeColor,
-            size: 20,
-          ),
+          child: Icon(icon, color: themeColor, size: 20),
         ),
         title: Text(
           title,
@@ -381,19 +552,23 @@ class ProfileScreen extends ConsumerWidget {
             color: color,
           ),
         ),
-        trailing: Icon(
-          Icons.chevron_right_rounded,
-          color: color ?? Colors.grey,
-        ),
+        trailing:
+            trailing ??
+            Icon(Icons.chevron_right_rounded, color: color ?? Colors.grey),
       ),
     );
   }
 
-  void _showEditProfileDialog(BuildContext context, WidgetRef ref, AccountModel account, bool isDark) {
-    final nameController = TextEditingController(text: account.name);
-    final designationController = TextEditingController(text: account.designation);
-    final experienceController = TextEditingController(text: account.experience);
-    DateTime? selectedDob = account.dob;
+  void _showEditProfileDialog(
+    BuildContext context,
+    WidgetRef ref,
+    AccountModel account,
+    bool isDark,
+  ) {
+    final nameController = TextEditingController();
+    final designationController = TextEditingController();
+    final experienceController = TextEditingController();
+    DateTime? selectedDob;
 
     showDialog(
       context: context,
@@ -403,7 +578,7 @@ class ProfileScreen extends ConsumerWidget {
             String dobText = selectedDob == null
                 ? 'Select DOB'
                 : '${selectedDob!.day}/${selectedDob!.month}/${selectedDob!.year}';
-            
+
             return Dialog(
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20.0),
@@ -422,17 +597,21 @@ class ProfileScreen extends ConsumerWidget {
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.white : BNXColors.lightTextPrimary,
+                          color: isDark
+                              ? Colors.white
+                              : BNXColors.lightTextPrimary,
                         ),
                       ),
                       const SizedBox(height: 16),
-                      
+
                       Text(
                         'Full Name',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.white70 : BNXColors.lightTextSecondary,
+                          color: isDark
+                              ? Colors.white70
+                              : BNXColors.lightTextSecondary,
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -443,14 +622,23 @@ class ProfileScreen extends ConsumerWidget {
                           contentPadding: const EdgeInsets.all(12),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
-                            borderSide: BorderSide(color: isDark ? Colors.white24 : Colors.grey.shade300),
+                            borderSide: BorderSide(
+                              color: isDark
+                                  ? Colors.white24
+                                  : Colors.grey.shade300,
+                            ),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
-                            borderSide: const BorderSide(color: BNXColors.lightPrimary, width: 2),
+                            borderSide: const BorderSide(
+                              color: BNXColors.lightPrimary,
+                              width: 2,
+                            ),
                           ),
                         ),
-                        style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+                        style: TextStyle(
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
                       ),
                       const SizedBox(height: 16),
 
@@ -459,7 +647,9 @@ class ProfileScreen extends ConsumerWidget {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.white70 : BNXColors.lightTextSecondary,
+                          color: isDark
+                              ? Colors.white70
+                              : BNXColors.lightTextSecondary,
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -470,14 +660,23 @@ class ProfileScreen extends ConsumerWidget {
                           contentPadding: const EdgeInsets.all(12),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
-                            borderSide: BorderSide(color: isDark ? Colors.white24 : Colors.grey.shade300),
+                            borderSide: BorderSide(
+                              color: isDark
+                                  ? Colors.white24
+                                  : Colors.grey.shade300,
+                            ),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
-                            borderSide: const BorderSide(color: BNXColors.lightPrimary, width: 2),
+                            borderSide: const BorderSide(
+                              color: BNXColors.lightPrimary,
+                              width: 2,
+                            ),
                           ),
                         ),
-                        style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+                        style: TextStyle(
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
                       ),
                       const SizedBox(height: 16),
 
@@ -486,7 +685,9 @@ class ProfileScreen extends ConsumerWidget {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.white70 : BNXColors.lightTextSecondary,
+                          color: isDark
+                              ? Colors.white70
+                              : BNXColors.lightTextSecondary,
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -498,14 +699,23 @@ class ProfileScreen extends ConsumerWidget {
                           contentPadding: const EdgeInsets.all(12),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
-                            borderSide: BorderSide(color: isDark ? Colors.white24 : Colors.grey.shade300),
+                            borderSide: BorderSide(
+                              color: isDark
+                                  ? Colors.white24
+                                  : Colors.grey.shade300,
+                            ),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
-                            borderSide: const BorderSide(color: BNXColors.lightPrimary, width: 2),
+                            borderSide: const BorderSide(
+                              color: BNXColors.lightPrimary,
+                              width: 2,
+                            ),
                           ),
                         ),
-                        style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+                        style: TextStyle(
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
                       ),
                       const SizedBox(height: 16),
 
@@ -514,7 +724,9 @@ class ProfileScreen extends ConsumerWidget {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.white70 : BNXColors.lightTextSecondary,
+                          color: isDark
+                              ? Colors.white70
+                              : BNXColors.lightTextSecondary,
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -533,9 +745,16 @@ class ProfileScreen extends ConsumerWidget {
                           }
                         },
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 14,
+                          ),
                           decoration: BoxDecoration(
-                            border: Border.all(color: isDark ? Colors.white24 : Colors.grey.shade300),
+                            border: Border.all(
+                              color: isDark
+                                  ? Colors.white24
+                                  : Colors.grey.shade300,
+                            ),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Row(
@@ -546,7 +765,9 @@ class ProfileScreen extends ConsumerWidget {
                                 style: TextStyle(
                                   color: selectedDob == null
                                       ? Colors.grey
-                                      : (isDark ? Colors.white : Colors.black87),
+                                      : (isDark
+                                            ? Colors.white
+                                            : Colors.black87),
                                   fontSize: 14,
                                 ),
                               ),
@@ -575,18 +796,36 @@ class ProfileScreen extends ConsumerWidget {
                                 borderRadius: BorderRadius.circular(8),
                               ),
                             ),
-                            onPressed: () {
-                              ref.read(accountsProvider.notifier).updateProfile(
+                            onPressed: () async {
+                              final newName = nameController.text.trim();
+                              await ref
+                                  .read(accountsProvider.notifier)
+                                  .updateProfile(
                                     account.id,
-                                    name: nameController.text.trim(),
-                                    designation: designationController.text.trim(),
-                                    experience: experienceController.text.trim(),
-                                    dob: selectedDob,
+                                    name: newName.isNotEmpty
+                                        ? newName
+                                        : account.name,
+                                    designation: designationController.text
+                                        .trim(),
+                                    experience: experienceController.text
+                                        .trim(),
+                                    dob: selectedDob ?? account.dob,
                                   );
-                              
-                              Navigator.of(context).pop();
+
+                              if (context.mounted) {
+                                Navigator.of(context).pop();
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Profile details updated & synchronized successfully!'),
+                                    backgroundColor: Color(0xFF195BAC),
+                                  ),
+                                );
+                              }
                             },
-                            child: const Text('Save Details', style: TextStyle(color: Colors.white)),
+                            child: const Text(
+                              'Save Details',
+                              style: TextStyle(color: Colors.white),
+                            ),
                           ),
                         ],
                       ),

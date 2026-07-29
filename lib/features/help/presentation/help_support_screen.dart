@@ -19,19 +19,23 @@ class _HelpSupportScreenState extends ConsumerState<HelpSupportScreen> {
   final List<Map<String, String>> _faqs = [
     {
       'question': 'How do I enable Multi-Factor Authentication (MFA)?',
-      'answer': 'Go to Settings > Security & Login, and toggle "Two-Factor Authentication" to active. Follow the on-screen instructions to link your mobile authenticator app.'
+      'answer':
+          'Go to Settings > Security & Login, and toggle "Two-Factor Authentication" to active. Follow the on-screen instructions to link your mobile authenticator app.',
     },
     {
       'question': 'Can I retrieve emails after permanently deleting them?',
-      'answer': 'Emails in the Trash folder are kept for 30 days before permanent deletion. Once deleted from Trash, they cannot be recovered by standard means.'
+      'answer':
+          'Emails in the Trash folder are kept for 30 days before permanent deletion. Once deleted from Trash, they cannot be recovered by standard means.',
     },
     {
       'question': 'How do email templates work?',
-      'answer': 'Click the Templates section in the left sidebar to view preloaded layouts. Select any card and click "Use Template" to automatically populate a new draft.'
+      'answer':
+          'Click the Templates section in the left sidebar to view preloaded layouts. Select any card and click "Use Template" to automatically populate a new draft.',
     },
     {
       'question': 'What are collaborative group chats?',
-      'answer': 'The Colab tab lets you chat with your project members in real-time. Join any workspace card to view shared documents and open chat rooms.'
+      'answer':
+          'The Colab tab lets you chat with your project members in real-time. Join any workspace card to view shared documents and open chat rooms.',
     },
   ];
 
@@ -45,7 +49,6 @@ class _HelpSupportScreenState extends ConsumerState<HelpSupportScreen> {
   Widget build(BuildContext context) {
     final uiState = ref.watch(appUiProvider);
     final isDark = uiState.isDarkMode;
-    final theme = Theme.of(context);
 
     final filteredFaqs = _faqs.where((faq) {
       final query = _searchQuery.toLowerCase();
@@ -67,7 +70,7 @@ class _HelpSupportScreenState extends ConsumerState<HelpSupportScreen> {
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () {
             ref.read(appUiProvider.notifier).selectFolder('Inbox');
-            context.go('/');
+            context.go('/home');
           },
         ),
       ),
@@ -95,7 +98,11 @@ class _HelpSupportScreenState extends ConsumerState<HelpSupportScreen> {
                   border: InputBorder.none,
                   suffixIcon: _searchQuery.isNotEmpty
                       ? IconButton(
-                          icon: const Icon(Icons.close_rounded, size: 18, color: Colors.grey),
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            size: 18,
+                            color: Colors.grey,
+                          ),
                           onPressed: () {
                             _searchController.clear();
                             setState(() {
@@ -190,12 +197,18 @@ class _HelpSupportScreenState extends ConsumerState<HelpSupportScreen> {
                       ),
                       children: [
                         Padding(
-                          padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
+                          padding: const EdgeInsets.only(
+                            left: 16,
+                            right: 16,
+                            bottom: 16,
+                          ),
                           child: Text(
                             faq['answer']!,
                             style: TextStyle(
                               fontSize: 13,
-                              color: isDark ? Colors.white60 : Colors.grey.shade700,
+                              color: isDark
+                                  ? Colors.white60
+                                  : Colors.grey.shade700,
                               height: 1.4,
                             ),
                           ),
@@ -218,7 +231,11 @@ class _HelpSupportScreenState extends ConsumerState<HelpSupportScreen> {
                 children: [
                   const Text(
                     'Still need help?',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.blue),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      color: Colors.blue,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -235,9 +252,7 @@ class _HelpSupportScreenState extends ConsumerState<HelpSupportScreen> {
                       Expanded(
                         child: NeumorphicButton(
                           onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Support ticket creator is being loaded...')),
-                            );
+                            _showSubmitTicketDialog(context, isDark);
                           },
                           borderRadius: 10,
                           color: Colors.blue,
@@ -245,11 +260,19 @@ class _HelpSupportScreenState extends ConsumerState<HelpSupportScreen> {
                           child: const Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.support_agent_rounded, size: 16, color: Colors.white),
+                              Icon(
+                                Icons.support_agent_rounded,
+                                size: 16,
+                                color: Colors.white,
+                              ),
                               SizedBox(width: 8),
                               Text(
                                 'Submit Ticket',
-                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
                               ),
                             ],
                           ),
@@ -259,17 +282,28 @@ class _HelpSupportScreenState extends ConsumerState<HelpSupportScreen> {
                       Expanded(
                         child: NeumorphicButton(
                           onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Opening email app... (support@bnxmail.com)')),
-                            );
+                            ref
+                                .read(appUiProvider.notifier)
+                                .updateComposeDraft(
+                                  to: 'support@bnxmail.com',
+                                  subject: 'Support Request',
+                                  body: 'Hello Support Team,\n\n',
+                                );
+                            context.push('/compose');
                           },
                           borderRadius: 10,
-                          color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF4F7FB),
+                          color: isDark
+                              ? const Color(0xFF0F172A)
+                              : const Color(0xFFF4F7FB),
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.email_outlined, size: 16, color: isDark ? Colors.white70 : Colors.blue),
+                              Icon(
+                                Icons.email_outlined,
+                                size: 16,
+                                color: isDark ? Colors.white70 : Colors.blue,
+                              ),
                               const SizedBox(width: 8),
                               Text(
                                 'Email Support',
@@ -312,29 +346,31 @@ class _HelpSupportScreenState extends ConsumerState<HelpSupportScreen> {
       },
       borderRadius: BorderRadius.circular(12),
       child: NeumorphicContainer(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         borderRadius: 12,
         color: isDark ? const Color(0xFF1E293B) : Colors.white,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            Icon(icon, color: color, size: 22),
-            const SizedBox(height: 8),
+            Icon(icon, color: color, size: 20),
             Text(
               title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                fontSize: 13,
+                fontSize: 12,
                 color: isDark ? Colors.white70 : Colors.black87,
               ),
             ),
-            const SizedBox(height: 2),
             Text(
               desc,
               style: TextStyle(
-                fontSize: 11,
-                color: isDark ? BNXColors.darkTextSecondary : BNXColors.lightTextSecondary,
+                fontSize: 10,
+                color: isDark
+                    ? BNXColors.darkTextSecondary
+                    : BNXColors.lightTextSecondary,
               ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
@@ -342,6 +378,100 @@ class _HelpSupportScreenState extends ConsumerState<HelpSupportScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  void _showSubmitTicketDialog(BuildContext context, bool isDark) {
+    final titleCtrl = TextEditingController();
+    final descCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Text(
+            'Submit Support Ticket',
+            style: TextStyle(
+              color: isDark ? Colors.white : const Color(0xFF0F172A),
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
+            ),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleCtrl,
+                style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                decoration: InputDecoration(
+                  labelText: 'Subject',
+                  labelStyle: TextStyle(
+                    color: isDark ? Colors.white70 : Colors.black54,
+                  ),
+                  hintText: 'e.g. Cannot send email',
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: isDark ? Colors.white24 : Colors.black12,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: descCtrl,
+                style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                maxLines: 3,
+                decoration: InputDecoration(
+                  labelText: 'Description',
+                  labelStyle: TextStyle(
+                    color: isDark ? Colors.white70 : Colors.black54,
+                  ),
+                  hintText: 'Describe your concern...',
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: isDark ? Colors.white24 : Colors.black12,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+              onPressed: () {
+                if (titleCtrl.text.trim().isEmpty ||
+                    descCtrl.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please fill in all fields.')),
+                  );
+                  return;
+                }
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Ticket #${DateTime.now().millisecondsSinceEpoch.toString().substring(7)} submitted successfully!',
+                    ),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              },
+              child: const Text(
+                'Submit',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

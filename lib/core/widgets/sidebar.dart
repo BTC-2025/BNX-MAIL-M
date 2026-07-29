@@ -1,18 +1,14 @@
-import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../constants/logo_base64.dart';
-import 'sidebar_tile.dart';
 import '../../data/app_state_provider.dart';
 import '../../data/email_provider.dart';
 import '../../data/account_provider.dart';
-import '../../dummy/dummy_data.dart';
-import '../constants/constants.dart';
+import '../../models/email_model.dart';
 import '../theme/colors.dart';
 import '../theme/neumorphic.dart';
-import 'account_switcher.dart';
+import 'create_label_dialog.dart';
 import 'bnx_calculator.dart';
 
 class Sidebar extends ConsumerStatefulWidget {
@@ -24,1921 +20,1170 @@ class Sidebar extends ConsumerStatefulWidget {
 
 class _SidebarState extends ConsumerState<Sidebar> {
   bool _isMoreExpanded = false;
-  int _utilityDisplayState = 0; // 0 = Closed (B only), 1 = First 4 + (+), 2 = All 9 + (‹)
-  bool _isEditingUtilities = false;
-  Set<String> _pinnedUtilityNames = {'Calculator', 'Calendar', 'Contacts', 'Shortcuts', 'Translate', 'Lens OCR', 'Weather', 'News'};
 
-  // Expanded sliding tab states
+  Set<String> get _activeToolNames => ref.watch(appUiProvider).activeToolNames;
+
+  void _toggleTool(String toolLabel, bool isEnabled) {
+    if (isEnabled) {
+      ref.read(appUiProvider.notifier).removeActiveTool(toolLabel);
+    } else {
+      ref.read(appUiProvider.notifier).addActiveTool(toolLabel);
+    }
+  }
+
+  // Master list of all available tools
+  final List<Map<String, dynamic>> _allTools = [
+    {
+      'icon': Icons.calculate_rounded,
+      'label': 'Calculator',
+      'color': Color(0xFF27AE60),
+    },
+    {
+      'icon': Icons.calendar_today_rounded,
+      'label': 'Calendar',
+      'color': Color(0xFFF2994A),
+    },
+    {
+      'icon': Icons.people_alt_rounded,
+      'label': 'Contacts',
+      'color': Color(0xFF2F80ED),
+    },
+    {
+      'icon': Icons.translate_rounded,
+      'label': 'Translate',
+      'color': Color(0xFFEB5757),
+    },
+    {
+      'icon': Icons.wb_sunny_rounded,
+      'label': 'Weather',
+      'color': Color(0xFFF2C94C),
+    },
+    {
+      'icon': Icons.newspaper_rounded,
+      'label': 'News',
+      'color': Color(0xFF56CCF2),
+    },
+  ];
+
   String? get _expandedUtilityTab => ref.watch(appUiProvider).activeLeftUtility;
   set _expandedUtilityTab(String? val) {
     ref.read(appUiProvider.notifier).setActiveLeftUtility(val);
   }
-  DateTime _selectedCalendarDate = DateTime.now();
-  final Map<String, List<String>> _calendarEvents = {
-    "2026-07-15": ["Meeting with Q3 Launch Team @ 2:30 PM"],
-    "2026-07-20": ["Project design review"],
-  };
 
-  final List<String> _keepNotes = ['Buy groceries', 'Review Flutter PR', 'Gym at 6 PM'];
-  final List<Map<String, String>> _contacts = [
-    {'name': 'Sarah Jenkins', 'email': 'sarah@bnx.com'},
-    {'name': 'Alex Rivera', 'email': 'alex@bnx.com'},
-    {'name': 'James Miller', 'email': 'james@bnx.com'}
-  ];
-
-  bool _securityScanInProgress = false;
-  String _securityStatus = 'All systems secure. Threat scan active.';
-
-  final List<Map<String, String>> _chatMessages = [
-    {'sender': 'Alex', 'msg': 'Let\'s review the code.'},
-    {'sender': 'Ravi', 'msg': 'Sure, looks good!'}
-  ];
-
-  final List<Map<String, String>> _shortcuts = [
-    {'keys': 'C', 'action': 'Compose new mail'},
-    {'keys': 'R', 'action': 'Reply to email'},
-    {'keys': '/ ', 'action': 'Search mail'}
-  ];
-
-  String _targetLanguage = 'Spanish';
-  String _translationResult = '';
-
-  String _ocrOutputText = 'Mock OCR Result: Extracted bill invoice details - total due \$240.00.';
-  bool _ocrScanRunning = false;
-
-  final List<String> _cloudFiles = ['presentation_q3.pdf', 'marketing_brief.docx', 'design_logo.png'];
-
-  late final TextEditingController _noteInputController;
-  late final TextEditingController _chatInputController;
-  late final TextEditingController _translateInputController;
-  late final TextEditingController _eventInputController;
-
-  @override
-  void initState() {
-    super.initState();
-    _noteInputController = TextEditingController();
-    _chatInputController = TextEditingController();
-    _translateInputController = TextEditingController();
-    _eventInputController = TextEditingController();
-  }
-
-  @override
-  void dispose() {
-    _noteInputController.dispose();
-    _chatInputController.dispose();
-    _translateInputController.dispose();
-    _eventInputController.dispose();
-    super.dispose();
-  }
-
-  Widget _buildUtilityToggle(String label, IconData icon, bool initialValue, bool isDark) {
-    return SwitchListTile(
-      title: Row(
-        children: [
-          Icon(icon, size: 18, color: isDark ? Colors.white70 : Colors.black87),
-          const SizedBox(width: 12),
-          Text(label, style: const TextStyle(fontSize: 14)),
-        ],
-      ),
-      value: initialValue,
-      onChanged: (val) {},
-      dense: true,
-      activeColor: BNXColors.lightPrimary,
-    );
-  }
-
-  void _showEditUtilitiesDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        final isDark = Theme.of(ctx).brightness == Brightness.dark;
-        return AlertDialog(
-          backgroundColor: isDark ? BNXColors.darkSurface : Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(
-            children: [
-              Icon(Icons.edit_note_rounded, color: BNXColors.lightPrimary),
-              SizedBox(width: 12),
-              Text('Customize BNX Utilities', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            ],
-          ),
-          content: SizedBox(
-            width: 320,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Select which tools appear in your quick access rail. Drag to reorder (Coming Soon).',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-                const SizedBox(height: 16),
-                _buildUtilityToggle('Calendar', Icons.calendar_today_rounded, true, isDark),
-                _buildUtilityToggle('Keep Notes', Icons.lightbulb_outline_rounded, true, isDark),
-                _buildUtilityToggle('Contacts', Icons.people_alt_rounded, true, isDark),
-                _buildUtilityToggle('Security', Icons.shield_outlined, true, isDark),
-                _buildUtilityToggle('Chat', Icons.chat_bubble_outline_rounded, true, isDark),
-                _buildUtilityToggle('Translator', Icons.translate_rounded, false, isDark),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(ctx),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: BNXColors.lightPrimary,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              child: const Text('Save Changes'),
-            ),
-          ],
-        );
-      },
-    );
-  }
+  bool _showCustomizer = false;
 
   @override
   Widget build(BuildContext context) {
     final uiState = ref.watch(appUiProvider);
-    final emails = ref.watch(emailProvider);
-    final activeAccount = ref.watch(activeAccountProvider);
+    final emails = ref.watch(emailListProvider);
     final isDark = uiState.isDarkMode;
-    final isCollapsed = uiState.isSidebarCollapsed;
     final customLabels = ref.watch(customLabelsProvider);
-    final double screenWidth = MediaQuery.of(context).size.width;
-    final bool isMobile = screenWidth < 600;
+
+    final activeAccount = ref.watch(activeAccountProvider);
+
+    bool isSentEmail(EmailModel e) {
+      if (e.isTrash || e.memberOfFolders.contains('Trash')) return false;
+      if (e.isDraft || e.memberOfFolders.contains('Draft')) return false;
+      final userEmail = activeAccount.email.trim().toLowerCase();
+      final userName = activeAccount.name.trim().toLowerCase();
+      final senderEmail = e.senderEmail.trim().toLowerCase();
+      final senderName = e.senderName.trim().toLowerCase();
+      final isSenderMatch =
+          (userEmail.isNotEmpty && senderEmail == userEmail) ||
+          (userName.isNotEmpty && senderName == userName);
+
+      if (e.isSent) {
+        if (senderEmail.isNotEmpty && userEmail.isNotEmpty && !isSenderMatch) {
+          return false;
+        }
+        return true;
+      }
+      if (e.memberOfFolders.contains('Sent')) {
+        if (senderEmail.isNotEmpty && userEmail.isNotEmpty && !isSenderMatch) {
+          return false;
+        }
+        return true;
+      }
+      return isSenderMatch;
+    }
 
     // Helper counts
-    final int unreadInbox = emails.where((e) => !e.isRead && !e.isTrash && !e.isDraft && !e.isSent && !e.isArchive && !e.isSpam).length;
-    final int draftCount = emails.where((e) => e.isDraft && !e.isTrash).length;
-    final int starredCount = emails.where((e) => e.isStarred && !e.isTrash).length;
-    
+    final int primaryCount = emails
+        .where(
+          (e) =>
+              e.memberOfFolders.contains('Inbox') &&
+              !e.memberOfFolders.contains('Trash') &&
+              !isSentEmail(e),
+        )
+        .length;
+    final int allInboxesCount = emails
+        .where((e) => !e.isTrash && !e.memberOfFolders.contains('Trash') && !isSentEmail(e))
+        .length;
+    final int sentCount = emails.where((e) => isSentEmail(e)).length;
+    final int draftCount =
+        emails.where((e) => (e.isDraft || e.memberOfFolders.contains('Draft')) && !e.isTrash).length;
+    final int archiveCount = emails
+        .where(
+          (e) =>
+              (e.isArchive || e.memberOfFolders.contains('Archive')) &&
+              !e.isTrash &&
+              !e.memberOfFolders.contains('Trash'),
+        )
+        .length;
+    final int starredCount = emails
+        .where((e) => (e.isStarred || e.memberOfFolders.contains('Starred')) && !e.isTrash)
+        .length;
+    final int spamCount =
+        emails.where((e) => e.memberOfFolders.contains('Spam') && !e.isTrash).length;
+    final int trashCount =
+        emails.where((e) => e.memberOfFolders.contains('Trash') || e.isTrash).length;
     final jobKeywords = activeAccount.getKeywords();
-    final int jobMailsCount = emails.where((e) {
-      if (e.isTrash) return false;
-      final text = '${e.subject} ${e.body} ${e.senderName} ${e.senderEmail}'.toLowerCase();
-      return jobKeywords.any((kw) => text.contains(kw));
-    }).length;
-
-    // Left-to-right horizontal scrollable utility icons row
-    Widget buildUtilityIcons() {
-      // Build the brand "B" icon representing BNX
-      Widget buildBrandBIcon() {
-        return Tooltip(
-          message: _utilityDisplayState == 0 ? 'Open BNX Utilities' : 'Close Utilities',
-          child: InkWell(
-            onTap: () {
-              setState(() {
-                if (isCollapsed) {
-                  ref.read(appUiProvider.notifier).setSidebarCollapsed(false);
-                  _utilityDisplayState = 1;
-                } else {
-                  if (_utilityDisplayState == 0) {
-                    _utilityDisplayState = 1;
-                  } else {
-                    _utilityDisplayState = 0;
-                    _isEditingUtilities = false; // Reset editing on close
-                  }
-                }
-              });
-            },
-            borderRadius: BorderRadius.circular(20),
-            child: Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.15),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  )
-                ],
+    final int jobMailsCount = emails
+        .where(
+          (e) =>
+              !e.isTrash &&
+              jobKeywords.any(
+                (kw) =>
+                    '${e.subject} ${e.body} ${e.senderName} ${e.senderEmail}'
+                        .toLowerCase()
+                        .contains(kw),
               ),
-              child: ClipOval(
-                child: Image.asset(
-                  'assets/bit_tool_logo.png',
-                  fit: BoxFit.cover,
-                ),
-              ),
-            ),
-          ),
-        );
-      }
+        )
+        .length;
 
-      if (isCollapsed) {
-        return Container(
-          height: 48,
-          alignment: Alignment.center,
-          child: buildBrandBIcon(),
-        );
-      }
+    final bool isMobile = MediaQuery.of(context).size.width < 600;
 
-      final List<Map<String, dynamic>> utilities = [
-        {
-          'icon': Icons.calculate_rounded,
-          'color': const Color(0xFF27AE60),
-          'label': 'Calculator',
-          'onTap': () {
-            setState(() {
-              _expandedUtilityTab = _expandedUtilityTab == 'Calculator' ? null : 'Calculator';
-            });
-          }
-        },
-        {
-          'icon': Icons.calendar_today_rounded,
-          'color': const Color(0xFFF2994A),
-          'label': 'Calendar',
-          'onTap': () {
-            setState(() {
-              _expandedUtilityTab = _expandedUtilityTab == 'Calendar' ? null : 'Calendar';
-            });
-          }
-        },
-        {
-          'icon': Icons.people_alt_rounded,
-          'color': const Color(0xFF2F80ED),
-          'label': 'Contacts',
-          'onTap': () {
-            setState(() {
-              _expandedUtilityTab = _expandedUtilityTab == 'Contacts' ? null : 'Contacts';
-            });
-          }
-        },
-        {
-          'icon': Icons.keyboard_outlined,
-          'color': const Color(0xFF9B51E0),
-          'label': 'Shortcuts',
-          'onTap': () {
-            setState(() {
-              _expandedUtilityTab = _expandedUtilityTab == 'Shortcuts' ? null : 'Shortcuts';
-            });
-          }
-        },
-        {
-          'icon': Icons.translate_rounded,
-          'color': const Color(0xFFEB5757),
-          'label': 'Translate',
-          'onTap': () {
-            setState(() {
-              _expandedUtilityTab = _expandedUtilityTab == 'Translate' ? null : 'Translate';
-            });
-          }
-        },
-        {
-          'icon': Icons.filter_center_focus_rounded,
-          'color': const Color(0xFF8E44AD),
-          'label': 'Lens OCR',
-          'onTap': () {
-            setState(() {
-              _expandedUtilityTab = _expandedUtilityTab == 'Lens OCR' ? null : 'Lens OCR';
-            });
-          }
-        },
-        {
-          'icon': Icons.wb_sunny_rounded,
-          'color': const Color(0xFFF2C94C),
-          'label': 'Weather',
-          'onTap': () {
-            setState(() {
-              _expandedUtilityTab = _expandedUtilityTab == 'Weather' ? null : 'Weather';
-            });
-          }
-        },
-        {
-          'icon': Icons.newspaper_rounded,
-          'color': const Color(0xFF56CCF2),
-          'label': 'News',
-          'onTap': () {
-            setState(() {
-              _expandedUtilityTab = _expandedUtilityTab == 'News' ? null : 'News';
-            });
-          }
-        },
-      ];
+    final labelsVis = uiState.sidebarLabelVisibility;
 
-      final double targetWidth;
-      if (_utilityDisplayState == 0) {
-        targetWidth = 96.0; // Increased width to hold both B and Arrow comfortably centered
-      } else {
-        // Expand width if editing to allow more icons to be seen
-        targetWidth = isMobile ? (screenWidth * 0.85).clamp(310, 450) : 340.0;
-      }
-
-      List<Map<String, dynamic>> displayList = [];
-      if (_utilityDisplayState > 0) {
-        if (_isEditingUtilities) {
-          displayList = utilities; // Show all for selection
-        } else if (_utilityDisplayState == 2) {
-          displayList = utilities; // Show all (expanded view)
-        } else {
-          // Show only pinned utilities in primary state
-          displayList = utilities.where((u) => _pinnedUtilityNames.contains(u['label'])).toList();
-        }
-      }
-
-      return Align(
-        alignment: Alignment.centerLeft, // Left aligned as requested
-        child: NeumorphicContainer(
-          shape: NeumorphicShape.pressed,
-          borderRadius: 24,
-          height: 48,
-          width: targetWidth,
-          margin: const EdgeInsets.only(left: 12, right: 12, top: 8, bottom: 0),
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-          clipBehavior: Clip.antiAlias,
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.start, // Flow left to right
-              children: [
-                buildBrandBIcon(),
-                if (_utilityDisplayState == 0) ...[
-                  const SizedBox(width: 4),
-                  Tooltip(
-                    message: 'Open Utilities',
-                    child: InkWell(
-                      onTap: () {
-                        setState(() {
-                          _utilityDisplayState = 1;
-                        });
-                      },
-                      borderRadius: BorderRadius.circular(12),
-                      child: Padding(
-                        padding: const EdgeInsets.all(2.0),
-                        child: Icon(
-                          Icons.chevron_right_rounded,
-                          size: 20,
-                          color: isDark ? BNXColors.darkPrimary : BNXColors.lightPrimary,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-                if (_utilityDisplayState > 0) ...[
-                  const SizedBox(width: 6),
-                  
-                  ...displayList.map((item) {
-                  final String label = item['label'] as String;
-                  final bool isPinned = _pinnedUtilityNames.contains(label);
-                  
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 6.0),
-                    child: Stack(
-                      alignment: Alignment.topRight,
-                      children: [
-                        Tooltip(
-                          message: label,
-                          child: NeumorphicContainer(
-                            boxShape: BoxShape.circle,
-                            shape: _isEditingUtilities && isPinned ? NeumorphicShape.pressed : NeumorphicShape.flat,
-                            depth: 2.0,
-                            width: 34,
-                            height: 34,
-                            color: isDark ? BNXColors.darkSurface : Colors.white,
-                            child: InkWell(
-                              onTap: () {
-                                if (_isEditingUtilities) {
-                                  setState(() {
-                                    if (isPinned) {
-                                      if (_pinnedUtilityNames.length > 1) {
-                                        _pinnedUtilityNames.remove(label);
-                                      }
-                                    } else {
-                                      _pinnedUtilityNames.add(label);
-                                    }
-                                  });
-                                } else {
-                                  (item['onTap'] as VoidCallback)();
-                                }
-                              },
-                              borderRadius: BorderRadius.circular(17),
-                              child: Center(
-                                child: Icon(
-                                  item['icon'] as IconData,
-                                  size: 16,
-                                  color: item['color'] as Color,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        if (_isEditingUtilities && isPinned)
-                          const IgnorePointer(
-                            child: Icon(Icons.check_circle, size: 14, color: BNXColors.lightPrimary),
-                          ),
-                      ],
-                    ),
-                  );
-                }),
-                ],
-
-                if (_isEditingUtilities) ...[
-                  // Tick button to save
-                  Tooltip(
-                    message: 'Save selection',
-                    child: NeumorphicContainer(
-                      boxShape: BoxShape.circle,
-                      shape: NeumorphicShape.flat,
-                      depth: 2.0,
-                      width: 34,
-                      height: 34,
-                      color: BNXColors.lightPrimary,
-                      child: InkWell(
-                        onTap: () => setState(() => _isEditingUtilities = false),
-                        borderRadius: BorderRadius.circular(17),
-                        child: const Center(
-                          child: Icon(Icons.check_rounded, size: 18, color: Colors.white),
-                        ),
-                      ),
-                    ),
-                  ),
-                ] else ...[
-                  // Normal controls
-                  Tooltip(
-                    message: _utilityDisplayState == 2 ? 'Show less' : 'Close rail',
-                    child: InkWell(
-                      onTap: () {
-                        setState(() {
-                          if (_utilityDisplayState == 2) {
-                            _utilityDisplayState = 1;
-                          } else {
-                            _utilityDisplayState = 0;
-                          }
-                        });
-                      },
-                      borderRadius: BorderRadius.circular(17),
-                      child: const Icon(Icons.keyboard_arrow_left_rounded, size: 18, color: Colors.grey),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Tooltip(
-                    message: _utilityDisplayState == 1 ? 'Edit selection' : 'Add / Show more',
-                    child: InkWell(
-                      onTap: () {
-                        setState(() {
-                          if (_utilityDisplayState == 1) {
-                            _isEditingUtilities = true;
-                          } else {
-                            _utilityDisplayState = 2;
-                          }
-                        });
-                      },
-                      borderRadius: BorderRadius.circular(17),
-                      child: Icon(
-                        _utilityDisplayState == 1 ? Icons.tune_rounded : Icons.add_rounded,
-                        size: 18,
-                        color: isDark ? BNXColors.darkPrimary : BNXColors.lightPrimary,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-
-
-    // Logo section
-    Widget buildLogo() {
-      return Container(
-        height: 64,
-        padding: EdgeInsets.only(left: isCollapsed ? 0.0 : 18.0),
-        alignment: isCollapsed ? Alignment.center : Alignment.centerLeft,
-        child: Row(
-          mainAxisAlignment: isCollapsed ? MainAxisAlignment.center : MainAxisAlignment.start,
-          children: [
-            // Custom drawn mail icon representing BNXMail
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: BNXColors.lightPrimary.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: BNXColors.lightPrimary.withValues(alpha: 0.2),
-                  width: 0.8,
-                ),
-              ),
-              child: Image.asset(
-                'assets/logo.jpg',
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return const Icon(
-                    Icons.mail_outline_rounded,
-                    color: BNXColors.lightPrimary,
-                    size: 20,
-                  );
-                },
-              ),
-            ),
-            if (!isCollapsed) ...[
-              const SizedBox(width: 12),
-              Text.rich(
-                TextSpan(
-                  children: [
-                    TextSpan(
-                      text: 'BNX',
-                      style: TextStyle(
-                        color: isDark ? BNXColors.darkPrimary : const Color(0xFF0F52BA), // Sapphire Blue
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    TextSpan(
-                      text: 'mail',
-                      style: TextStyle(
-                        color: isDark ? Colors.white70 : Colors.black87,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: -0.2,
-                      ),
-                    ),
-                  ],
-                ),
-                style: const TextStyle(
-                  fontSize: 22,
-                ),
-              ),
-            ]
-          ],
-        ),
-      );
-    }
-
-    // Compose Button
-    Widget buildComposeButton() {
-      if (uiState.activeFolder == 'Templates') {
-        return const SizedBox.shrink();
-      }
-      final currentRoute = GoRouterState.of(context).uri.toString();
-      if (currentRoute != '/') {
-        return const SizedBox.shrink();
-      }
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 16.0),
-        child: NeumorphicButton(
-          onPressed: () {
-            ref.read(appUiProvider.notifier).setComposeStatus(ComposeStatus.normal);
-          },
-          height: 56,
-          width: isCollapsed ? 56 : double.infinity,
-          borderRadius: 16,
-          color: isDark ? BNXColors.darkSurface : Colors.white,
-          child: Row(
-            mainAxisAlignment: isCollapsed ? MainAxisAlignment.center : MainAxisAlignment.start,
-            children: [
-              const SizedBox(width: 16),
-              const Icon(
-                Icons.edit_outlined,
-                color: BNXColors.lightPrimary,
-                size: 24,
-              ),
-              if (!isCollapsed) ...[
-                const SizedBox(width: 12),
-                const Text(
-                  'Compose',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: BNXColors.lightPrimary,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      );
-    }
-
-    void _showCreateLabelDialog(BuildContext context) {
-      final TextEditingController controller = TextEditingController();
-      Color selectedColor = BNXColors.labelWork; // Default blue color
-      final List<Color> colorsList = [
-        BNXColors.labelWork,
-        BNXColors.labelPersonal,
-        BNXColors.labelImportant,
-        BNXColors.labelPromotions,
-        BNXColors.labelSocial,
-        BNXColors.labelUpdates,
-      ];
-
-      showDialog(
-        context: context,
-        builder: (ctx) {
-          return StatefulBuilder(
-            builder: (context, setStateDialog) {
-              final isDark = Theme.of(ctx).brightness == Brightness.dark;
-              return AlertDialog(
-                backgroundColor: isDark ? BNXColors.darkSurface : Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                title: const Text(
-                  'New Custom Label',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    TextField(
-                      controller: controller,
-                      autofocus: true,
-                      decoration: InputDecoration(
-                        hintText: 'Enter label name',
-                        filled: true,
-                        fillColor: isDark ? Colors.white10 : Colors.grey.shade100,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide.none,
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    const Text(
-                      'Select Color Theme',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: colorsList.map((color) {
-                        final isSelected = selectedColor == color;
-                        return GestureDetector(
-                          onTap: () {
-                            setStateDialog(() {
-                              selectedColor = color;
-                            });
-                          },
-                          child: Container(
-                            width: 32,
-                            height: 32,
-                            decoration: BoxDecoration(
-                              color: color,
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: isSelected 
-                                    ? (isDark ? Colors.white : Colors.black87)
-                                    : Colors.transparent,
-                                width: 2.5,
-                              ),
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ],
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-                  ),
-                  ElevatedButton(
-                    onPressed: () {
-                      final name = controller.text.trim();
-                      if (name.isNotEmpty) {
-                        ref.read(customLabelsProvider.notifier).addLabel(name, selectedColor);
-                        Navigator.pop(ctx);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Custom label "$name" created successfully!')),
-                        );
-                      }
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: BNXColors.lightPrimary,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      elevation: 0,
-                    ),
-                    child: const Text('Create'),
-                  ),
-                ],
-              );
-            },
-          );
-        },
-      );
-    }
-
-    void navigateToFolder(String folderName, String routePath) {
-      ref.read(appUiProvider.notifier).selectFolder(folderName);
-      ref.read(appUiProvider.notifier).selectEmail(null); // Clear selected email!
-      
-      // Close drawer if open
-      final scaffold = Scaffold.maybeOf(context);
-      if (scaffold != null && scaffold.isDrawerOpen) {
-        Navigator.pop(context);
-      }
-
-      if (GoRouterState.of(context).uri.toString() != routePath) {
-        context.go(routePath);
-      }
-    }
-
-    // 5 Important Folders
     final List<Widget> importantFolderTiles = [
-      SidebarTile(
-        icon: Icons.all_inbox_rounded,
-        selectedIcon: Icons.all_inbox_rounded,
-        title: 'All inboxes',
-        isSelected: uiState.activeFolder == 'All inboxes' && uiState.activeLabel == null,
-        isCollapsed: isCollapsed,
-        onTap: () => navigateToFolder('All inboxes', '/'),
+      if (labelsVis['Inbox'] ?? true)
+        _buildPillTile(
+          icon: Icons.all_inbox_rounded,
+          title: 'All Inboxes',
+          isSelected: uiState.activeFolder == 'All Inboxes',
+          badgeText: allInboxesCount > 0 ? '$allInboxesCount' : null,
+          onTap: () => navigateToFolder('All Inboxes', '/'),
+        ),
+      if (labelsVis['Inbox'] ?? true)
+        _buildPillTile(
+          icon: Icons.inbox_outlined,
+          title: 'Primary',
+          isSelected: uiState.activeFolder == 'Inbox',
+          badgeText: primaryCount > 0 ? '$primaryCount' : null,
+          onTap: () => navigateToFolder('Inbox', '/'),
+        ),
+      _buildPillTile(
+        icon: Icons.local_offer_outlined,
+        title: 'Promotions',
+        isSelected: uiState.activeFolder == 'Promotions',
+        onTap: () => navigateToFolder('Promotions', '/'),
       ),
-      SidebarTile(
-        icon: Icons.inbox_outlined,
-        selectedIcon: Icons.inbox,
-        title: 'Primary',
-        isSelected: uiState.activeFolder == 'Inbox' && uiState.activeLabel == null,
-        isCollapsed: isCollapsed,
-        badgeText: unreadInbox > 0 ? '$unreadInbox' : null,
-        onTap: () => navigateToFolder('Inbox', '/'),
+      _buildPillTile(
+        icon: Icons.people_outline_rounded,
+        title: 'Social',
+        isSelected: uiState.activeFolder == 'Social',
+        onTap: () => navigateToFolder('Social', '/'),
       ),
-      SidebarTile(
+      _buildPillTile(
+        icon: Icons.info_outline_rounded,
+        title: 'Updates',
+        isSelected: uiState.activeFolder == 'Updates',
+        onTap: () => navigateToFolder('Updates', '/'),
+      ),
+      _buildPillTile(
         icon: Icons.work_outline_rounded,
-        selectedIcon: Icons.work_rounded,
         title: 'Job Mails',
-        isSelected: uiState.activeFolder == 'Job Mails' && uiState.activeLabel == null,
-        isCollapsed: isCollapsed,
+        isSelected: uiState.activeFolder == 'Job Mails',
         badgeText: jobMailsCount > 0 ? '$jobMailsCount' : null,
         onTap: () => navigateToFolder('Job Mails', '/'),
       ),
-      SidebarTile(
-        icon: Icons.star_outline_rounded,
-        selectedIcon: Icons.star_rounded,
-        title: 'Starred',
-        isSelected: uiState.activeFolder == 'Starred' && uiState.activeLabel == null,
-        isCollapsed: isCollapsed,
-        badgeText: starredCount > 0 ? '$starredCount' : null,
-        onTap: () => navigateToFolder('Starred', '/'),
-      ),
-      SidebarTile(
-        icon: Icons.send_outlined,
-        selectedIcon: Icons.send,
-        title: 'Sent',
-        isSelected: uiState.activeFolder == 'Sent' && uiState.activeLabel == null,
-        isCollapsed: isCollapsed,
-        onTap: () => navigateToFolder('Sent', '/'),
-      ),
-      SidebarTile(
-        icon: Icons.file_present_outlined,
-        selectedIcon: Icons.insert_drive_file,
-        title: 'Drafts',
-        isSelected: uiState.activeFolder == 'Draft' && uiState.activeLabel == null,
-        isCollapsed: isCollapsed,
-        badgeText: draftCount > 0 ? '$draftCount' : null,
-        onTap: () => navigateToFolder('Draft', '/'),
-      ),
+      if (labelsVis['Starred'] ?? true)
+        _buildPillTile(
+          icon: Icons.star_outline_rounded,
+          title: 'Starred',
+          isSelected: uiState.activeFolder == 'Starred',
+          badgeText: starredCount > 0 ? '$starredCount' : null,
+          onTap: () => navigateToFolder('Starred', '/'),
+        ),
+      if (labelsVis['Sent'] ?? true)
+        _buildPillTile(
+          icon: Icons.send_outlined,
+          title: 'Sent',
+          isSelected: uiState.activeFolder == 'Sent',
+          badgeText: sentCount > 0 ? '$sentCount' : null,
+          onTap: () => navigateToFolder('Sent', '/'),
+        ),
+      if (labelsVis['Draft'] ?? true)
+        _buildPillTile(
+          icon: Icons.file_present_outlined,
+          title: 'Drafts',
+          isSelected: uiState.activeFolder == 'Draft',
+          badgeText: draftCount > 0 ? '$draftCount' : null,
+          onTap: () => navigateToFolder('Draft', '/'),
+        ),
     ];
 
-    // Less / More folders
+    final int importantCount = emails.where((e) => e.isStarred && !e.isTrash).length;
+    final int purchasesCount = emails
+        .where(
+          (e) =>
+              !e.isTrash &&
+              (e.labels.contains('Purchases') ||
+                  e.subject.toLowerCase().contains('payment') ||
+                  e.subject.toLowerCase().contains('order')),
+        )
+        .length;
+
     final List<Widget> otherFolderTiles = [
-      SidebarTile(
-        icon: Icons.access_time_rounded,
-        selectedIcon: Icons.access_time_filled_rounded,
-        title: 'Snoozed',
-        isSelected: uiState.activeFolder == 'Snoozed' && uiState.activeLabel == null,
-        isCollapsed: isCollapsed,
-        onTap: () => navigateToFolder('Snoozed', '/'),
-      ),
-      SidebarTile(
+      if (labelsVis['Snoozed'] ?? true)
+        _buildPillTile(
+          icon: Icons.access_time_rounded,
+          title: 'Snoozed',
+          isSelected: uiState.activeFolder == 'Snoozed',
+          onTap: () => navigateToFolder('Snoozed', '/'),
+        ),
+      _buildPillTile(
         icon: Icons.label_important_outline_rounded,
-        selectedIcon: Icons.label_important_rounded,
         title: 'Important',
-        isSelected: uiState.activeFolder == 'Important' && uiState.activeLabel == null,
-        isCollapsed: isCollapsed,
-        badgeText: '837',
+        isSelected: uiState.activeFolder == 'Important',
+        badgeText: importantCount > 0 ? '$importantCount' : null,
         onTap: () => navigateToFolder('Important', '/'),
       ),
-      SidebarTile(
+      _buildPillTile(
         icon: Icons.shopping_bag_outlined,
-        selectedIcon: Icons.shopping_bag,
         title: 'Purchases',
-        isSelected: uiState.activeFolder == 'Purchases' && uiState.activeLabel == null,
-        isCollapsed: isCollapsed,
-        badgeText: '30',
+        isSelected: uiState.activeFolder == 'Purchases',
+        badgeText: purchasesCount > 0 ? '$purchasesCount' : null,
         onTap: () => navigateToFolder('Purchases', '/'),
       ),
-      SidebarTile(
+      _buildPillTile(
         icon: Icons.schedule_send_outlined,
-        selectedIcon: Icons.schedule_send,
         title: 'Scheduled',
-        isSelected: uiState.activeFolder == 'Scheduled' && uiState.activeLabel == null,
-        isCollapsed: isCollapsed,
+        isSelected: uiState.activeFolder == 'Scheduled',
         onTap: () => navigateToFolder('Scheduled', '/'),
       ),
-      SidebarTile(
+      _buildPillTile(
         icon: Icons.outbox_outlined,
-        selectedIcon: Icons.outbox,
         title: 'Outbox',
-        isSelected: uiState.activeFolder == 'Outbox' && uiState.activeLabel == null,
-        isCollapsed: isCollapsed,
+        isSelected: uiState.activeFolder == 'Outbox',
         onTap: () => navigateToFolder('Outbox', '/'),
       ),
-      SidebarTile(
+      _buildPillTile(
         icon: Icons.archive_outlined,
-        selectedIcon: Icons.archive,
         title: 'Archive',
-        isSelected: uiState.activeFolder == 'Archive' && uiState.activeLabel == null,
-        isCollapsed: isCollapsed,
+        isSelected: uiState.activeFolder == 'Archive',
+        badgeText: archiveCount > 0 ? '$archiveCount' : null,
         onTap: () => navigateToFolder('Archive', '/'),
       ),
-      SidebarTile(
+      _buildPillTile(
         icon: Icons.mail_outline_rounded,
-        selectedIcon: Icons.mail_rounded,
         title: 'All Mail',
-        isSelected: uiState.activeFolder == 'All Mail' && uiState.activeLabel == null,
-        isCollapsed: isCollapsed,
+        isSelected: uiState.activeFolder == 'All Mail',
         onTap: () => navigateToFolder('All Mail', '/'),
       ),
-      SidebarTile(
+      _buildPillTile(
         icon: Icons.report_gmailerrorred_outlined,
-        selectedIcon: Icons.report_gmailerrorred,
         title: 'Spam',
-        isSelected: uiState.activeFolder == 'Spam' && uiState.activeLabel == null,
-        isCollapsed: isCollapsed,
+        isSelected: uiState.activeFolder == 'Spam',
+        badgeText: spamCount > 0 ? '$spamCount' : null,
         onTap: () => navigateToFolder('Spam', '/'),
       ),
-      SidebarTile(
-        icon: Icons.delete_outline_rounded,
-        selectedIcon: Icons.delete_rounded,
-        title: 'Trash',
-        isSelected: uiState.activeFolder == 'Trash' && uiState.activeLabel == null,
-        isCollapsed: isCollapsed,
-        onTap: () => navigateToFolder('Trash', '/'),
-      ),
-      SidebarTile(
+      if (labelsVis['Trash'] ?? true)
+        _buildPillTile(
+          icon: Icons.delete_outline_rounded,
+          title: 'Trash',
+          isSelected: uiState.activeFolder == 'Trash',
+          badgeText: trashCount > 0 ? '$trashCount' : null,
+          onTap: () => navigateToFolder('Trash', '/'),
+        ),
+      _buildPillTile(
         icon: Icons.bar_chart_outlined,
-        selectedIcon: Icons.bar_chart_rounded,
         title: 'Analytics',
         isSelected: uiState.activeFolder == 'Analytics',
-        isCollapsed: isCollapsed,
         onTap: () => navigateToFolder('Analytics', '/analytics'),
       ),
-      SidebarTile(
+      _buildPillTile(
         icon: Icons.assignment_outlined,
-        selectedIcon: Icons.assignment_rounded,
         title: 'Templates',
-        isSelected: uiState.activeFolder == 'Templates' && uiState.activeLabel == null,
-        isCollapsed: isCollapsed,
+        isSelected: uiState.activeFolder == 'Templates',
         onTap: () => navigateToFolder('Templates', '/'),
-      ),
-      SidebarTile(
-        icon: Icons.local_offer_outlined,
-        selectedIcon: Icons.local_offer,
-        title: 'Promotions',
-        isSelected: uiState.activeLabel == 'Promotions',
-        isCollapsed: isCollapsed,
-        onTap: () {
-          ref.read(appUiProvider.notifier).selectLabel('Promotions');
-          ref.read(appUiProvider.notifier).selectEmail(null);
-          final scaffold = Scaffold.maybeOf(context);
-          if (scaffold != null && scaffold.isDrawerOpen) {
-            Navigator.pop(context);
-          }
-          if (GoRouterState.of(context).uri.toString() != '/') {
-            context.go('/');
-          }
-        },
-      ),
-      SidebarTile(
-        icon: Icons.people_outline,
-        selectedIcon: Icons.people,
-        title: 'Social',
-        isSelected: uiState.activeLabel == 'Social',
-        isCollapsed: isCollapsed,
-        onTap: () {
-          ref.read(appUiProvider.notifier).selectLabel('Social');
-          ref.read(appUiProvider.notifier).selectEmail(null);
-          final scaffold = Scaffold.maybeOf(context);
-          if (scaffold != null && scaffold.isDrawerOpen) {
-            Navigator.pop(context);
-          }
-          if (GoRouterState.of(context).uri.toString() != '/') {
-            context.go('/');
-          }
-        },
-      ),
-      SidebarTile(
-        icon: Icons.info_outline,
-        selectedIcon: Icons.info,
-        title: 'Updates',
-        isSelected: uiState.activeLabel == 'Updates',
-        isCollapsed: isCollapsed,
-        badgeText: '2 new',
-        onTap: () {
-          ref.read(appUiProvider.notifier).selectLabel('Updates');
-          ref.read(appUiProvider.notifier).selectEmail(null);
-          final scaffold = Scaffold.maybeOf(context);
-          if (scaffold != null && scaffold.isDrawerOpen) {
-            Navigator.pop(context);
-          }
-          if (GoRouterState.of(context).uri.toString() != '/') {
-            context.go('/');
-          }
-        },
       ),
     ];
 
-    return Drawer(
-      backgroundColor: isDark ? BNXColors.darkBg : BNXColors.lightSidebarBg,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-      child: SafeArea(
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Scrollbar(
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                child: Column(
-                  children: [
-                    buildLogo(),
-                    buildUtilityIcons(),
-                    if (!isCollapsed) _buildSlidingTabPanel(isDark),
-                    buildComposeButton(),
-                    ...importantFolderTiles,
-                    
-                    if (!_isMoreExpanded)
-                      SidebarTile(
-                        icon: Icons.keyboard_arrow_down_rounded,
-                        selectedIcon: Icons.keyboard_arrow_down_rounded,
-                        title: 'Show more',
-                        isSelected: false,
-                        isCollapsed: isCollapsed,
-                        onTap: () {
-                          setState(() {
-                            _isMoreExpanded = true;
-                          });
-                        },
-                      )
-                    else ...[
-                      ...otherFolderTiles,
-                      SidebarTile(
-                        icon: Icons.keyboard_arrow_up_rounded,
-                        selectedIcon: Icons.keyboard_arrow_up_rounded,
-                        title: 'Show less',
-                        isSelected: false,
-                        isCollapsed: isCollapsed,
-                        onTap: () {
-                          setState(() {
-                            _isMoreExpanded = false;
-                          });
-                        },
-                      ),
-                    ],
-
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16.0),
-                      child: Divider(),
+    // If Chat/Colab section is active, show the specialized sidebar as per the screenshot
+    if (uiState.activeFolder == 'Chat' || uiState.activeFolder == 'Casbox') {
+      return AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: isMobile
+              ? Brightness.light
+              : (isDark ? Brightness.light : Brightness.dark),
+          statusBarBrightness: isMobile
+              ? Brightness.dark
+              : (isDark ? Brightness.dark : Brightness.light),
+        ),
+        child: Drawer(
+          backgroundColor: isDark
+              ? BNXColors.darkBg
+              : const Color(0xFFEAF2F9), // slightly blended background
+          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              children: [
+                // --- TOP BLUE SECTION (SAME AS MAIN SIDEBAR) ---
+                Container(
+                  width: double.infinity,
+                  padding: EdgeInsets.fromLTRB(
+                    20,
+                    MediaQuery.of(context).padding.top + 20,
+                    20,
+                    24,
+                  ),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0xFF195bac), Color(0xFF2471D4)],
                     ),
-
-                    // Chat Section Header
-                    if (!isCollapsed)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
-                        child: Text(
-                          'CHAT',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: isDark ? Colors.white54 : BNXColors.lightTextSecondary,
-                            letterSpacing: 1.0,
-                          ),
-                        ),
-                      ),
-
-                    // Colab special button (now in CHAT section)
-                    SidebarTile(
-                      icon: Icons.people_outline_rounded,
-                      selectedIcon: Icons.people_rounded,
-                      title: 'Colab',
-                      isSelected: uiState.activeFolder == 'Colab',
-                      isCollapsed: isCollapsed,
-                      onTap: () => navigateToFolder('Colab', '/colab'),
+                    borderRadius: BorderRadius.only(
+                      bottomRight: Radius.circular(32),
                     ),
-
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16.0),
-                      child: Divider(),
-                    ),
-
-                    // Labels Section Header
-                    if (!isCollapsed)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'CUSTOM LABELS',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: isDark ? Colors.white54 : BNXColors.lightTextSecondary,
-                                letterSpacing: 1.0,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          ClipOval(
+                            child: Image.asset(
+                              'assets/logo.jpg',
+                              width: 38,
+                              height: 38,
+                              fit: BoxFit.cover,
+                              errorBuilder: (c, e, s) => const Icon(
+                                Icons.mail,
+                                color: Colors.white,
+                                size: 28,
                               ),
                             ),
-                            GestureDetector(
-                              onTap: () => _showCreateLabelDialog(context),
-                              child: Icon(
-                                Icons.add,
-                                size: 16,
-                                color: isDark ? Colors.white54 : BNXColors.lightTextSecondary,
-                              ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Text(
+                            'BNXmail',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 23,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                      _buildDynamicBitToolRail(isDark),
+                    ],
+                  ),
+                ),
+                // Make the rest of the drawer scrollable to avoid overflow
+                Expanded(
+                  child: ListView(
+                    padding: EdgeInsets.zero,
+                    physics: const BouncingScrollPhysics(),
+                    children: [
+                      // --- UTILITY PANEL (shows when a tool is tapped) ---
+                      _buildSlidingTabPanel(isDark),
+                      const SizedBox(height: 8),
+                      // "Casbox" section button
+                      _buildPillTile(
+                        icon: Icons.chat_bubble_outline_rounded,
+                        title: 'Casbox',
+                        isSelected: uiState.activeFolder == 'Casbox',
+                        onTap: () => navigateToFolder('Casbox', '/colab'),
+                      ),
+                      // "Colab" section button
+                      _buildPillTile(
+                        icon: Icons.people_alt_outlined,
+                        title: 'Colab',
+                        isSelected: uiState.activeFolder == 'Chat',
+                        onTap: () => navigateToFolder('Chat', '/colab'),
+                      ),
+                      const SizedBox(height: 16),
+                      // Bottom sections: Settings and Help & Support
+                      _buildPillTile(
+                        icon: Icons.settings_outlined,
+                        title: 'Settings',
+                        isSelected: uiState.activeFolder == 'Settings',
+                        onTap: () => navigateToFolder('Settings', '/settings'),
+                      ),
+                      _buildPillTile(
+                        icon: Icons.help_outline_rounded,
+                        title: 'Help & Support',
+                        isSelected: uiState.activeFolder == 'Help',
+                        onTap: () => navigateToFolder('Help', '/help'),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: isMobile
+            ? Brightness.light
+            : (isDark ? Brightness.light : Brightness.dark),
+        statusBarBrightness: isMobile
+            ? Brightness.dark
+            : (isDark ? Brightness.dark : Brightness.light),
+      ),
+      child: Drawer(
+        backgroundColor: isDark ? BNXColors.darkBg : Colors.white,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        child: SafeArea(
+          top: false,
+          child: ListView(
+            physics: const BouncingScrollPhysics(),
+            padding: EdgeInsets.zero,
+            children: [
+              // --- TOP BLUE SECTION (BRANDING + DYNAMIC BIT TOOL RAIL) ---
+              Container(
+                width: double.infinity,
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  MediaQuery.of(context).padding.top + 20,
+                  20,
+                  24,
+                ),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF195bac), Color(0xFF2471D4)],
+                  ),
+                  borderRadius: BorderRadius.only(
+                    bottomRight: Radius.circular(32),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        ClipOval(
+                          child: Image.asset(
+                            'assets/logo.jpg',
+                            width: 38,
+                            height: 38,
+                            fit: BoxFit.cover,
+                            errorBuilder: (c, e, s) => const Icon(
+                              Icons.mail,
+                              color: Colors.white,
+                              size: 28,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'BNXmail',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 23,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    _buildDynamicBitToolRail(isDark),
+                  ],
+                ),
+              ),
+
+              // --- MAIN LIST CONTENT ---
+              const SizedBox(height: 8),
+              _buildSlidingTabPanel(isDark),
+              _buildPremiumComposeButton(isDark, uiState),
+              const SizedBox(height: 8),
+              ...importantFolderTiles,
+              if (!_isMoreExpanded)
+                _buildPillTile(
+                  icon: Icons.keyboard_arrow_down_rounded,
+                  title: 'Show more',
+                  isSelected: false,
+                  onTap: () => setState(() => _isMoreExpanded = true),
+                )
+              else ...[
+                ...otherFolderTiles,
+                _buildPillTile(
+                  icon: Icons.keyboard_arrow_up_rounded,
+                  title: 'Show less',
+                  isSelected: false,
+                  onTap: () => setState(() => _isMoreExpanded = false),
+                ),
+              ],
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Divider(indent: 16, endIndent: 16, thickness: 0.8),
+              ),
+              _buildLabelsHeader(isDark),
+              ...customLabels.map(
+                (l) => _buildPillTile(
+                  icon: uiState.activeLabel == l.name
+                      ? Icons.label_rounded
+                      : Icons.label_outline_rounded,
+                  iconColor: l.color,
+                  title: l.name,
+                  isSelected: uiState.activeLabel == l.name,
+                  trailing: PopupMenuButton<String>(
+                    icon: Icon(
+                      Icons.more_vert_rounded,
+                      size: 18,
+                      color: isDark ? Colors.white60 : Colors.black54,
+                    ),
+                    color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    offset: const Offset(0, 36),
+                    onSelected: (val) {
+                      if (val == 'edit') {
+                        CreateLabelDialog.show(context, labelToEdit: l);
+                      } else if (val == 'delete') {
+                        ref
+                            .read(customLabelsProvider.notifier)
+                            .deleteLabel(l.id);
+                      }
+                    },
+                    itemBuilder: (ctx) => [
+                      const PopupMenuItem<String>(
+                        value: 'edit',
+                        child: Row(
+                          children: [
+                            Icon(Icons.edit_outlined, size: 18),
+                            SizedBox(width: 10),
+                            Text('Edit', style: TextStyle(fontSize: 14)),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem<String>(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.delete_outline_rounded,
+                              size: 18,
+                              color: Colors.red,
+                            ),
+                            SizedBox(width: 10),
+                            Text(
+                              'Delete',
+                              style: TextStyle(fontSize: 14, color: Colors.red),
                             ),
                           ],
                         ),
                       ),
-
-                    // List Labels
-                    ...customLabels.map((l) {
-                      final isSelected = uiState.activeLabel == l.name;
-                      return SidebarTile(
-                        icon: isSelected ? Icons.label_rounded : Icons.label_outline_rounded,
-                        title: l.name,
-                        isSelected: isSelected,
-                        isCollapsed: isCollapsed,
-                        // Wrap in customized icon color
-                        selectedIcon: Icons.label_rounded,
-                        onTap: () {
-                          ref.read(appUiProvider.notifier).selectLabel(l.name);
-                          ref.read(appUiProvider.notifier).selectEmail(null); // Clear selected email!
-                          
-                          // Close drawer if open
-                          final scaffold = Scaffold.maybeOf(context);
-                          if (scaffold != null && scaffold.isDrawerOpen) {
-                            Navigator.pop(context);
-                          }
-
-                          if (GoRouterState.of(context).uri.toString() != '/') {
-                            context.go('/');
-                          }
-                        },
-                      );
-                    }),
-
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16.0),
-                      child: Divider(),
-                    ),
-
-                    // Settings and support at the bottom
-                    SidebarTile(
-                      icon: Icons.settings_outlined,
-                      selectedIcon: Icons.settings,
-                      title: 'Settings',
-                      isSelected: uiState.activeFolder == 'Settings',
-                      isCollapsed: isCollapsed,
-                      onTap: () => navigateToFolder('Settings', '/settings'),
-                    ),
-                    SidebarTile(
-                      icon: Icons.help_outline_rounded,
-                      selectedIcon: Icons.help_rounded,
-                      title: 'Help & Support',
-                      isSelected: uiState.activeFolder == 'Help',
-                      isCollapsed: isCollapsed,
-                      onTap: () => navigateToFolder('Help', '/help'),
-                    ),
-                    const SizedBox(height: 24),
-                  ],
+                    ],
+                  ),
+                  onTap: () {
+                    ref.read(appUiProvider.notifier).selectLabel(l.name);
+                    final scaffold = Scaffold.maybeOf(context);
+                    if (scaffold != null && scaffold.isDrawerOpen) {
+                      Navigator.pop(context);
+                    }
+                    context.go('/home');
+                  },
                 ),
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Divider(indent: 16, endIndent: 16, thickness: 0.8),
+              ),
+              _buildPillTile(
+                icon: Icons.settings_outlined,
+                title: 'Settings',
+                isSelected: uiState.activeFolder == 'Settings',
+                onTap: () => navigateToFolder('Settings', '/settings'),
+              ),
+              _buildPillTile(
+                icon: Icons.help_outline_rounded,
+                title: 'Help & Support',
+                isSelected: uiState.activeFolder == 'Help',
+                onTap: () => navigateToFolder('Help', '/help'),
+              ),
+              const SizedBox(height: 32),
+              const Center(
+                child: Text(
+                  'BNX Mail v1.1.0',
+                  style: TextStyle(color: Colors.grey, fontSize: 11),
+                ),
+              ),
+              const SizedBox(height: 32),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDynamicBitToolRail(bool isDark) {
+    if (_showCustomizer) {
+      // Inline edit mode: shows all tools with selection indicator
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.start,
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              child: Row(
+                children: [
+                  // Bit Tool static logo at the start (Customizer mode)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 10),
+                    child: Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      padding: const EdgeInsets.all(5),
+                      child: Image.asset(
+                        'assets/bit_tool_logo.png',
+                        fit: BoxFit.contain,
+                        errorBuilder: (c, e, s) => const Icon(
+                          Icons.tune_rounded,
+                          color: Color(0xFF195bac),
+                          size: 16,
+                        ),
+                      ),
+                    ),
+                  ),
+                  ..._allTools.map((tool) {
+                    final bool isEnabled = _activeToolNames.contains(
+                      tool['label'],
+                    );
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: GestureDetector(
+                        onTap: () => _toggleTool(tool['label'], isEnabled),
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Container(
+                              width: 34,
+                              height: 34,
+                              decoration: BoxDecoration(
+                                color: isEnabled
+                                    ? Colors.white
+                                    : Colors.white.withValues(alpha: 0.15),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: isEnabled
+                                      ? Colors.transparent
+                                      : Colors.white30,
+                                  width: 1.2,
+                                ),
+                              ),
+                              child: Icon(
+                                tool['icon'],
+                                color: isEnabled
+                                    ? const Color(0xFF195BAC)
+                                    : Colors.white.withValues(alpha: 0.4),
+                                size: 16,
+                              ),
+                            ),
+                            if (isEnabled)
+                              Positioned(
+                                right: -2,
+                                top: -2,
+                                child: Container(
+                                  padding: const EdgeInsets.all(2),
+                                  decoration: const BoxDecoration(
+                                    color: Colors.green,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.check,
+                                    color: Colors.white,
+                                    size: 10,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
+                  // CHECKMARK ICON TO FINISH CUSTOMIZATION
+                  GestureDetector(
+                    onTap: () => setState(() => _showCustomizer = false),
+                    child: Container(
+                      width: 34,
+                      height: 34,
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.check_rounded,
+                        color: Color(0xFF195BAC),
+                        size: 16,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-            // Floating utility panel when collapsed
-            if (isCollapsed && _expandedUtilityTab != null)
-              Positioned(
-                left: BNXConstants.sidebarCollapsedWidth - 12,
-                top: 60,
-                width: 280,
-                child: Material(
-                  elevation: 8,
-                  borderRadius: BorderRadius.circular(16),
-                  color: Colors.transparent,
-                  child: _buildSlidingTabPanel(isDark, forceShow: true),
+          ),
+        ],
+      );
+    }
+
+    // Normal mode: shows active tools only + static logo + '+' icon
+    final List<Map<String, dynamic>> activeTools = _allTools
+        .where((t) => _activeToolNames.contains(t['label']))
+        .toList();
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.start,
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            child: Row(
+              children: [
+                // Bit Tool static logo at the start (Normal mode)
+                Padding(
+                  padding: const EdgeInsets.only(right: 10),
+                  child: Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    padding: const EdgeInsets.all(5),
+                    child: Image.asset(
+                      'assets/bit_tool_logo.png',
+                      fit: BoxFit.contain,
+                      errorBuilder: (c, e, s) => const Icon(
+                        Icons.tune_rounded,
+                        color: Color(0xFF195bac),
+                        size: 16,
+                      ),
+                    ),
+                  ),
+                ),
+                ...activeTools.map((tool) {
+                  final bool isActive = _expandedUtilityTab == tool['label'];
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 10),
+                    child: GestureDetector(
+                      onTap: () => setState(
+                        () => _expandedUtilityTab = isActive
+                            ? null
+                            : tool['label'],
+                      ),
+                      child: Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: isActive
+                              ? Colors.white
+                              : Colors.white.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          tool['icon'],
+                          color: isActive
+                              ? const Color(0xFF195BAC)
+                              : Colors.white,
+                          size: 16,
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+                // PLUS ICON FOR CUSTOMIZATION
+                GestureDetector(
+                  onTap: () => setState(() => _showCustomizer = true),
+                  child: Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.add_rounded,
+                      color: Colors.white,
+                      size: 16,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPillTile({
+    required IconData icon,
+    required String title,
+    required bool isSelected,
+    String? badgeText,
+    Color? iconColor,
+    Widget? trailing,
+    required VoidCallback onTap,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    const Color activeColor = Color(0xFF195BAC);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(24),
+        child: Container(
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? activeColor.withValues(alpha: 0.08)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                color: iconColor ??
+                    (isSelected
+                        ? activeColor
+                        : (isDark ? Colors.white70 : Colors.black54)),
+                size: 22,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                    color: isSelected
+                        ? activeColor
+                        : (isDark ? Colors.white : Colors.black87),
+                  ),
                 ),
               ),
+              if (badgeText != null)
+                Text(
+                  badgeText,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: isSelected ? activeColor : Colors.grey,
+                  ),
+                ),
+              ?trailing,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPremiumComposeButton(bool isDark, dynamic uiState) {
+    if (uiState.activeFolder == 'Templates') return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+      child: InkWell(
+        onTap: () {
+          Navigator.pop(context);
+          context.push('/compose');
+        },
+        borderRadius: BorderRadius.circular(28),
+        child: Container(
+          height: 56,
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E293B) : Colors.white,
+            borderRadius: BorderRadius.circular(28),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+            border: Border.all(
+              color: isDark ? Colors.white10 : Colors.grey.shade200,
+            ),
+          ),
+          child: const Row(
+            children: [
+              SizedBox(width: 20),
+              Icon(Icons.edit_outlined, color: Color(0xFF195BAC), size: 24),
+              SizedBox(width: 16),
+              Text(
+                'Compose',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF195BAC),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLabelsHeader(bool isDark) => Padding(
+    padding: const EdgeInsets.fromLTRB(28, 8, 16, 8),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          'CUSTOM LABELS',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            color: isDark ? Colors.white38 : Colors.grey.shade500,
+            letterSpacing: 1.2,
+          ),
+        ),
+        GestureDetector(
+          onTap: () => _showCreateLabelDialog(context),
+          child: Icon(
+            Icons.add,
+            size: 16,
+            color: isDark ? Colors.white38 : Colors.grey.shade500,
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _buildSlidingTabPanel(bool isDark) {
+    if (_expandedUtilityTab == null) return const SizedBox.shrink();
+    Widget content;
+    switch (_expandedUtilityTab) {
+      case 'Calculator':
+        content = BNXCalculatorWidget(isDark: isDark);
+        break;
+      case 'Calendar':
+        content = SidebarCalendarWidget(isDark: isDark);
+        break;
+      case 'Contacts':
+        content = SidebarContactsWidget(isDark: isDark);
+        break;
+      case 'Translate':
+        content = SidebarTranslateWidget(isDark: isDark);
+        break;
+      case 'Weather':
+        content = SidebarWeatherWidget(isDark: isDark);
+        break;
+      case 'News':
+        content = SidebarNewsWidget(isDark: isDark);
+        break;
+      default:
+        content = const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+      child: NeumorphicContainer(
+        borderRadius: 20,
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  _expandedUtilityTab!,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: isDark ? Colors.white70 : const Color(0xFF195BAC),
+                  ),
+                ),
+                GestureDetector(
+                  onTap: () => setState(() => _expandedUtilityTab = null),
+                  child: const Icon(
+                    Icons.close_rounded,
+                    size: 18,
+                    color: Colors.grey,
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 20),
+            content,
           ],
         ),
       ),
     );
   }
 
-  Widget _buildCalendarTab(bool isDark) {
-    final selectedYear = _selectedCalendarDate.year;
-    final selectedMonth = _selectedCalendarDate.month;
-    final selectedDay = _selectedCalendarDate.day;
+  void _showCreateLabelDialog(BuildContext context) {
+    CreateLabelDialog.show(context);
+  }
 
-    const monthNames = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
-    ];
-    final monthLabel = monthNames[selectedMonth - 1];
+  void navigateToFolder(String folderName, String routePath) {
+    ref.read(appUiProvider.notifier).selectFolder(folderName);
+    ref.read(appUiProvider.notifier).selectEmail(null);
+    final scaffold = Scaffold.maybeOf(context);
+    if (scaffold != null && scaffold.isDrawerOpen) Navigator.pop(context);
 
-    final firstDayOfMonth = DateTime(selectedYear, selectedMonth, 1);
-    final totalDaysInMonth = DateTime(selectedYear, selectedMonth + 1, 0).day;
-    final startOffset = firstDayOfMonth.weekday - 1; 
+    // Normalize '/' targets to go to '/home'
+    final targetRoute = routePath == '/' ? '/home' : routePath;
+    if (GoRouterState.of(context).uri.toString() != targetRoute) {
+      context.go(targetRoute);
+    }
+  }
+}
 
-    final weekdays = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+// ==========================================
+// --- ADDITIONAL UTILITY WIDGETS ---
+// ==========================================
 
-    final dateKey = "$selectedYear-${selectedMonth.toString().padLeft(2, '0')}-${selectedDay.toString().padLeft(2, '0')}";
-    final dayEvents = _calendarEvents[dateKey] ?? [];
+class SidebarCalendarWidget extends StatefulWidget {
+  final bool isDark;
+  const SidebarCalendarWidget({super.key, required this.isDark});
 
+  @override
+  State<SidebarCalendarWidget> createState() => _SidebarCalendarWidgetState();
+}
+
+class _SidebarCalendarWidgetState extends State<SidebarCalendarWidget> {
+  int _selectedDay = 14;
+  final Map<int, List<String>> _events = {
+    14: ['14:00 - Project Review', '16:30 - Antigravity Sync'],
+    15: ['10:00 - UI Design Alignment', '15:00 - Client Call'],
+    16: ['11:30 - Tech Refinement Session'],
+    17: ['13:00 - Team Lunch'],
+    18: ['09:00 - Release Checkpoint'],
+  };
+  final TextEditingController _eventController = TextEditingController();
+
+  @override
+  void dispose() {
+    _eventController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final themeColor = widget.isDark ? Colors.amber : const Color(0xFF195BAC);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        const Text(
+          'July 2026',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+        ),
+        const SizedBox(height: 10),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            DropdownButtonHideUnderline(
-              child: DropdownButton<int>(
-                value: selectedMonth,
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87),
-                dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-                isDense: true,
-                onChanged: (val) {
-                  if (val != null) {
-                    setState(() {
-                      final nextDays = DateTime(selectedYear, val + 1, 0).day;
-                      final d = selectedDay > nextDays ? nextDays : selectedDay;
-                      _selectedCalendarDate = DateTime(selectedYear, val, d);
-                    });
-                  }
-                },
-                items: List.generate(12, (index) => DropdownMenuItem(
-                  value: index + 1,
-                  child: Text(monthNames[index]),
-                )),
-              ),
-            ),
-            DropdownButtonHideUnderline(
-              child: DropdownButton<int>(
-                value: selectedYear >= 2000 && selectedYear <= 2035 ? selectedYear : 2026,
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87),
-                dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-                isDense: true,
-                onChanged: (val) {
-                  if (val != null) {
-                    setState(() {
-                      final nextDays = DateTime(val, selectedMonth + 1, 0).day;
-                      final d = selectedDay > nextDays ? nextDays : selectedDay;
-                      _selectedCalendarDate = DateTime(val, selectedMonth, d);
-                    });
-                  }
-                },
-                items: List.generate(36, (index) => DropdownMenuItem(
-                  value: 2000 + index,
-                  child: Text('${2000 + index}'),
-                )),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: weekdays.map((w) => SizedBox(
-            width: 24,
-            child: Text(w, textAlign: TextAlign.center, style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
-          )).toList(),
-        ),
-        const SizedBox(height: 4),
-        Builder(
-          builder: (context) {
-            final List<Widget> dayWidgets = [];
-            
-            for (int i = 0; i < startOffset; i++) {
-              dayWidgets.add(const SizedBox(width: 24, height: 24));
-            }
-
-            for (int d = 1; d <= totalDaysInMonth; d++) {
-              final isCurrentSelected = selectedDay == d;
-              final isToday = DateTime.now().year == selectedYear &&
-                  DateTime.now().month == selectedMonth &&
-                  DateTime.now().day == d;
-
-              final currentKey = "$selectedYear-${selectedMonth.toString().padLeft(2, '0')}-${d.toString().padLeft(2, '0')}";
-              final hasEvent = _calendarEvents.containsKey(currentKey) && _calendarEvents[currentKey]!.isNotEmpty;
-
-              dayWidgets.add(
-                GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _selectedCalendarDate = DateTime(selectedYear, selectedMonth, d);
-                    });
-                  },
-                  child: Container(
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      color: isCurrentSelected 
-                          ? (isDark ? BNXColors.darkPrimary : BNXColors.lightPrimary) 
-                          : Colors.transparent,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: isCurrentSelected 
-                            ? Colors.transparent 
-                            : (isToday ? Colors.amber.withOpacity(0.5) : (isDark ? Colors.white10 : Colors.grey.shade200)),
-                        width: isToday ? 1.5 : 0.8,
+          children: const ['S', 'M', 'T', 'W', 'T', 'F', 'S']
+              .map(
+                (d) => Expanded(
+                  child: Center(
+                    child: Text(
+                      d,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.grey,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                    alignment: Alignment.center,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Text(
-                          '$d',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: isCurrentSelected ? FontWeight.bold : FontWeight.normal,
-                            color: isCurrentSelected 
-                                ? Colors.white 
-                                : (isDark ? Colors.white70 : Colors.black87),
-                          ),
-                        ),
-                        if (hasEvent && !isCurrentSelected)
-                          Positioned(
-                            bottom: 2,
-                            child: Container(
-                              width: 3,
-                              height: 3,
-                              decoration: const BoxDecoration(
-                                color: Colors.amber,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                          )
-                      ],
-                    ),
                   ),
                 ),
-              );
-            }
-
-            final totalGridItems = dayWidgets.length;
-            final remaining = totalGridItems % 7 == 0 ? 0 : 7 - (totalGridItems % 7);
-            for (int i = 0; i < remaining; i++) {
-              dayWidgets.add(const SizedBox(width: 24, height: 24));
-            }
-
-            final List<Widget> weekRows = [];
-            for (int i = 0; i < dayWidgets.length; i += 7) {
-              weekRows.add(
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: dayWidgets.sublist(i, i + 7),
-                  ),
-                ),
-              );
-            }
-
-            return Column(children: weekRows);
-          },
+              )
+              .toList(),
         ),
-        const Divider(height: 16),
-        Text(
-          'Events for $monthLabel $selectedDay, $selectedYear',
-          style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 4),
-        if (dayEvents.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8.0),
-            child: Text(
-              'No events recorded for this date.',
-              style: TextStyle(fontSize: 10, color: Colors.grey, fontStyle: FontStyle.italic),
-            ),
-          )
-        else
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 80),
-            child: Scrollbar(
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: dayEvents.length,
-                itemBuilder: (context, idx) {
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2.0),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.lens, size: 6, color: Colors.amber),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            dayEvents[idx],
-                            style: TextStyle(fontSize: 10.5, color: isDark ? Colors.white70 : Colors.black87),
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _calendarEvents[dateKey]!.removeAt(idx);
-                              if (_calendarEvents[dateKey]!.isEmpty) {
-                                _calendarEvents.remove(dateKey);
-                              }
-                            });
-                          },
-                          child: const Icon(Icons.close_rounded, size: 12, color: Colors.redAccent),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-          ),
         const SizedBox(height: 6),
-        Row(
-          children: [
-            Expanded(
-              child: NeumorphicContainer(
-                height: 28,
-                shape: NeumorphicShape.pressed,
-                borderRadius: 6,
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF4F7FB),
-                child: TextField(
-                  controller: _eventInputController,
-                  style: const TextStyle(fontSize: 10),
-                  decoration: const InputDecoration(
-                    hintText: 'Record new event...',
-                    border: InputBorder.none,
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(vertical: 6),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 6),
-            NeumorphicButton(
-              onPressed: () {
-                final txt = _eventInputController.text.trim();
-                if (txt.isNotEmpty) {
-                  setState(() {
-                    if (!_calendarEvents.containsKey(dateKey)) {
-                      _calendarEvents[dateKey] = [];
-                    }
-                    _calendarEvents[dateKey]!.add(txt);
-                    _eventInputController.clear();
-                  });
-                }
-              },
-              borderRadius: 6,
-              padding: const EdgeInsets.all(6),
-              color: isDark ? BNXColors.darkPrimary : BNXColors.lightPrimary,
-              child: const Icon(Icons.add, size: 14, color: Colors.white),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildKeepNotesTab(bool isDark) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          height: 80,
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: _keepNotes.length,
-            itemBuilder: (context, idx) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2.0),
-                child: Row(
-                  children: [
-                    Icon(Icons.label_outline_rounded, size: 10, color: isDark ? BNXColors.darkPrimary : BNXColors.lightPrimary),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _keepNotes[idx],
-                        style: TextStyle(fontSize: 11, color: isDark ? Colors.white70 : Colors.black87),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _keepNotes.removeAt(idx);
-                        });
-                      },
-                      child: const Icon(Icons.delete_outline_rounded, size: 12, color: Colors.redAccent),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: NeumorphicContainer(
-                height: 32,
-                shape: NeumorphicShape.pressed,
-                borderRadius: 8,
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF4F7FB),
-                child: TextField(
-                  controller: _noteInputController,
-                  style: const TextStyle(fontSize: 11),
-                  decoration: const InputDecoration(
-                    hintText: 'Add new note...',
-                    border: InputBorder.none,
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(vertical: 8),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            NeumorphicButton(
-              onPressed: () {
-                final txt = _noteInputController.text.trim();
-                if (txt.isNotEmpty) {
-                  setState(() {
-                    _keepNotes.add(txt);
-                    _noteInputController.clear();
-                  });
-                }
-              },
-              borderRadius: 8,
-              padding: const EdgeInsets.all(8),
-              color: isDark ? BNXColors.darkPrimary : BNXColors.lightPrimary,
-              child: const Icon(Icons.add, size: 14, color: Colors.white),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildContactsTab(bool isDark) {
-    return Column(
-      children: _contacts.map((c) {
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4.0),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 12,
-                backgroundColor: isDark ? Colors.white10 : Colors.blue.shade50,
-                child: Text(
-                  c['name']![0],
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : BNXColors.lightPrimary),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      c['name']!,
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87),
-                    ),
-                    Text(
-                      c['email']!,
-                      style: const TextStyle(fontSize: 9, color: Colors.grey),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(Icons.chat_bubble_outline_rounded, size: 14, color: isDark ? BNXColors.darkPrimary : BNXColors.lightPrimary),
-            ],
-          ),
-        );
-      }).toList(),
-    );
-  }
-
-  Widget _buildSecurityTab(bool isDark) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(
-              _securityScanInProgress ? Icons.sync_rounded : Icons.shield_rounded,
-              size: 20,
-              color: _securityScanInProgress ? Colors.amber : Colors.green,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                _securityStatus,
-                style: TextStyle(fontSize: 11, color: isDark ? Colors.white70 : Colors.black87),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Align(
-          alignment: Alignment.centerRight,
-          child: NeumorphicButton(
-            onPressed: () {
-              setState(() {
-                _securityScanInProgress = true;
-                _securityStatus = 'Scanning emails for malware/phishing...';
-              });
-              Future.delayed(const Duration(seconds: 2), () {
-                if (mounted) {
-                  setState(() {
-                    _securityScanInProgress = false;
-                    _securityStatus = 'Security check complete. No threats detected.';
-                  });
-                }
-              });
-            },
-            borderRadius: 8,
-            color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF4F7FB),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: Text(
-              _securityScanInProgress ? 'Scanning...' : 'Scan Now',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                color: isDark ? Colors.white70 : BNXColors.lightPrimary,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildChatTab(bool isDark) {
-    return Column(
-      children: [
-        SizedBox(
-          height: 100,
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: _chatMessages.length,
-            itemBuilder: (context, idx) {
-              final m = _chatMessages[idx];
-              final isMe = m['sender'] == 'Ravi';
-              return Align(
-                alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-                child: Container(
-                  margin: const EdgeInsets.symmetric(vertical: 2.0),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: isMe 
-                        ? (isDark ? BNXColors.darkPrimary.withValues(alpha: 0.2) : Colors.blue.shade50)
-                        : (isDark ? Colors.white10 : Colors.grey.shade100),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    "${m['sender']}: ${m['msg']}",
-                    style: TextStyle(fontSize: 10, color: isDark ? Colors.white70 : Colors.black87),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: NeumorphicContainer(
-                height: 32,
-                shape: NeumorphicShape.pressed,
-                borderRadius: 8,
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF4F7FB),
-                child: TextField(
-                  controller: _chatInputController,
-                  style: const TextStyle(fontSize: 11),
-                  decoration: const InputDecoration(
-                    hintText: 'Type message...',
-                    border: InputBorder.none,
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(vertical: 8),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            NeumorphicButton(
-              onPressed: () {
-                final txt = _chatInputController.text.trim();
-                if (txt.isNotEmpty) {
-                  setState(() {
-                    _chatMessages.add({'sender': 'Ravi', 'msg': txt});
-                    _chatInputController.clear();
-                  });
-                }
-              },
-              borderRadius: 8,
-              padding: const EdgeInsets.all(8),
-              color: isDark ? BNXColors.darkPrimary : BNXColors.lightPrimary,
-              child: const Icon(Icons.send_rounded, size: 14, color: Colors.white),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildShortcutsTab(bool isDark) {
-    return Column(
-      children: _shortcuts.map((s) {
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 3.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                s['action']!,
-                style: TextStyle(fontSize: 11, color: isDark ? Colors.white70 : Colors.black87),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.white10 : Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  s['keys']!,
-                  style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : BNXColors.lightPrimary),
-                ),
-              ),
-            ],
-          ),
-        );
-      }).toList(),
-    );
-  }
-
-  Widget _buildTranslateTab(bool isDark) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text('Translate text to: ', style: TextStyle(fontSize: 10, color: Colors.grey)),
-            DropdownButton<String>(
-              value: _targetLanguage,
-              style: TextStyle(fontSize: 11, color: isDark ? Colors.white : Colors.black87),
-              dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-              underline: const SizedBox.shrink(),
-              items: ['Spanish', 'French', 'German', 'Chinese'].map((lang) {
-                return DropdownMenuItem<String>(value: lang, child: Text(lang));
-              }).toList(),
-              onChanged: (val) {
-                setState(() => _targetLanguage = val!);
-              },
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        NeumorphicContainer(
-          height: 32,
-          shape: NeumorphicShape.pressed,
-          borderRadius: 8,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF4F7FB),
-          child: TextField(
-            controller: _translateInputController,
-            style: const TextStyle(fontSize: 11),
-            decoration: const InputDecoration(
-              hintText: 'Enter text to translate...',
-              border: InputBorder.none,
-              isDense: true,
-              contentPadding: EdgeInsets.symmetric(vertical: 8),
-            ),
-          ),
-        ),
-        if (_translationResult.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(6),
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: isDark ? Colors.white10 : Colors.grey.shade50,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              _translationResult,
-              style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic),
-            ),
-          ),
-        ],
-        const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerRight,
-          child: NeumorphicButton(
-            onPressed: () {
-              final txt = _translateInputController.text.trim();
-              if (txt.isNotEmpty) {
-                setState(() {
-                  _translationResult = "Translated ($_targetLanguage): [Mock Translation of '$txt']";
-                });
-              }
-            },
-            borderRadius: 8,
-            color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF4F7FB),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: Text(
-              'Translate',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                color: isDark ? Colors.white70 : BNXColors.lightPrimary,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildOcrTab(bool isDark) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
+        _buildGrid(),
+        const Divider(height: 20),
         Text(
-          _ocrScanRunning ? 'Analyzing image details...' : _ocrOutputText,
-          style: TextStyle(fontSize: 11, color: isDark ? Colors.white70 : Colors.black87),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            NeumorphicButton(
-              onPressed: () {
-                setState(() {
-                  _ocrScanRunning = true;
-                });
-                Future.delayed(const Duration(milliseconds: 1500), () {
-                  if (mounted) {
-                    setState(() {
-                      _ocrScanRunning = false;
-                      _ocrOutputText = "Extracted Text: 'Invoice Date: 2026-07-02. Total Paid: \$120.50.'";
-                    });
-                  }
-                });
-              },
-              borderRadius: 8,
-              color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF4F7FB),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              child: Text(
-                _ocrScanRunning ? 'Analyzing...' : 'Scan New File',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white70 : BNXColors.lightPrimary,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCloudStorageTab(bool isDark) {
-    return Column(
-      children: _cloudFiles.map((file) {
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4.0),
-          child: Row(
-            children: [
-              Icon(Icons.insert_drive_file_outlined, size: 14, color: isDark ? BNXColors.darkPrimary : BNXColors.lightPrimary),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  file,
-                  style: TextStyle(fontSize: 11, color: isDark ? Colors.white70 : Colors.black87),
-                ),
-              ),
-              Icon(Icons.download_rounded, size: 14, color: isDark ? Colors.white30 : Colors.grey),
-            ],
+          "SCHEDULE FOR JULY $_selectedDay",
+          style: const TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            color: Colors.grey,
+            letterSpacing: 0.8,
           ),
-        );
-      }).toList(),
-    );
-  }
-
-  Widget _buildSlidingTabPanel(bool isDark, {bool forceShow = false}) {
-    if (_expandedUtilityTab == null || (!forceShow && ref.read(appUiProvider).isSidebarCollapsed)) {
-      return const SizedBox.shrink();
-    }
-
-    Widget content;
-    switch (_expandedUtilityTab) {
-      case 'Calculator':
-        content = _buildCalculatorTab(isDark);
-        break;
-      case 'Calendar':
-        content = _buildCalendarTab(isDark);
-        break;
-      case 'Contacts':
-        content = _buildContactsTab(isDark);
-        break;
-      case 'Shortcuts':
-        content = _buildShortcutsTab(isDark);
-        break;
-      case 'Translate':
-        content = _buildTranslateTab(isDark);
-        break;
-      case 'Lens OCR':
-        content = _buildOcrTab(isDark);
-        break;
-      case 'Weather':
-        content = _buildWeatherTab(isDark);
-        break;
-      case 'News':
-        content = _buildNewsTab(isDark);
-        break;
-      default:
-        content = const SizedBox.shrink();
-    }
-
-    return AnimatedSize(
-      duration: const Duration(milliseconds: 350),
-      curve: Curves.fastOutSlowIn,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-        child: NeumorphicContainer(
-          borderRadius: 16,
-          color: isDark ? const Color(0xFF1E293B) : Colors.white,
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    _expandedUtilityTab!,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                      color: isDark ? Colors.white70 : BNXColors.lightPrimary,
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () => setState(() => _expandedUtilityTab = null),
-                    child: const Icon(Icons.close_rounded, size: 16, color: Colors.grey),
-                  ),
-                  ],
+        ),
+        const SizedBox(height: 8),
+        ...?_events[_selectedDay]?.map(
+          (event) => Padding(
+            padding: const EdgeInsets.only(bottom: 6.0),
+            child: Row(
+              children: [
+                Icon(Icons.lens, size: 6, color: themeColor),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(event, style: const TextStyle(fontSize: 12)),
                 ),
-                const Divider(height: 16),
-                content,
               ],
             ),
           ),
         ),
-      );
-  }
-
-  Widget _buildCalculatorTab(bool isDark) {
-    return BNXCalculatorWidget(isDark: isDark);
-  }
-
-  Widget _buildWeatherTab(bool isDark) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'San Francisco',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87),
+        if (_events[_selectedDay] == null || _events[_selectedDay]!.isEmpty)
+          const Text(
+            'No events scheduled.',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey,
+              fontStyle: FontStyle.italic,
             ),
-            const Text(
-              'Partly Cloudy',
-              style: TextStyle(fontSize: 10, color: Colors.grey),
-            ),
-          ],
-        ),
+          ),
+        const SizedBox(height: 12),
         Row(
           children: [
-            const Icon(Icons.cloud_queue_rounded, size: 24, color: Colors.blueAccent),
+            Expanded(
+              child: TextField(
+                controller: _eventController,
+                style: const TextStyle(fontSize: 12),
+                decoration: InputDecoration(
+                  hintText: 'Add new event...',
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
             const SizedBox(width: 8),
-            Text(
-              '68°F',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87),
+            IconButton(
+              icon: Icon(Icons.add_circle, color: themeColor),
+              onPressed: () {
+                final txt = _eventController.text.trim();
+                if (txt.isNotEmpty) {
+                  setState(() {
+                    _events.putIfAbsent(_selectedDay, () => []).add(txt);
+                    _eventController.clear();
+                  });
+                }
+              },
             ),
           ],
         ),
@@ -1946,37 +1191,649 @@ class _SidebarState extends ConsumerState<Sidebar> {
     );
   }
 
-  Widget _buildNewsTab(bool isDark) {
-    final newsList = [
-      'BNXMail Beta launch scheduled next week',
-      'Flutter 3.22 dynamic Impeller features',
-      'Tech industry shifts towards agentic AI workflows'
-    ];
+  Widget _buildGrid() {
+    final List<Widget> days = [];
+    // Start Wednesday July 1st (Sun=0, Mon=1, Tue=2, Wed=3 offset)
+    for (int i = 0; i < 3; i++) {
+      days.add(const SizedBox.shrink());
+    }
+    for (int d = 1; d <= 31; d++) {
+      final isSelected = d == _selectedDay;
+      final hasEvent = _events[d] != null && _events[d]!.isNotEmpty;
+      days.add(
+        GestureDetector(
+          onTap: () => setState(() => _selectedDay = d),
+          child: Container(
+            margin: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              color: isSelected ? const Color(0xFF195BAC) : Colors.transparent,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: hasEvent && !isSelected
+                    ? Colors.blue.withValues(alpha: 0.4)
+                    : Colors.transparent,
+              ),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              '$d',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: isSelected || hasEvent
+                    ? FontWeight.bold
+                    : FontWeight.normal,
+                color: isSelected
+                    ? Colors.white
+                    : (widget.isDark ? Colors.white70 : Colors.black87),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: 7,
+      childAspectRatio: 1.2,
+      children: days,
+    );
+  }
+}
+
+class SidebarContactsWidget extends ConsumerStatefulWidget {
+  final bool isDark;
+  const SidebarContactsWidget({super.key, required this.isDark});
+
+  @override
+  ConsumerState<SidebarContactsWidget> createState() =>
+      _SidebarContactsWidgetState();
+}
+
+class _SidebarContactsWidgetState extends ConsumerState<SidebarContactsWidget> {
+  final List<Map<String, String>> _contacts = [
+    {'name': 'Sarah Chen', 'email': 'sarah.chen@bnxmail.com', 'initial': 'SC'},
+    {
+      'name': 'Alex Rivera',
+      'email': 'alex.rivera@techcorp.com',
+      'initial': 'AR',
+    },
+    {
+      'name': 'James Wilson',
+      'email': 'james.wilson@design.com',
+      'initial': 'JW',
+    },
+    {'name': 'John Doe', 'email': 'john.doe@bnxmail.com', 'initial': 'JD'},
+  ];
+  String _searchQuery = '';
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  bool _showAddForm = false;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = _contacts
+        .where(
+          (c) =>
+              c['name']!.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+              c['email']!.toLowerCase().contains(_searchQuery.toLowerCase()),
+        )
+        .toList();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: newsList.map((item) {
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 3.0),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Padding(
-                padding: EdgeInsets.only(top: 3.0),
-                child: Icon(Icons.article_outlined, size: 10, color: Colors.grey),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  item,
-                  style: TextStyle(fontSize: 10, color: isDark ? Colors.white70 : Colors.black87),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+      children: [
+        TextField(
+          onChanged: (val) => setState(() => _searchQuery = val),
+          style: const TextStyle(fontSize: 12),
+          decoration: InputDecoration(
+            hintText: 'Search contacts...',
+            prefixIcon: const Icon(Icons.search, size: 16),
+            isDense: true,
+            contentPadding: EdgeInsets.zero,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        ),
+        const SizedBox(height: 12),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 180),
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: filtered.length,
+            itemBuilder: (context, index) {
+              final c = filtered[index];
+              return ListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                leading: CircleAvatar(
+                  radius: 14,
+                  backgroundColor: Colors.blue.withValues(alpha: 0.15),
+                  child: Text(
+                    c['initial']!,
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue,
+                    ),
+                  ),
                 ),
+                title: Text(
+                  c['name']!,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                subtitle: Text(
+                  c['email']!,
+                  style: const TextStyle(fontSize: 10, color: Colors.grey),
+                ),
+                trailing: IconButton(
+                  icon: const Icon(
+                    Icons.mail_outline,
+                    size: 16,
+                    color: Color(0xFF195BAC),
+                  ),
+                  onPressed: () {
+                    ref
+                        .read(appUiProvider.notifier)
+                        .updateComposeDraft(to: c['email']!);
+                    Navigator.pop(context);
+                    context.push('/compose');
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+        const Divider(),
+        if (_showAddForm) ...[
+          TextField(
+            controller: _nameController,
+            style: const TextStyle(fontSize: 12),
+            decoration: const InputDecoration(
+              hintText: 'Name',
+              isDense: true,
+              contentPadding: EdgeInsets.symmetric(vertical: 6),
+            ),
+          ),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _emailController,
+            style: const TextStyle(fontSize: 12),
+            decoration: const InputDecoration(
+              hintText: 'Email',
+              isDense: true,
+              contentPadding: EdgeInsets.symmetric(vertical: 6),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(
+                onPressed: () => setState(() => _showAddForm = false),
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(fontSize: 11, color: Colors.grey),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  final name = _nameController.text.trim();
+                  final email = _emailController.text.trim();
+                  if (name.isNotEmpty && email.isNotEmpty) {
+                    setState(() {
+                      final parts = name.split(' ');
+                      final initial = parts
+                          .map((p) => p.isNotEmpty ? p[0] : '')
+                          .join()
+                          .toUpperCase();
+                      _contacts.add({
+                        'name': name,
+                        'email': email,
+                        'initial': initial.isNotEmpty ? initial : '?',
+                      });
+                      _nameController.clear();
+                      _emailController.clear();
+                      _showAddForm = false;
+                    });
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF195BAC),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                ),
+                child: const Text('Save', style: TextStyle(fontSize: 11)),
               ),
             ],
           ),
+        ] else
+          TextButton.icon(
+            onPressed: () => setState(() => _showAddForm = true),
+            icon: const Icon(Icons.add, size: 14),
+            label: const Text('Add Contact', style: TextStyle(fontSize: 11)),
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.zero,
+              foregroundColor: const Color(0xFF195BAC),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class SidebarTranslateWidget extends StatefulWidget {
+  final bool isDark;
+  const SidebarTranslateWidget({super.key, required this.isDark});
+
+  @override
+  State<SidebarTranslateWidget> createState() => _SidebarTranslateWidgetState();
+}
+
+class _SidebarTranslateWidgetState extends State<SidebarTranslateWidget> {
+  final TextEditingController _inputController = TextEditingController();
+  String _translatedText = '';
+  String _targetLang = 'Spanish';
+
+  final Map<String, Map<String, String>> _mockDb = {
+    'hello': {
+      'French': 'Bonjour',
+      'Spanish': 'Hola',
+      'German': 'Hallo',
+      'Japanese': 'こんにちは (Konnichiwa)',
+    },
+    'thank you': {
+      'French': 'Merci',
+      'Spanish': 'Gracias',
+      'German': 'Danke',
+      'Japanese': 'ありがとう (Arigatou)',
+    },
+    'how are you': {
+      'French': 'Comment ça va?',
+      'Spanish': '¿Cómo estás?',
+      'German': 'Wie geht es dir?',
+      'Japanese': 'お元気ですか (Ogenki desu ka)',
+    },
+    'good morning': {
+      'French': 'Bonjour',
+      'Spanish': 'Buenos días',
+      'German': 'Guten Morgen',
+      'Japanese': 'おはようございます (Ohayou gozaimasu)',
+    },
+  };
+
+  void _translate() {
+    final input = _inputController.text.trim().toLowerCase();
+    if (input.isEmpty) {
+      setState(() => _translatedText = '');
+      return;
+    }
+    if (_mockDb.containsKey(input)) {
+      setState(() => _translatedText = _mockDb[input]![_targetLang]!);
+    } else {
+      setState(
+        () => _translatedText =
+            '[$_targetLang] ${input[0].toUpperCase()}${input.substring(1)} (Simulated)',
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _inputController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            const Text(
+              'To: ',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(width: 8),
+            DropdownButton<String>(
+              value: _targetLang,
+              isDense: true,
+              style: TextStyle(
+                fontSize: 12,
+                color: widget.isDark ? Colors.white : Colors.black87,
+              ),
+              dropdownColor: widget.isDark
+                  ? BNXColors.darkSurface
+                  : Colors.white,
+              underline: const SizedBox.shrink(),
+              items: ['French', 'Spanish', 'German', 'Japanese'].map((
+                String lang,
+              ) {
+                return DropdownMenuItem<String>(value: lang, child: Text(lang));
+              }).toList(),
+              onChanged: (val) {
+                if (val != null) {
+                  setState(() {
+                    _targetLang = val;
+                    if (_inputController.text.isNotEmpty) _translate();
+                  });
+                }
+              },
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _inputController,
+          style: const TextStyle(fontSize: 12),
+          decoration: InputDecoration(
+            hintText: 'Type word (e.g. hello, thank you)...',
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 8,
+            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+          onChanged: (_) => _translate(),
+        ),
+        if (_translatedText.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.blue.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _targetLang.toUpperCase(),
+                  style: const TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _translatedText,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class SidebarWeatherWidget extends StatefulWidget {
+  final bool isDark;
+  const SidebarWeatherWidget({super.key, required this.isDark});
+
+  @override
+  State<SidebarWeatherWidget> createState() => _SidebarWeatherWidgetState();
+}
+
+class _SidebarWeatherWidgetState extends State<SidebarWeatherWidget> {
+  String _selectedCity = 'New York';
+  bool _useCelsius = true;
+
+  final Map<String, Map<String, dynamic>> _weatherData = {
+    'New York': {
+      'temp': 24,
+      'cond': 'Partly Cloudy',
+      'icon': Icons.wb_cloudy_rounded,
+      'humidity': '62%',
+      'wind': '12 km/h',
+    },
+    'London': {
+      'temp': 18,
+      'cond': 'Light Rain',
+      'icon': Icons.grain_rounded,
+      'humidity': '80%',
+      'wind': '15 km/h',
+    },
+    'Tokyo': {
+      'temp': 28,
+      'cond': 'Sunny',
+      'icon': Icons.wb_sunny_rounded,
+      'humidity': '50%',
+      'wind': '8 km/h',
+    },
+    'Paris': {
+      'temp': 21,
+      'cond': 'Clear',
+      'icon': Icons.wb_sunny_outlined,
+      'humidity': '58%',
+      'wind': '10 km/h',
+    },
+    'Mumbai': {
+      'temp': 30,
+      'cond': 'Thunderstorm',
+      'icon': Icons.thunderstorm_rounded,
+      'humidity': '85%',
+      'wind': '22 km/h',
+    },
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final data = _weatherData[_selectedCity]!;
+    final int baseTemp = data['temp'];
+    final displayTemp = _useCelsius
+        ? baseTemp
+        : ((baseTemp * 9 / 5) + 32).round();
+    final unit = _useCelsius ? '°C' : '°F';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: _weatherData.keys.map((city) {
+              final isSel = city == _selectedCity;
+              return Padding(
+                padding: const EdgeInsets.only(right: 6.0),
+                child: ChoiceChip(
+                  label: Text(city, style: const TextStyle(fontSize: 10)),
+                  selected: isSel,
+                  onSelected: (val) {
+                    if (val) setState(() => _selectedCity = city);
+                  },
+                  padding: EdgeInsets.zero,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Icon(
+              data['icon'] as IconData,
+              size: 36,
+              color: Colors.orangeAccent,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _selectedCity,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    data['cond'] as String,
+                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+            Row(
+              children: [
+                Text(
+                  '$displayTemp$unit',
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                GestureDetector(
+                  onTap: () => setState(() => _useCelsius = !_useCelsius),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      _useCelsius ? '°F' : '°C',
+                      style: const TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Humidity: ${data['humidity']}',
+              style: const TextStyle(fontSize: 10, color: Colors.grey),
+            ),
+            Text(
+              'Wind: ${data['wind']}',
+              style: const TextStyle(fontSize: 10, color: Colors.grey),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class SidebarNewsWidget extends StatefulWidget {
+  final bool isDark;
+  const SidebarNewsWidget({super.key, required this.isDark});
+
+  @override
+  State<SidebarNewsWidget> createState() => _SidebarNewsWidgetState();
+}
+
+class _SidebarNewsWidgetState extends State<SidebarNewsWidget> {
+  int _expandedIndex = -1;
+  final List<Map<String, String>> _news = [
+    {
+      'title': 'BNX Mail v1.1.0 Released!',
+      'summary':
+          'The next-generation neumorphic email client now boasts inline widgets, customizable dynamic bit rails, and improved state synchronizations.',
+      'time': '2h ago',
+    },
+    {
+      'title': 'Market Hits Historic Highs',
+      'summary':
+          'Technology shares rally today, pushing indices to new records. AI and SaaS providers lead the market expansion.',
+      'time': '5h ago',
+    },
+    {
+      'title': 'Remote Collaboration Study',
+      'summary':
+          'A recent workplace survey reveals that integrated inline utilities (calendars, quick calculators) boost developer daily workflow efficiency by 24%.',
+      'time': '1d ago',
+    },
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: List.generate(_news.length, (idx) {
+        final item = _news[idx];
+        final isExpanded = _expandedIndex == idx;
+        return Card(
+          margin: const EdgeInsets.only(bottom: 6),
+          color: widget.isDark
+              ? Colors.white.withValues(alpha: 0.05)
+              : Colors.grey.shade50,
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          child: InkWell(
+            onTap: () => setState(() => _expandedIndex = isExpanded ? -1 : idx),
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          item['title']!,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        item['time']!,
+                        style: const TextStyle(fontSize: 9, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                  if (isExpanded) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      item['summary']!,
+                      style: const TextStyle(fontSize: 10, color: Colors.grey),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
         );
-      }).toList(),
+      }),
     );
   }
 }

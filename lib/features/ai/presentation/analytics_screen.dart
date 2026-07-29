@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../../core/theme/colors.dart';
-import '../../../core/theme/neumorphic.dart';
 import '../../../data/app_state_provider.dart';
 import '../data/analytics_provider.dart';
 
@@ -16,664 +15,733 @@ class AnalyticsScreen extends ConsumerWidget {
     final double screenWidth = MediaQuery.of(context).size.width;
     final bool isMobile = screenWidth < 600;
 
-    // Pie chart colors
-    final List<Color> pieColors = [
-      const Color(0xFF3B82F6),
-      const Color(0xFF10B981),
-      const Color(0xFFF59E0B),
-      const Color(0xFFEF4444),
-      const Color(0xFF8B5CF6),
-      const Color(0xFFEC4899),
-    ];
-
-    final labelColors = [
-      const Color(0xFF3B82F6),
-      const Color(0xFF10B981),
-      const Color(0xFFEF4444),
-      const Color(0xFFF59E0B),
-      const Color(0xFF8B5CF6),
-      const Color(0xFFEC4899),
-    ];
-
     return Scaffold(
-      backgroundColor: isDark ? BNXColors.darkSurface : Colors.white,
-      body: ListView(
-        padding: EdgeInsets.all(isMobile ? 16 : 24),
-        children: [
-          // ─── Header ───────────────────────────────────────────
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      BNXColors.lightPrimary,
-                      BNXColors.lightPrimary.withValues(alpha: 0.7),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: const Icon(Icons.bar_chart_rounded,
-                    color: Colors.white, size: 24),
-              ),
-              const SizedBox(width: 14),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Email Analytics',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.white : const Color(0xFF1E293B),
-                    ),
-                  ),
-                  Text(
-                    'Insights from your mailbox',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: isDark ? Colors.white54 : Colors.grey.shade600,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-
-          // ─── Stat Cards Row ────────────────────────────────────
-          isMobile
-              ? Column(
-                  children: [
-                    Row(children: [
-                      Expanded(child: _StatCard(label: 'Total', value: analytics.total, icon: Icons.mail_outline_rounded, color: const Color(0xFF3B82F6), isDark: isDark)),
-                      const SizedBox(width: 12),
-                      Expanded(child: _StatCard(label: 'Unread', value: analytics.unread, icon: Icons.mark_email_unread_outlined, color: const Color(0xFFEF4444), isDark: isDark)),
-                    ]),
-                    const SizedBox(height: 12),
-                    Row(children: [
-                      Expanded(child: _StatCard(label: 'Sent', value: analytics.sent, icon: Icons.send_outlined, color: const Color(0xFF10B981), isDark: isDark)),
-                      const SizedBox(width: 12),
-                      Expanded(child: _StatCard(label: 'Starred', value: analytics.starred, icon: Icons.star_outline_rounded, color: const Color(0xFFF59E0B), isDark: isDark)),
-                    ]),
-                  ],
-                )
-              : Row(
-                  children: [
-                    Expanded(child: _StatCard(label: 'Total Emails', value: analytics.total, icon: Icons.mail_outline_rounded, color: const Color(0xFF3B82F6), isDark: isDark)),
-                    const SizedBox(width: 16),
-                    Expanded(child: _StatCard(label: 'Unread', value: analytics.unread, icon: Icons.mark_email_unread_outlined, color: const Color(0xFFEF4444), isDark: isDark)),
-                    const SizedBox(width: 16),
-                    Expanded(child: _StatCard(label: 'Sent', value: analytics.sent, icon: Icons.send_outlined, color: const Color(0xFF10B981), isDark: isDark)),
-                    const SizedBox(width: 16),
-                    Expanded(child: _StatCard(label: 'Starred', value: analytics.starred, icon: Icons.star_outline_rounded, color: const Color(0xFFF59E0B), isDark: isDark)),
-                  ],
-                ),
-          const SizedBox(height: 28),
-
-          // ─── Bar Chart: Emails per Weekday ────────────────────
-          _ChartCard(
-            title: 'Email Activity by Weekday',
-            subtitle: 'Emails received per day of the week',
-            icon: Icons.show_chart_rounded,
-            iconColor: const Color(0xFF3B82F6),
-            isDark: isDark,
-            child: SizedBox(
-              height: 220,
-              child: BarChart(
-                BarChartData(
-                  alignment: BarChartAlignment.spaceAround,
-                  maxY: (analytics.emailsPerWeekday.isNotEmpty
-                          ? analytics.emailsPerWeekday.reduce((a, b) => a > b ? a : b)
-                          : 10)
-                      .toDouble() * 1.3,
-                  gridData: FlGridData(
-                    show: true,
-                    drawVerticalLine: false,
-                    getDrawingHorizontalLine: (value) => FlLine(
-                      color: isDark ? Colors.white10 : Colors.grey.shade200,
-                      strokeWidth: 1,
-                    ),
-                  ),
-                  borderData: FlBorderData(show: false),
-                  titlesData: FlTitlesData(
-                    show: true,
-                    leftTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        reservedSize: 28,
-                        getTitlesWidget: (v, _) => Text(
-                          v.toInt().toString(),
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: isDark ? Colors.white38 : Colors.grey.shade500,
+      backgroundColor: isDark ? BNXColors.darkSurface : const Color(0xFFF8FAFC),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          await ref.read(analyticsProvider.notifier).loadAnalytics();
+        },
+        child: ListView(
+          padding: EdgeInsets.all(isMobile ? 16 : 24),
+          children: [
+            // ─── Header: Analytics Dashboard ───────────────────────
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [
+                              Color(0xFF3B82F6),
+                              Color(0xFF1D4ED8),
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
                           ),
+                          borderRadius: BorderRadius.circular(14),
                         ),
-                        interval: _computeInterval(analytics.emailsPerWeekday),
+                        child: const Icon(
+                          Icons.show_chart_rounded,
+                          color: Colors.white,
+                          size: 24,
+                        ),
                       ),
-                    ),
-                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    bottomTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        getTitlesWidget: (v, _) {
-                          const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-                          final idx = v.toInt();
-                          if (idx < 0 || idx >= days.length) return const SizedBox.shrink();
-                          return Padding(
-                            padding: const EdgeInsets.only(top: 6),
-                            child: Text(
-                              days[idx],
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Analytics Dashboard',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: isDark ? Colors.white : const Color(0xFF1E293B),
+                              ),
+                            ),
+                            Text(
+                              'Mailbox insights, composition & activity',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
                                 color: isDark ? Colors.white54 : Colors.grey.shade600,
                               ),
                             ),
-                          );
-                        },
-                        reservedSize: 28,
-                      ),
-                    ),
-                  ),
-                  barGroups: List.generate(
-                    analytics.emailsPerWeekday.length,
-                    (i) => BarChartGroupData(
-                      x: i,
-                      barRods: [
-                        BarChartRodData(
-                          toY: analytics.emailsPerWeekday[i].toDouble(),
-                          gradient: LinearGradient(
-                            colors: [
-                              const Color(0xFF3B82F6),
-                              const Color(0xFF1D4ED8),
-                            ],
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                          ),
-                          width: 22,
-                          borderRadius: const BorderRadius.vertical(
-                              top: Radius.circular(6)),
+                          ],
                         ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // ─── Two charts side by side on desktop ───────────────
-          isMobile
-              ? Column(
-                  children: [
-                    _buildLabelChart(analytics, labelColors, isDark),
-                    const SizedBox(height: 20),
-                    _buildTopSendersChart(analytics, pieColors, isDark),
-                  ],
-                )
-              : Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                        child: _buildLabelChart(analytics, labelColors, isDark)),
-                    const SizedBox(width: 20),
-                    Expanded(
-                        child: _buildTopSendersChart(
-                            analytics, pieColors, isDark)),
-                  ],
-                ),
-          const SizedBox(height: 24),
-
-          // ─── Read vs Unread donut ─────────────────────────────
-          _ChartCard(
-            title: 'Read vs Unread',
-            subtitle: 'Overall mailbox read rate',
-            icon: Icons.donut_large_rounded,
-            iconColor: const Color(0xFF10B981),
-            isDark: isDark,
-            child: SizedBox(
-              height: 200,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: PieChart(
-                      PieChartData(
-                        sectionsSpace: 3,
-                        centerSpaceRadius: 55,
-                        sections: [
-                          PieChartSectionData(
-                            value: (analytics.total - analytics.unread)
-                                .toDouble()
-                                .clamp(0, double.infinity),
-                            color: const Color(0xFF10B981),
-                            radius: 40,
-                            title: '',
-                          ),
-                          PieChartSectionData(
-                            value: analytics.unread.toDouble(),
-                            color: const Color(0xFFEF4444),
-                            radius: 40,
-                            title: '',
-                          ),
-                        ],
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _LegendItem(
-                        color: const Color(0xFF10B981),
-                        label: 'Read',
-                        value: analytics.total - analytics.unread,
-                        isDark: isDark,
-                      ),
-                      const SizedBox(height: 12),
-                      _LegendItem(
-                        color: const Color(0xFFEF4444),
-                        label: 'Unread',
-                        value: analytics.unread,
-                        isDark: isDark,
-                      ),
-                      const SizedBox(height: 16),
-                      // Read rate percent
-                      if (analytics.total > 0)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF10B981).withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            '${((analytics.total - analytics.unread) / analytics.total * 100).toStringAsFixed(0)}% read',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF10B981),
-                            ),
-                          ),
-                        ),
                     ],
                   ),
-                  const SizedBox(width: 16),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 32),
-        ],
-      ),
-    );
-  }
-
-  double _computeInterval(List<int> data) {
-    if (data.isEmpty) return 1;
-    final max = data.reduce((a, b) => a > b ? a : b);
-    if (max <= 5) return 1;
-    if (max <= 20) return 5;
-    return 10;
-  }
-
-  Widget _buildLabelChart(EmailAnalytics analytics, List<Color> colors, bool isDark) {
-    return _ChartCard(
-      title: 'Label Distribution',
-      subtitle: 'Emails per label category',
-      icon: Icons.label_outline_rounded,
-      iconColor: const Color(0xFF8B5CF6),
-      isDark: isDark,
-      child: Column(
-        children: analytics.labelCounts.take(6).toList().asMap().entries.map((e) {
-          final idx = e.key;
-          final entry = e.value;
-          final maxCount = analytics.labelCounts.isNotEmpty
-              ? analytics.labelCounts.first.value
-              : 1;
-          final ratio = maxCount > 0 ? entry.value / maxCount : 0.0;
-          final color = colors[idx % colors.length];
-
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 70,
-                  child: Text(
-                    entry.key,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: isDark ? Colors.white70 : Colors.grey.shade700,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: ratio,
-                      minHeight: 12,
-                      backgroundColor:
-                          isDark ? Colors.white10 : Colors.grey.shade100,
-                      valueColor: AlwaysStoppedAnimation<Color>(color),
-                    ),
+                IconButton(
+                  icon: Icon(
+                    Icons.refresh_rounded,
+                    color: isDark ? Colors.white70 : Colors.grey.shade700,
                   ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  '${entry.value}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: color,
-                  ),
+                  onPressed: () {
+                    ref.read(analyticsProvider.notifier).loadAnalytics();
+                  },
+                  tooltip: 'Refresh analytics',
                 ),
               ],
             ),
-          );
-        }).toList(),
+            const SizedBox(height: 24),
+
+            if (analytics.isLoading)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 40),
+                  child: CircularProgressIndicator(),
+                ),
+              )
+            else ...[
+              // ─── Card 1: Mailbox Composition (Donut PieChart) ────
+              _buildMailboxCompositionCard(analytics, isDark, isMobile),
+              const SizedBox(height: 24),
+
+              // ─── Card 2: Daily Email Volume ───────────────────────
+              _buildDailyVolumeCard(analytics, isDark),
+              const SizedBox(height: 24),
+
+              // ─── Card 3: Monthly Volume Overview ───────────────────
+              _buildMonthlyVolumeCard(analytics, isDark),
+              const SizedBox(height: 24),
+
+              // ─── Grid Row: Top Senders & Top Recipients ────────────
+              if (isMobile) ...[
+                _buildTopSendersCard(analytics, isDark),
+                const SizedBox(height: 24),
+                _buildTopReceiversCard(analytics, isDark),
+              ] else ...[
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: _buildTopSendersCard(analytics, isDark)),
+                    const SizedBox(width: 24),
+                    Expanded(child: _buildTopReceiversCard(analytics, isDark)),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 40),
+            ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildTopSendersChart(
-      EmailAnalytics analytics, List<Color> colors, bool isDark) {
-    if (analytics.topSenders.isEmpty) {
-      return _ChartCard(
-        title: 'Top Senders',
-        subtitle: 'Most frequent email senders',
-        icon: Icons.people_outline_rounded,
-        iconColor: const Color(0xFFF59E0B),
-        isDark: isDark,
-        child: const Center(
-            child: Text('No data', style: TextStyle(color: Colors.grey))),
-      );
-    }
+  // ── 1. Mailbox Composition Donut PieChart ─────────────────────────────────
 
-    final total = analytics.topSenders.fold(0, (s, e) => s + e.value);
+  Widget _buildMailboxCompositionCard(EmailAnalyticsData data, bool isDark, bool isMobile) {
+    final total = data.inbox + data.sent + data.archive + data.drafts + data.spam + data.trash;
 
-    return _ChartCard(
-      title: 'Top Senders',
-      subtitle: 'Most frequent email senders',
-      icon: Icons.people_outline_rounded,
-      iconColor: const Color(0xFFF59E0B),
+    final slices = [
+      _PieSlice('INBOX', data.inbox, const Color(0xFFEF4444)),
+      _PieSlice('Sent', data.sent, const Color(0xFF8B5CF6)),
+      _PieSlice('Archive', data.archive, const Color(0xFF3B82F6)),
+      _PieSlice('Drafts', data.drafts, const Color(0xFF64748B)),
+      _PieSlice('Spam', data.spam, const Color(0xFFF59E0B)),
+      _PieSlice('Trash', data.trash, const Color(0xFF10B981)),
+    ];
+
+    return _buildCardContainer(
       isDark: isDark,
+      title: 'MAILBOX COMPOSITION',
+      subtitle: 'Proportion of messages stored across mailboxes',
       child: Column(
         children: [
+          const SizedBox(height: 12),
+          // Donut PieChart
           SizedBox(
-            height: 160,
+            height: 180,
             child: PieChart(
               PieChartData(
+                centerSpaceRadius: 50,
                 sectionsSpace: 3,
-                centerSpaceRadius: 40,
-                sections: analytics.topSenders.asMap().entries.map((e) {
-                  final idx = e.key;
-                  final entry = e.value;
+                startDegreeOffset: -90,
+                sections: slices.map((s) {
+                  final val = s.count > 0 ? s.count.toDouble() : 0.1;
                   return PieChartSectionData(
-                    value: entry.value.toDouble(),
-                    color: colors[idx % colors.length],
-                    radius: 45,
-                    title: total > 0
-                        ? '${(entry.value / total * 100).toStringAsFixed(0)}%'
-                        : '',
-                    titleStyle: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
+                    color: s.color,
+                    value: val,
+                    title: '',
+                    radius: 26,
                   );
                 }).toList(),
               ),
+              swapAnimationDuration: const Duration(milliseconds: 500),
+              swapAnimationCurve: Curves.easeInOutCubic,
             ),
           ),
-          const SizedBox(height: 12),
-          ...analytics.topSenders.asMap().entries.map((e) {
-            final idx = e.key;
-            final entry = e.value;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Row(
+          const SizedBox(height: 24),
+
+          // Legend Pills matching Screenshot 1
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 16,
+            runSpacing: 10,
+            children: slices.map((s) {
+              final pct = total > 0 ? (s.count / total * 100).toStringAsFixed(0) : '0';
+              return Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
                     width: 10,
                     height: 10,
                     decoration: BoxDecoration(
-                      color: colors[idx % colors.length],
+                      color: s.color,
                       shape: BoxShape.circle,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      entry.key,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark ? Colors.white70 : Colors.grey.shade700,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
+                  const SizedBox(width: 6),
                   Text(
-                    '${entry.value}',
+                    '${s.label} (${s.count})',
                     style: TextStyle(
                       fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: colors[idx % colors.length],
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white70 : const Color(0xFF475569),
                     ),
                   ),
                 ],
-              ),
-            );
-          }),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 8),
         ],
       ),
     );
   }
-}
 
-// ──────────────────────────────────────────────────────────────
-// Reusable sub-widgets
-// ──────────────────────────────────────────────────────────────
+  // ── 2. Daily Email Volume (Non-congested Animated BarChart) ─────────────
 
-class _StatCard extends StatelessWidget {
-  final String label;
-  final int value;
-  final IconData icon;
-  final Color color;
-  final bool isDark;
+  Widget _buildDailyVolumeCard(EmailAnalyticsData data, bool isDark) {
+    final allDates = <String>{
+      ...data.receivedByDate.keys,
+      ...data.sentByDate.keys,
+    }.toList()
+      ..sort();
 
-  const _StatCard({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.color,
-    required this.isDark,
-  });
+    if (allDates.isEmpty) {
+      return _buildCardContainer(
+        isDark: isDark,
+        title: 'Daily Email Volume (Received vs Sent)',
+        subtitle: 'Comparison of messages received and sent per day',
+        child: _buildEmptyChartState('No daily activity recorded yet.', isDark),
+      );
+    }
 
-  @override
-  Widget build(BuildContext context) {
-    return NeumorphicContainer(
-      padding: const EdgeInsets.all(16),
-      color: isDark ? const Color(0xFF1E293B) : Colors.white,
-      borderRadius: 16,
-      border: Border.all(color: color.withValues(alpha: 0.2)),
+    // Limit to last 6 dates on mobile for clear non-congested spacing
+    final displayDates = allDates.length > 6 ? allDates.sublist(allDates.length - 6) : allDates;
+
+    double maxY = 0;
+    for (final d in displayDates) {
+      final r = (data.receivedByDate[d] ?? 0).toDouble();
+      final s = (data.sentByDate[d] ?? 0).toDouble();
+      if (r > maxY) maxY = r;
+      if (s > maxY) maxY = s;
+    }
+    if (maxY == 0) maxY = 10;
+
+    return _buildCardContainer(
+      isDark: isDark,
+      title: 'Daily Email Volume (Received vs Sent)',
+      subtitle: 'Comparison of messages received and sent per day',
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Legend indicator
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              Container(
-                padding: const EdgeInsets.all(7),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, color: color, size: 18),
-              ),
-              // Trend indicator (static for now)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF10B981).withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Text(
-                  '↑ live',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF10B981),
+              _buildChartLegendDot('Received', const Color(0xFF2563EB), isDark),
+              const SizedBox(width: 14),
+              _buildChartLegendDot('Sent', const Color(0xFF10B981), isDark),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          SizedBox(
+            height: 220,
+            child: BarChart(
+              BarChartData(
+                alignment: BarChartAlignment.spaceAround,
+                maxY: maxY * 1.25,
+                barTouchData: BarTouchData(
+                  touchTooltipData: BarTouchTooltipData(
+                    getTooltipColor: (_) => isDark ? const Color(0xFF1E293B) : Colors.white,
+                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                      final d = displayDates[group.x.toInt()];
+                      final label = rodIndex == 0 ? 'Received' : 'Sent';
+                      return BarTooltipItem(
+                        '$d\n$label: ${rod.toY.toInt()}',
+                        TextStyle(
+                          color: isDark ? Colors.white : Colors.black87,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      );
+                    },
                   ),
                 ),
+                titlesData: FlTitlesData(
+                  show: true,
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 32,
+                      getTitlesWidget: (value, meta) {
+                        final idx = value.toInt();
+                        if (idx < 0 || idx >= displayDates.length) return const SizedBox.shrink();
+                        final dStr = displayDates[idx];
+                        final parts = dStr.split('-');
+                        final shortLabel = parts.length >= 3 ? '${parts[1]}/${parts[2]}' : dStr;
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(
+                            shortLabel,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 28,
+                      getTitlesWidget: (value, meta) {
+                        if (value == 0) return const SizedBox.shrink();
+                        return Text(
+                          value.toInt().toString(),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark ? Colors.white54 : Colors.grey.shade600,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  getDrawingHorizontalLine: (value) => FlLine(
+                    color: isDark ? Colors.white10 : Colors.grey.shade200,
+                    strokeWidth: 1,
+                  ),
+                ),
+                borderData: FlBorderData(show: false),
+                barGroups: displayDates.asMap().entries.map((entry) {
+                  final idx = entry.key;
+                  final date = entry.value;
+                  final recvVal = (data.receivedByDate[date] ?? 0).toDouble();
+                  final sentVal = (data.sentByDate[date] ?? 0).toDouble();
+
+                  return BarChartGroupData(
+                    x: idx,
+                    barRods: [
+                      BarChartRodData(
+                        toY: recvVal,
+                        color: const Color(0xFF2563EB),
+                        width: 10,
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                      ),
+                      BarChartRodData(
+                        toY: sentVal,
+                        color: const Color(0xFF10B981),
+                        width: 10,
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                      ),
+                    ],
+                  );
+                }).toList(),
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            '$value',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              color: isDark ? Colors.white : const Color(0xFF1E293B),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: isDark ? Colors.white54 : Colors.grey.shade600,
+              swapAnimationDuration: const Duration(milliseconds: 450),
+              swapAnimationCurve: Curves.easeOutCubic,
             ),
           ),
         ],
       ),
     );
   }
-}
 
-class _ChartCard extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final Color iconColor;
-  final bool isDark;
-  final Widget child;
+  // ── 3. Monthly Volume Overview ──────────────────────────────────────────
 
-  const _ChartCard({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.iconColor,
-    required this.isDark,
-    required this.child,
-  });
+  Widget _buildMonthlyVolumeCard(EmailAnalyticsData data, bool isDark) {
+    final allMonths = <String>{
+      ...data.receivedByMonth.keys,
+      ...data.sentByMonth.keys,
+    }.toList()
+      ..sort();
 
-  @override
-  Widget build(BuildContext context) {
-    return NeumorphicContainer(
-      padding: const EdgeInsets.all(20),
-      color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFF),
-      borderRadius: 20,
-      border: Border.all(
-        color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
-      ),
+    if (allMonths.isEmpty) {
+      return _buildCardContainer(
+        isDark: isDark,
+        title: 'Monthly Volume Overview',
+        subtitle: 'Total volume comparison across months',
+        child: _buildEmptyChartState('No monthly history available.', isDark),
+      );
+    }
+
+    final displayMonths = allMonths.length > 5 ? allMonths.sublist(allMonths.length - 5) : allMonths;
+
+    double maxY = 0;
+    for (final m in displayMonths) {
+      final r = (data.receivedByMonth[m] ?? 0).toDouble();
+      final s = (data.sentByMonth[m] ?? 0).toDouble();
+      if (r > maxY) maxY = r;
+      if (s > maxY) maxY = s;
+    }
+    if (maxY == 0) maxY = 10;
+
+    return _buildCardContainer(
+      isDark: isDark,
+      title: 'Monthly Volume Overview',
+      subtitle: 'Total volume comparison across months',
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              Container(
-                padding: const EdgeInsets.all(7),
-                decoration: BoxDecoration(
-                  color: iconColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, color: iconColor, size: 16),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: isDark ? Colors.white : const Color(0xFF1E293B),
-                      ),
-                    ),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: isDark ? Colors.white38 : Colors.grey.shade500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              _buildChartLegendDot('Received', const Color(0xFF6366F1), isDark),
+              const SizedBox(width: 14),
+              _buildChartLegendDot('Sent', const Color(0xFF14B8A6), isDark),
             ],
           ),
-          const SizedBox(height: 20),
-          child,
+          const SizedBox(height: 14),
+
+          SizedBox(
+            height: 220,
+            child: BarChart(
+              BarChartData(
+                alignment: BarChartAlignment.spaceAround,
+                maxY: maxY * 1.25,
+                titlesData: FlTitlesData(
+                  show: true,
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 32,
+                      getTitlesWidget: (value, meta) {
+                        final idx = value.toInt();
+                        if (idx < 0 || idx >= displayMonths.length) return const SizedBox.shrink();
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(
+                            displayMonths[idx],
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 28,
+                      getTitlesWidget: (value, meta) {
+                        if (value == 0) return const SizedBox.shrink();
+                        return Text(
+                          value.toInt().toString(),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark ? Colors.white54 : Colors.grey.shade600,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  getDrawingHorizontalLine: (value) => FlLine(
+                    color: isDark ? Colors.white10 : Colors.grey.shade200,
+                    strokeWidth: 1,
+                  ),
+                ),
+                borderData: FlBorderData(show: false),
+                barGroups: displayMonths.asMap().entries.map((entry) {
+                  final idx = entry.key;
+                  final month = entry.value;
+                  final recvVal = (data.receivedByMonth[month] ?? 0).toDouble();
+                  final sentVal = (data.sentByMonth[month] ?? 0).toDouble();
+
+                  return BarChartGroupData(
+                    x: idx,
+                    barRods: [
+                      BarChartRodData(
+                        toY: recvVal,
+                        color: const Color(0xFF6366F1),
+                        width: 12,
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                      ),
+                      BarChartRodData(
+                        toY: sentVal,
+                        color: const Color(0xFF14B8A6),
+                        width: 12,
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
+              swapAnimationDuration: const Duration(milliseconds: 450),
+              swapAnimationCurve: Curves.easeOutCubic,
+            ),
+          ),
         ],
       ),
     );
   }
-}
 
-class _LegendItem extends StatelessWidget {
-  final Color color;
-  final String label;
-  final int value;
-  final bool isDark;
+  // ── 4. Top Senders Card ───────────────────────────────────────────────────
 
-  const _LegendItem({
-    required this.color,
-    required this.label,
-    required this.value,
-    required this.isDark,
-  });
+  Widget _buildTopSendersCard(EmailAnalyticsData data, bool isDark) {
+    final senders = data.topSenders.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final top5 = senders.take(5).toList();
 
-  @override
-  Widget build(BuildContext context) {
+    return _buildCardContainer(
+      isDark: isDark,
+      title: 'Top Senders',
+      subtitle: 'Contacts who send you the most emails',
+      child: top5.isEmpty
+          ? _buildEmptyChartState('No sender metrics recorded.', isDark)
+          : Column(
+              children: top5.map((entry) {
+                final max = top5.first.value > 0 ? top5.first.value : 1;
+                final ratio = (entry.value / max).clamp(0.0, 1.0);
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              entry.key,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: isDark ? Colors.white.withValues(alpha: 0.87) : Colors.grey.shade800,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Text(
+                            '${entry.value} msgs',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? Colors.white70 : Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: ratio,
+                          minHeight: 6,
+                          backgroundColor: isDark ? Colors.white10 : Colors.grey.shade200,
+                          valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF2563EB)),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+    );
+  }
+
+  // ── 5. Top Receivers Card ─────────────────────────────────────────────────
+
+  Widget _buildTopReceiversCard(EmailAnalyticsData data, bool isDark) {
+    final receivers = data.topReceivers.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final top5 = receivers.take(5).toList();
+
+    return _buildCardContainer(
+      isDark: isDark,
+      title: 'Top Recipients',
+      subtitle: 'Contacts you email most frequently',
+      child: top5.isEmpty
+          ? _buildEmptyChartState('No recipient metrics recorded.', isDark)
+          : Column(
+              children: top5.map((entry) {
+                final max = top5.first.value > 0 ? top5.first.value : 1;
+                final ratio = (entry.value / max).clamp(0.0, 1.0);
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              entry.key,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: isDark ? Colors.white.withValues(alpha: 0.87) : Colors.grey.shade800,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Text(
+                            '${entry.value} msgs',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? Colors.white70 : Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: ratio,
+                          minHeight: 6,
+                          backgroundColor: isDark ? Colors.white10 : Colors.grey.shade200,
+                          valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF10B981)),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+    );
+  }
+
+  // ── Helper Widgets ────────────────────────────────────────────────────────
+
+  Widget _buildChartLegendDot(String label, Color color, bool isDark) {
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 12,
-          height: 12,
-          decoration:
-              BoxDecoration(color: color, borderRadius: BorderRadius.circular(3)),
-        ),
-        const SizedBox(width: 8),
-        Text(
-          '$label: ',
-          style: TextStyle(
-            fontSize: 13,
-            color: isDark ? Colors.white70 : Colors.grey.shade700,
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
           ),
         ),
+        const SizedBox(width: 5),
         Text(
-          '$value',
+          label,
           style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.bold,
-            color: isDark ? Colors.white : const Color(0xFF1E293B),
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: isDark ? Colors.white70 : const Color(0xFF64748B),
           ),
         ),
       ],
     );
   }
+
+  Widget _buildCardContainer({
+    required bool isDark,
+    required String title,
+    required String subtitle,
+    required Widget child,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark ? Colors.white10 : Colors.grey.shade200,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white : const Color(0xFF1E293B),
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              color: isDark ? Colors.white54 : Colors.grey.shade500,
+            ),
+          ),
+          const SizedBox(height: 18),
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyChartState(String message, bool isDark) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        child: Text(
+          message,
+          style: TextStyle(
+            fontSize: 13,
+            color: isDark ? Colors.white38 : Colors.grey.shade500,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PieSlice {
+  final String label;
+  final int count;
+  final Color color;
+
+  _PieSlice(this.label, this.count, this.color);
 }

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../data/account_provider.dart';
 import '../../models/account_model.dart';
+import '../../data/email_provider.dart';
 import '../theme/colors.dart';
 
 class AccountSwitcherSheet extends ConsumerWidget {
@@ -57,7 +59,9 @@ class AccountSwitcherSheet extends ConsumerWidget {
               children: [
                 Icon(
                   Icons.manage_accounts_outlined,
-                  color: isDark ? BNXColors.darkPrimary : BNXColors.lightPrimary,
+                  color: isDark
+                      ? BNXColors.darkPrimary
+                      : BNXColors.lightPrimary,
                   size: 22,
                 ),
                 const SizedBox(width: 10),
@@ -81,21 +85,7 @@ class AccountSwitcherSheet extends ConsumerWidget {
           InkWell(
             onTap: () {
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Row(
-                    children: [
-                      Icon(Icons.add_circle_outline, color: Colors.white, size: 18),
-                      SizedBox(width: 10),
-                      Text('Add Account feature coming soon!'),
-                    ],
-                  ),
-                  behavior: SnackBarBehavior.floating,
-                  backgroundColor: const Color(0xFF1D4ED8),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                ),
-              );
+              context.push('/login');
             },
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
@@ -145,31 +135,45 @@ class _AccountTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return InkWell(
-      onTap: () {
-        ref.read(accountsProvider.notifier).switchAccount(account.id);
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                CircleAvatar(
-                  radius: 12,
-                  backgroundColor: account.avatarColor,
-                  child: Text(
-                    account.avatarLetter,
-                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+      onTap: () async {
+        final targetId = account.email.isNotEmpty ? account.email : account.id;
+
+        // 1. Dismiss bottom sheet instantly for ultra-fast UI feedback
+        if (context.mounted) {
+          Navigator.pop(context);
+        }
+
+        // 2. Perform fast account switch & reset navigation to Inbox
+        await ref.read(accountsProvider.notifier).switchAccount(targetId, ref);
+
+        // 3. Navigate straight to '/' (the main Mail section)
+        if (context.mounted) {
+          context.go('/');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 12,
+                    backgroundColor: account.avatarColor,
+                    child: Text(
+                      account.avatarLetter,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Text('Switched to ${account.email}'),
-              ],
+                  const SizedBox(width: 10),
+                  Text('Switched to ${account.email}'),
+                ],
+              ),
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 1),
             ),
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: account.avatarColor,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            duration: const Duration(seconds: 2),
-          ),
-        );
+          );
+        }
       },
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
@@ -222,7 +226,9 @@ class _AccountTile extends ConsumerWidget {
                     account.name,
                     style: TextStyle(
                       fontSize: 15,
-                      fontWeight: account.isActive ? FontWeight.bold : FontWeight.w500,
+                      fontWeight: account.isActive
+                          ? FontWeight.bold
+                          : FontWeight.w500,
                       color: isDark ? Colors.white : const Color(0xFF1E293B),
                     ),
                   ),
@@ -248,7 +254,9 @@ class _AccountTile extends ConsumerWidget {
                 child: Icon(
                   Icons.check_rounded,
                   size: 16,
-                  color: isDark ? BNXColors.darkPrimary : BNXColors.lightPrimary,
+                  color: isDark
+                      ? BNXColors.darkPrimary
+                      : BNXColors.lightPrimary,
                 ),
               ),
           ],

@@ -5,30 +5,148 @@ import 'package:go_router/go_router.dart';
 import '../../../data/email_provider.dart';
 import '../../../data/app_state_provider.dart';
 import '../../../core/widgets/email_tile.dart';
-import '../../../core/widgets/email_body.dart';
 import '../../../core/theme/colors.dart';
-import '../../../core/theme/neumorphic.dart';
 import '../../../models/email_model.dart';
+import '../../../models/label_model.dart';
+import '../../../models/account_model.dart';
 import '../../../data/account_provider.dart';
+import '../../../data/all_inboxes_provider.dart';
 import 'templates_view.dart';
 
-class EmailListScreen extends ConsumerWidget {
+class EmailListScreen extends ConsumerStatefulWidget {
   const EmailListScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<EmailListScreen> createState() => _EmailListScreenState();
+}
+
+class _EmailListScreenState extends ConsumerState<EmailListScreen>
+    with SingleTickerProviderStateMixin {
+  static const List<String> _tabs = ['Primary', 'Unread', 'Sent', 'Draft'];
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: _tabs.length, vsync: this);
+    _tabController.addListener(() {
+      if (mounted && !_tabController.indexIsChanging) {
+        setState(() {});
+      }
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final initialFolder = ref.read(appUiProvider).activeFolder;
+        ref.read(emailProvider.notifier).loadFolder(initialFolder);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  bool _isSentEmail(EmailModel e, AccountModel activeAccount) {
+    if (e.isTrash || e.memberOfFolders.contains('Trash')) return false;
+    if (e.isDraft || e.memberOfFolders.contains('Draft')) return false;
+
+    final userEmail = activeAccount.email.trim().toLowerCase();
+    final userName = activeAccount.name.trim().toLowerCase();
+    final senderEmail = e.senderEmail.trim().toLowerCase();
+    final senderName = e.senderName.trim().toLowerCase();
+
+    final isSenderMatch =
+        (userEmail.isNotEmpty && senderEmail == userEmail) ||
+        (userName.isNotEmpty && senderName == userName);
+
+    if (e.isSent) {
+      if (senderEmail.isNotEmpty && userEmail.isNotEmpty && !isSenderMatch) {
+        return false;
+      }
+      return true;
+    }
+
+    if (e.memberOfFolders.contains('Sent')) {
+      if (senderEmail.isNotEmpty && userEmail.isNotEmpty && !isSenderMatch) {
+        return false;
+      }
+      return true;
+    }
+
+    return isSenderMatch;
+  }
+
+  bool _isIncomingOrSelf(EmailModel e, AccountModel activeAccount) {
+    final userEmail = activeAccount.email.trim().toLowerCase();
+    if (userEmail.isEmpty) return true;
+    final senderEmail = e.senderEmail.trim().toLowerCase();
+    final recipient = e.recipient.trim().toLowerCase();
+    if (recipient == userEmail) return true;
+    if (senderEmail != userEmail) return true;
+    return false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final uiState = ref.watch(appUiProvider);
-    final emails = ref.watch(emailProvider);
+    final emails = ref.watch(emailListProvider);
+    final activeAccount = ref.watch(activeAccountProvider);
     final isDark = uiState.isDarkMode;
     final double screenWidth = MediaQuery.of(context).size.width;
-    final bool isMobile = screenWidth < 600;
+
+    // Reactively load folder or category only when activeFolder changes
+    ref.listen<String>(
+      appUiProvider.select((s) => s.activeFolder),
+      (previous, next) {
+        if (previous != next) {
+          Future.microtask(() {
+            if (!context.mounted) return;
+            if (next == 'All Inboxes' || next == 'All inboxes') {
+              ref.read(allInboxesProvider.notifier).loadAllInboxes();
+            } else if (['Promotions', 'Social', 'Updates', 'Primary'].contains(next)) {
+              ref.read(emailProvider.notifier).fetchCategory(next.toLowerCase());
+            } else {
+              ref.read(emailProvider.notifier).loadFolder(next);
+            }
+          });
+        }
+      },
+    );
+
+    final int currentTabIndex = _tabController.index;
 
     // 1. FILTER EMAILS BY FOLDER / CATEGORY
     List<EmailModel> filtered = emails;
 
     if (uiState.activeLabel != null) {
-      // Filter by label
-      filtered = emails.where((e) => e.labels.contains(uiState.activeLabel) && !e.isTrash).toList();
+      // Filter by label accurately (matching both label ID and label name)
+      final labelQuery = uiState.activeLabel!.trim().toLowerCase();
+      final customLabels = ref.watch(customLabelsProvider);
+      final matchingLabel = customLabels.firstWhere(
+        (l) =>
+            l.name.trim().toLowerCase() == labelQuery ||
+            l.id.trim().toLowerCase() == labelQuery,
+        orElse: () => LabelModel(
+          id: labelQuery,
+          name: labelQuery,
+          color: const Color(0xFF195BAC),
+        ),
+      );
+      final targetId = matchingLabel.id.trim().toLowerCase();
+      final targetName = matchingLabel.name.trim().toLowerCase();
+
+      filtered = emails
+          .where(
+            (e) =>
+                !e.isTrash &&
+                e.labels.any((l) {
+                  final norm = l.trim().toLowerCase();
+                  return norm == targetId || norm == targetName;
+                }),
+          )
+          .toList();
     } else {
       // Filter by folder
       switch (uiState.activeFolder) {
@@ -36,65 +154,248 @@ class EmailListScreen extends ConsumerWidget {
           filtered = emails.where((e) => e.isStarred && !e.isTrash).toList();
           break;
         case 'Job Mails':
-          final activeAccount = ref.watch(activeAccountProvider);
           final jobKeywords = activeAccount.getKeywords();
           filtered = emails.where((e) {
             if (e.isTrash) return false;
-            final text = '${e.subject} ${e.body} ${e.senderName} ${e.senderEmail}'.toLowerCase();
+            final text =
+                '${e.subject} ${e.body} ${e.senderName} ${e.senderEmail}'
+                    .toLowerCase();
             return jobKeywords.any((kw) => text.contains(kw));
           }).toList();
           break;
         case 'Purchases':
-          filtered = emails.where((e) => e.labels.contains('Purchases') || e.subject.toLowerCase().contains('payment') || e.subject.toLowerCase().contains('order')).toList();
+          filtered = emails
+              .where(
+                (e) =>
+                    e.labels.contains('Purchases') ||
+                    e.subject.toLowerCase().contains('payment') ||
+                    e.subject.toLowerCase().contains('order'),
+              )
+              .toList();
           break;
+        case 'Promotions':
+          filtered = emails
+              .where(
+                (e) =>
+                    !e.isTrash &&
+                    (e.labels.contains('Promotions') ||
+                        e.subject.toLowerCase().contains('promo') ||
+                        e.subject.toLowerCase().contains('offer') ||
+                        e.subject.toLowerCase().contains('discount') ||
+                        e.subject.toLowerCase().contains('sale') ||
+                        e.subject.toLowerCase().contains('deal')),
+              )
+              .toList();
+          break;
+        case 'Social':
+          filtered = emails
+              .where(
+                (e) =>
+                    !e.isTrash &&
+                    (e.labels.contains('Social') ||
+                        e.subject.toLowerCase().contains('social') ||
+                        e.subject.toLowerCase().contains('facebook') ||
+                        e.subject.toLowerCase().contains('linkedin') ||
+                        e.subject.toLowerCase().contains('twitter') ||
+                        e.subject.toLowerCase().contains('instagram') ||
+                        e.subject.toLowerCase().contains('invite') ||
+                        e.subject.toLowerCase().contains('friend')),
+              )
+              .toList();
+          break;
+        case 'Updates':
+          filtered = emails
+              .where(
+                (e) =>
+                    !e.isTrash &&
+                    (e.labels.contains('Updates') ||
+                        e.subject.toLowerCase().contains('update') ||
+                        e.subject.toLowerCase().contains('alert') ||
+                        e.subject.toLowerCase().contains('notification') ||
+                        e.subject.toLowerCase().contains('security') ||
+                        e.subject.toLowerCase().contains('billing') ||
+                        e.subject.toLowerCase().contains('confirm')),
+              )
+              .toList();
+          break;
+        case 'All Inboxes':
         case 'All inboxes':
-          filtered = emails.where((e) => !e.isTrash && !e.isDraft).toList();
+          final allInboxesState = ref.watch(allInboxesProvider);
+          if (allInboxesState.emails.isEmpty && !allInboxesState.isLoading) {
+            Future.microtask(() => ref.read(allInboxesProvider.notifier).loadAllInboxes());
+          }
+          filtered = allInboxesState.emails
+              .where((e) => !e.isTrash && !e.isDraft && !e.isArchive && !e.isSpam)
+              .toList();
           break;
         case 'Outbox':
           filtered = emails.where((e) => e.isScheduled && !e.isTrash).toList();
           break;
         case 'Inbox':
-          filtered = emails
-              .where((e) => !e.isTrash && !e.isDraft && !e.isSent && !e.isArchive && !e.isSpam)
-              .toList();
+          // Apply tab sub-filter
+          if (currentTabIndex == 0) {
+            // Primary inbox: received or self-sent emails
+            filtered = emails
+                .where(
+                  (e) =>
+                      !e.isTrash &&
+                      !e.isDraft &&
+                      !e.isScheduled &&
+                      !e.isArchive &&
+                      !e.isSpam &&
+                      !e.memberOfFolders.contains('Trash') &&
+                      !e.memberOfFolders.contains('Archive') &&
+                      !e.memberOfFolders.contains('Draft') &&
+                      !e.memberOfFolders.contains('Scheduled') &&
+                      !e.memberOfFolders.contains('Spam') &&
+                      _isIncomingOrSelf(e, activeAccount),
+                )
+                .toList();
+          } else if (currentTabIndex == 1) {
+            // Unread inbox: unread received or self-sent emails
+            filtered = emails
+                .where(
+                  (e) =>
+                      !e.isRead &&
+                      !e.isTrash &&
+                      !e.isDraft &&
+                      !e.isScheduled &&
+                      !e.isArchive &&
+                      !e.isSpam &&
+                      !e.memberOfFolders.contains('Trash') &&
+                      !e.memberOfFolders.contains('Archive') &&
+                      !e.memberOfFolders.contains('Draft') &&
+                      !e.memberOfFolders.contains('Scheduled') &&
+                      !e.memberOfFolders.contains('Spam') &&
+                      _isIncomingOrSelf(e, activeAccount),
+                )
+                .toList();
+          } else if (currentTabIndex == 2) {
+            // Sent
+            filtered = emails
+                .where((e) => _isSentEmail(e, activeAccount))
+                .toList();
+          } else if (currentTabIndex == 3) {
+            // Draft
+            filtered = emails
+                .where(
+                  (e) =>
+                      (e.isDraft || e.memberOfFolders.contains('Draft')) &&
+                      !e.isScheduled &&
+                      !e.memberOfFolders.contains('Scheduled') &&
+                      !e.isTrash &&
+                      !e.memberOfFolders.contains('Trash'),
+                )
+                .toList();
+          }
           break;
         case 'Starred':
-          filtered = emails.where((e) => e.isStarred && !e.isTrash).toList();
+          filtered = emails
+              .where(
+                (e) =>
+                    (e.isStarred || e.memberOfFolders.contains('Starred')) &&
+                    !e.isTrash &&
+                    !e.memberOfFolders.contains('Trash'),
+              )
+              .toList();
           break;
         case 'Snoozed':
-          filtered = emails.where((e) => e.isSnoozed && !e.isTrash).toList();
+          filtered = emails
+              .where(
+                (e) =>
+                    (e.isSnoozed || e.memberOfFolders.contains('Snoozed')) &&
+                    !e.isTrash &&
+                    !e.memberOfFolders.contains('Trash'),
+              )
+              .toList();
           break;
         case 'Sent':
-          filtered = emails.where((e) => e.isSent && !e.isTrash).toList();
+          filtered = emails
+              .where((e) => _isSentEmail(e, activeAccount))
+              .toList();
           break;
         case 'Draft':
-          filtered = emails.where((e) => e.isDraft && !e.isTrash).toList();
+          filtered = emails
+              .where(
+                (e) =>
+                    (e.isDraft || e.memberOfFolders.contains('Draft')) &&
+                    !e.isScheduled &&
+                    !e.memberOfFolders.contains('Scheduled') &&
+                    !e.isTrash &&
+                    !e.memberOfFolders.contains('Trash'),
+              )
+              .toList();
           break;
         case 'Trash':
-          filtered = emails.where((e) => e.isTrash).toList();
+          filtered = emails
+              .where((e) => e.isTrash || e.memberOfFolders.contains('Trash'))
+              .toList();
           break;
         case 'Archive':
-          filtered = emails.where((e) => e.isArchive && !e.isTrash).toList();
+          filtered = emails
+              .where(
+                (e) =>
+                    (e.isArchive || e.memberOfFolders.contains('Archive')) &&
+                    !e.isTrash &&
+                    !e.memberOfFolders.contains('Trash'),
+              )
+              .toList();
           break;
         case 'Scheduled':
-          filtered = emails.where((e) => e.isScheduled && !e.isTrash).toList();
+          filtered = emails
+              .where(
+                (e) =>
+                    (e.isScheduled || e.memberOfFolders.contains('Scheduled')) &&
+                    !e.isTrash &&
+                    !e.memberOfFolders.contains('Trash'),
+              )
+              .toList();
           break;
         case 'Spam':
-          filtered = emails.where((e) => e.isSpam && !e.isTrash).toList();
+          filtered = emails
+              .where(
+                (e) =>
+                    (e.isSpam || e.memberOfFolders.contains('Spam')) &&
+                    !e.isTrash &&
+                    !e.memberOfFolders.contains('Trash'),
+              )
+              .toList();
           break;
         case 'All Mail':
           filtered = emails.where((e) => !e.isTrash).toList();
           break;
         case 'Templates':
-          filtered = emails.where((e) => e.isDraft && e.subject.toLowerCase().contains('template') && !e.isTrash).toList();
+          filtered = emails
+              .where(
+                (e) =>
+                    e.labels.contains('Templates') ||
+                    e.subject.toLowerCase().contains('template'),
+              )
+              .toList();
           break;
         case 'Subscriptions':
-          filtered = emails.where((e) => e.senderEmail.contains('newsletter') || e.senderEmail.contains('digest') || e.senderEmail.contains('noreply')).toList();
+          filtered = emails
+              .where(
+                (e) =>
+                    e.senderEmail.contains('newsletter') ||
+                    e.senderEmail.contains('digest') ||
+                    e.senderEmail.contains('noreply'),
+              )
+              .toList();
           break;
         default:
           filtered = emails;
       }
     }
+
+    // Filter out Casbox secure messages from regular email folders (Primary, Starred, Sent, etc.)
+    if (uiState.activeFolder != 'All Mail' && uiState.activeFolder != 'Trash') {
+      filtered = filtered
+          .where((e) => !e.labels.any((l) => l.toLowerCase() == 'casbox'))
+          .toList();
+    }
+
+    print('[STAGE 6: UI FILTERED] ActiveFolder: "${uiState.activeFolder}" | SubTab: $currentTabIndex | Total State Emails: ${emails.length} | Rendered Count: ${filtered.length}');
 
     // 2. FILTER EMAILS BY SEARCH QUERY
     if (uiState.searchQuery.isNotEmpty) {
@@ -107,7 +408,17 @@ class EmailListScreen extends ConsumerWidget {
       }).toList();
     }
 
-    // 3. HANDLE VIEW TOGGLING: DETAIL VIEW vs. LIST VIEW
+    // 3. SORT EMAILS CHRONOLOGICALLY (Newest at top)
+    filtered = List<EmailModel>.from(filtered)
+      ..sort((a, b) => b.date.compareTo(a.date));
+
+    // 4. DEDUPLICATE BY EMAIL ID TO PREVENT DUPLICATE KEY RED SCREEN CRASHES
+    final seenIds = <String>{};
+    filtered = filtered.where((e) => seenIds.add(e.id)).toList();
+
+    print('[UI RENDER DIAGNOSTIC] Active Folder: ${uiState.activeFolder} | SubTab: $currentTabIndex | Total Provider State Emails: ${emails.length} | UI Filtered Rendered Count: ${filtered.length}');
+
+    // 4. HANDLE VIEW TOGGLING: DETAIL VIEW vs. LIST VIEW
     final Widget mainBody;
 
     if (uiState.activeFolder == 'Templates' && uiState.activeLabel == null) {
@@ -116,437 +427,222 @@ class EmailListScreen extends ConsumerWidget {
       // Otherwise render the Email List
       mainBody = Column(
         children: [
-          // Inbox Header Toolbar (Select all, Refresh, More, Pagination)
-          Container(
-            height: 48,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(
-                  color: isDark ? BNXColors.darkBorder : BNXColors.lightBorder,
-                  width: 1,
+          // --- INBOX TAB BAR (only shown in Inbox) ---
+          if (uiState.activeFolder == 'Inbox' &&
+              uiState.activeLabel == null &&
+              uiState.searchQuery.isEmpty)
+            Container(
+              color: isDark ? BNXColors.darkBg : Colors.white,
+              child: TabBar(
+                controller: _tabController,
+                onTap: (index) => setState(() {}),
+                isScrollable: false,
+                indicatorColor: const Color(0xFF195bac),
+                indicatorWeight: 3,
+                indicatorSize: TabBarIndicatorSize.tab,
+                labelColor: const Color(0xFF195bac),
+                unselectedLabelColor: isDark
+                    ? Colors.white54
+                    : Colors.grey.shade500,
+                labelStyle: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
                 ),
-              ),
-            ),
-            child: Row(
-              children: [
-                Checkbox(
-                  value: uiState.selectedEmailIds.isEmpty
-                      ? false
-                      : (uiState.selectedEmailIds.length == filtered.length ? true : null),
-                  tristate: true,
-                  onChanged: (val) {
-                    final emailIds = filtered.map((e) => e.id).toList();
-                    ref.read(appUiProvider.notifier).selectAllEmails(emailIds);
-                  },
+                unselectedLabelStyle: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
                 ),
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.arrow_drop_down, size: 18),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  onSelected: (val) {
-                    final emailIds = filtered.map((e) => e.id).toList();
-                    if (val == 'all') {
-                      ref.read(appUiProvider.notifier).selectAllEmails(emailIds);
-                    } else if (val == 'none') {
-                      ref.read(appUiProvider.notifier).clearSelection();
-                    } else if (val == 'read') {
-                      final readIds = filtered.where((e) => e.isRead).map((e) => e.id).toList();
-                      ref.read(appUiProvider.notifier).selectAllEmails(readIds);
-                    } else if (val == 'unread') {
-                      final unreadIds = filtered.where((e) => !e.isRead).map((e) => e.id).toList();
-                      ref.read(appUiProvider.notifier).selectAllEmails(unreadIds);
-                    }
-                  },
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(value: 'all', child: Text('All')),
-                    PopupMenuItem(value: 'none', child: Text('None')),
-                    PopupMenuItem(value: 'read', child: Text('Read')),
-                    PopupMenuItem(value: 'unread', child: Text('Unread')),
-                  ],
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (uiState.selectedEmailIds.isNotEmpty) ...[
-                          IconButton(
-                            icon: const Icon(Icons.archive_outlined, size: 20),
-                            tooltip: 'Archive',
-                            onPressed: () {
-                              for (final id in uiState.selectedEmailIds) {
-                                ref.read(emailProvider.notifier).archiveEmail(id);
-                              }
-                              ref.read(appUiProvider.notifier).clearSelection();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Selected emails archived.')),
-                              );
-                            },
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.report_gmailerrorred_rounded, size: 20),
-                            tooltip: 'Report spam',
-                            onPressed: () {
-                              for (final id in uiState.selectedEmailIds) {
-                                ref.read(emailProvider.notifier).archiveEmail(id);
-                              }
-                              ref.read(appUiProvider.notifier).clearSelection();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Selected emails marked as spam.')),
-                              );
-                            },
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline_rounded, size: 20),
-                            tooltip: 'Delete',
-                            onPressed: () {
-                              for (final id in uiState.selectedEmailIds) {
-                                ref.read(emailProvider.notifier).deleteEmail(id);
-                              }
-                              ref.read(appUiProvider.notifier).clearSelection();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Selected emails deleted.')),
-                              );
-                            },
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.mark_email_read_outlined, size: 20),
-                            tooltip: 'Mark as read',
-                            onPressed: () {
-                              for (final id in uiState.selectedEmailIds) {
-                                ref.read(emailProvider.notifier).toggleRead(id, forceValue: true);
-                              }
-                              ref.read(appUiProvider.notifier).clearSelection();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Selected emails marked as read.')),
-                              );
-                            },
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.mark_email_unread_outlined, size: 20),
-                            tooltip: 'Mark as unread',
-                            onPressed: () {
-                              for (final id in uiState.selectedEmailIds) {
-                                ref.read(emailProvider.notifier).toggleRead(id, forceValue: false);
-                              }
-                              ref.read(appUiProvider.notifier).clearSelection();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Selected emails marked as unread.')),
-                              );
-                            },
-                          ),
-                          PopupMenuButton<DateTime>(
-                            icon: const Icon(Icons.access_time_rounded, size: 20),
-                            tooltip: 'Snooze',
-                            onSelected: (until) {
-                              for (final id in uiState.selectedEmailIds) {
-                                ref.read(emailProvider.notifier).snoozeEmail(id, until);
-                              }
-                              ref.read(appUiProvider.notifier).clearSelection();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Selected emails snoozed.')),
-                              );
-                            },
-                            itemBuilder: (context) {
-                              final now = DateTime.now();
-                              return [
-                                PopupMenuItem(
-                                  value: DateTime(now.year, now.month, now.day, 18, 0),
-                                  child: const Text('Later Today (6:00 PM)'),
-                                ),
-                                PopupMenuItem(
-                                  value: DateTime(now.year, now.month, now.day + 1, 8, 0),
-                                  child: const Text('Tomorrow Morning (8:00 AM)'),
-                                ),
-                                PopupMenuItem(
-                                  value: DateTime(now.year, now.month, now.day + 7, 8, 0),
-                                  child: const Text('Next Week (8:00 AM)'),
-                                ),
-                              ];
-                            },
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.star_outline_rounded, size: 20),
-                            tooltip: 'Star/Unstar',
-                            onPressed: () {
-                              for (final id in uiState.selectedEmailIds) {
-                                ref.read(emailProvider.notifier).toggleStar(id);
-                              }
-                              ref.read(appUiProvider.notifier).clearSelection();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Toggled stars on selected emails.')),
-                              );
-                            },
-                          ),
-                        ] else ...[
-                          IconButton(
-                            icon: const Icon(Icons.refresh, size: 20),
-                            onPressed: () {
-                              ScaffoldMessenger.of(context).clearSnackBars();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Row(
-                                    children: [
-                                      SizedBox(
-                                        width: 16,
-                                        height: 16,
-                                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                      ),
-                                      SizedBox(width: 12),
-                                      Text('Checking for new emails...'),
-                                    ],
-                                  ),
-                                  duration: Duration(milliseconds: 1500),
-                                ),
-                              );
-                              Future.delayed(const Duration(milliseconds: 1500), () {
-                                ref.read(emailProvider.notifier).receiveMockEmail();
-                                ScaffoldMessenger.of(context).clearSnackBars();
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('New email received!')),
-                                );
-                              });
-                            },
-                            tooltip: 'Check new mail',
-                          ),
-                          PopupMenuButton<String>(
-                            icon: const Icon(Icons.more_vert, size: 20),
-                            tooltip: 'More options',
-                            onSelected: (value) {
-                              if (value == 'Mark all as read') {
-                                ref.read(emailProvider.notifier).markAllAsRead();
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('All emails marked as read.')),
-                                );
-                              } else if (value == 'Sort by date') {
-                                ref.read(emailProvider.notifier).sortByDate();
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Sorted by date.')),
-                                );
-                              } else if (value == 'Sort by sender') {
-                                ref.read(emailProvider.notifier).sortBySender();
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Sorted by sender name.')),
-                                );
-                              } else if (value == 'Select all messages') {
-                                final emailIds = filtered.map((e) => e.id).toList();
-                                ref.read(appUiProvider.notifier).selectAllEmails(emailIds);
-                              } else if (value == 'Filter unread only') {
-                                ref.read(appUiProvider.notifier).setSearchQuery('unread');
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Filtering unread emails (applied search query).')),
-                                );
-                              }
-                            },
-                            itemBuilder: (context) => [
-                              const PopupMenuItem(value: 'Mark all as read', child: ListTile(leading: Icon(Icons.mark_email_read_outlined), title: Text('Mark all as read'), dense: true)),
-                              const PopupMenuItem(value: 'Sort by date', child: ListTile(leading: Icon(Icons.sort_rounded), title: Text('Sort by date'), dense: true)),
-                              const PopupMenuItem(value: 'Sort by sender', child: ListTile(leading: Icon(Icons.sort_by_alpha_rounded), title: Text('Sort by sender'), dense: true)),
-                              const PopupMenuItem(value: 'Select all messages', child: ListTile(leading: Icon(Icons.select_all_rounded), title: Text('Select all messages'), dense: true)),
-                              const PopupMenuItem(value: 'Filter unread only', child: ListTile(leading: Icon(Icons.filter_alt_outlined), title: Text('Filter unread only'), dense: true)),
-                            ],
-                          ),
-                        ],
-                      ],
-                    ),
+                dividerColor: isDark
+                    ? BNXColors.darkBorder
+                    : BNXColors.lightBorder,
+                padding: EdgeInsets.zero,
+                labelPadding: EdgeInsets.zero,
+                tabs: const [
+                  Tab(
+                    icon: Icon(Icons.inbox_rounded, size: 20),
+                    text: 'Primary',
+                    iconMargin: EdgeInsets.only(bottom: 3),
                   ),
-                ),
-                if (!isMobile) ...[
-                  const SizedBox(width: 16),
-                  Text(
-                    '1-${filtered.length} of ${filtered.length}',
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  Tab(
+                    icon: Icon(Icons.mark_email_unread_rounded, size: 20),
+                    text: 'Unread',
+                    iconMargin: EdgeInsets.only(bottom: 3),
                   ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    icon: const Icon(Icons.chevron_left, size: 20),
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('You are on the first page.')),
-                      );
-                    },
+                  Tab(
+                    icon: Icon(Icons.send_rounded, size: 20),
+                    text: 'Sent',
+                    iconMargin: EdgeInsets.only(bottom: 3),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.chevron_right, size: 20),
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('No older emails available.')),
-                      );
-                    },
+                  Tab(
+                    icon: Icon(Icons.drafts_rounded, size: 20),
+                    text: 'Draft',
+                    iconMargin: EdgeInsets.only(bottom: 3),
                   ),
                 ],
-              ],
+              ),
             ),
-          ),
 
           // List Content
           Expanded(
-            child: filtered.isEmpty
-                ? _buildEmptyState(uiState.activeFolder, isDark)
-                : NotificationListener<UserScrollNotification>(
-                    onNotification: (notification) {
-                      if (notification.direction == ScrollDirection.reverse) {
-                        if (ref.read(fabExtensionProvider)) {
-                          ref.read(fabExtensionProvider.notifier).state = false;
-                        }
-                      } else if (notification.direction == ScrollDirection.forward) {
-                        if (!ref.read(fabExtensionProvider)) {
-                          ref.read(fabExtensionProvider.notifier).state = true;
-                        }
-                      }
-                      return true;
-                    },
-                    child: ListView(
-                      children: [
-                        if (isMobile)
-                          Padding(
-                            padding: const EdgeInsets.only(left: 16, top: 16, bottom: 8),
-                            child: Text(
-                              uiState.activeLabel != null 
-                                  ? uiState.activeLabel!
-                                  : (uiState.activeFolder == 'Inbox' ? 'Primary' : uiState.activeFolder),
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: isDark ? Colors.white38 : Colors.grey.shade600,
-                                letterSpacing: 1.0,
-                              ),
-                            ),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              child: KeyedSubtree(
+                key: ValueKey(
+                  '${uiState.activeFolder}_${uiState.activeLabel}_$currentTabIndex',
+                ),
+                child: () {
+                  final isFolderLoading = (uiState.activeFolder == 'All Inboxes' || uiState.activeFolder == 'All inboxes')
+                      ? ref.watch(allInboxesProvider).isLoading
+                      : ref.watch(emailProvider).isLoading;
+
+                  if (filtered.isEmpty && isFolderLoading) {
+                    return _buildLoadingState(isDark);
+                  }
+
+                  if (filtered.isEmpty) {
+                    return _buildEmptyState(
+                      uiState.activeFolder == 'Inbox' && uiState.activeLabel == null
+                          ? _tabs[currentTabIndex]
+                          : uiState.activeFolder,
+                      isDark,
+                    );
+                  }
+
+                  return RefreshIndicator(
+                        onRefresh: () async {
+                          if (uiState.activeFolder == 'All Inboxes' || uiState.activeFolder == 'All inboxes') {
+                            await ref.read(allInboxesProvider.notifier).loadAllInboxes(forceRefresh: true);
+                          } else {
+                            await ref.read(emailProvider.notifier).initialLoad();
+                          }
+                        },
+                        child: NotificationListener<UserScrollNotification>(
+                          onNotification: (notification) {
+                          if (notification.direction == ScrollDirection.reverse) {
+                            if (ref.read(fabExtensionProvider)) {
+                              ref.read(fabExtensionProvider.notifier).state = false;
+                            }
+                          } else if (notification.direction ==
+                              ScrollDirection.forward) {
+                            if (!ref.read(fabExtensionProvider)) {
+                              ref.read(fabExtensionProvider.notifier).state = true;
+                            }
+                          }
+                          return true;
+                        },
+                        child: ListView(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 8,
                           ),
-                        
-                        if (uiState.activeFolder == 'Inbox' && uiState.searchQuery.isEmpty && uiState.activeLabel == null) ...[
-                          _buildCategoryTile(
-                            context: context,
-                            icon: Icons.local_offer_outlined,
-                            iconColor: Colors.green.shade700,
-                            iconBgColor: isDark ? Colors.green.withValues(alpha: 0.15) : Colors.green.shade50,
-                            title: 'Promotions',
-                            subtitle: 'harsha — Due Diligence Analyst | ...',
-                            onTap: () {
-                              ref.read(appUiProvider.notifier).selectLabel('Promotions');
-                            },
-                            isDark: isDark,
-                          ),
-                          _buildCategoryTile(
-                            context: context,
-                            icon: Icons.info_outline,
-                            iconColor: Colors.orange.shade700,
-                            iconBgColor: isDark ? Colors.orange.withValues(alpha: 0.15) : Colors.orange.shade50,
-                            title: 'Updates',
-                            subtitle: 'LinkedIn Job Alerts — Data...',
-                            trailing: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          children: [
+                            // Grouped emails in a single card-like container
+                            Container(
                               decoration: BoxDecoration(
-                                color: isDark ? Colors.orange.withValues(alpha: 0.3) : Colors.orange.shade100,
-                                borderRadius: BorderRadius.circular(10),
+                                color: isDark
+                                    ? const Color(0xFF1E293B)
+                                    : Colors.white,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: isDark
+                                      ? Colors.white.withValues(alpha: 0.1)
+                                      : Colors.grey.shade300,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(
+                                      alpha: isDark ? 0.2 : 0.04,
+                                    ),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
                               ),
-                              child: Text(
-                                '2 new',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: isDark ? Colors.orange.shade300 : Colors.orange.shade800,
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(16),
+                                child: Column(
+                                  children: filtered.asMap().entries.map((entry) {
+                                    final idx = entry.key;
+                                    final email = entry.value;
+                                    final isLast = idx == filtered.length - 1;
+
+                                    return Column(
+                                      key: ValueKey('email_item_${email.id}_$idx'),
+                                      children: [
+                                        EmailTile(
+                                          email: email,
+                                          isSelected: uiState.selectedEmailIds
+                                              .contains(email.id),
+                                          onTap: () {
+                                            if (uiState.isSelectionMode) {
+                                              ref
+                                                  .read(appUiProvider.notifier)
+                                                  .toggleEmailSelection(email.id);
+                                            } else if (email.isDraft ||
+                                                email.memberOfFolders.contains('Draft') ||
+                                                uiState.activeFolder == 'Draft') {
+                                              if (!email.isRead) {
+                                                ref
+                                                    .read(emailProvider.notifier)
+                                                    .toggleRead(
+                                                      email.id,
+                                                      'Draft',
+                                                      forceValue: true,
+                                                    );
+                                              }
+                                              context.push('/draft/${email.id}');
+                                            } else {
+                                              if (!email.isRead &&
+                                                  uiState.activeFolder != 'All Inboxes' &&
+                                                  uiState.activeFolder != 'All inboxes') {
+                                                ref
+                                                    .read(emailProvider.notifier)
+                                                    .toggleRead(
+                                                      email.id,
+                                                      uiState.activeFolder,
+                                                      forceValue: true,
+                                                    );
+                                              }
+                                              context.push('/email/${email.id}');
+                                            }
+                                          },
+                                        ),
+                                        if (!isLast)
+                                          Divider(
+                                            height: 1,
+                                            thickness: 0.8,
+                                            color: isDark
+                                                ? Colors.white.withValues(
+                                                    alpha: 0.08,
+                                                  )
+                                                : Colors.grey.shade200,
+                                            indent: 0,
+                                            endIndent: 0,
+                                          ),
+                                      ],
+                                    );
+                                  }).toList(),
                                 ),
                               ),
                             ),
-                            onTap: () {
-                              ref.read(appUiProvider.notifier).selectLabel('Updates');
-                            },
-                            isDark: isDark,
-                          ),
-                        ],
-
-                        ...filtered.map((email) {
-                          return EmailTile(
-                            email: email,
-                            isSelected: uiState.selectedEmailId == email.id,
-                            onTap: () {
-                              context.push('/email/${email.id}');
-                            },
-                          );
-                        }),
-                      ],
-                    ),
-                  ),
+                            const SizedBox(height: 80), // Space for FAB
+                          ],
+                        ),
+                      ),
+                    );
+                }(),
+              ),
+            ),
           ),
         ],
       );
     }
 
-    return mainBody;
-  }
-
-  Widget _buildCategoryTile({
-    required BuildContext context,
-    required IconData icon,
-    required Color iconColor,
-    required Color iconBgColor,
-    required String title,
-    required String subtitle,
-    Widget? trailing,
-    required VoidCallback onTap,
-    required bool isDark,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: NeumorphicButton(
-        onPressed: onTap,
-        borderRadius: 14,
-        color: isDark ? const Color(0xFF1E293B) : Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            NeumorphicContainer(
-              width: 40,
-              height: 40,
-              boxShape: BoxShape.circle,
-              shape: NeumorphicShape.pressed,
-              color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF4F7FB),
-              child: Center(
-                child: Icon(
-                  icon,
-                  color: iconColor,
-                  size: 20,
-                ),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.white : BNXColors.lightTextPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: isDark ? BNXColors.darkTextSecondary : BNXColors.lightTextSecondary,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            if (trailing != null) ...[
-              const SizedBox(width: 8),
-              trailing,
-            ],
-          ],
-        ),
-      ),
+    return Container(
+      color: isDark ? Colors.transparent : const Color(0xFFE9F4FF),
+      child: mainBody,
     );
   }
 
@@ -579,6 +675,67 @@ class EmailListScreen extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildLoadingState(bool isDark) {
+    return ListView.builder(
+      itemCount: 6,
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      itemBuilder: (context, index) {
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          height: 72,
+          decoration: BoxDecoration(
+            color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.white.withValues(alpha: 0.7),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isDark ? Colors.white10 : Colors.grey.shade200,
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white10 : Colors.grey.shade300,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 140,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.white10 : Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        width: 200,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.white10 : Colors.grey.shade200,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

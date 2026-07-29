@@ -38,7 +38,8 @@ class SettingsTile extends StatelessWidget {
         leading: Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: (isDark ? BNXColors.darkPrimary : BNXColors.lightPrimary).withValues(alpha: 0.1),
+            color: (isDark ? BNXColors.darkPrimary : BNXColors.lightPrimary)
+                .withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(
@@ -49,25 +50,21 @@ class SettingsTile extends StatelessWidget {
         ),
         title: Text(
           title,
-          style: const TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 14,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
         subtitle: subtitle != null
             ? Text(
                 subtitle!,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey,
-                ),
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               )
             : null,
-        trailing: trailing ?? const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+        trailing:
+            trailing ??
+            const Icon(Icons.chevron_right_rounded, color: Colors.grey),
       ),
     );
   }

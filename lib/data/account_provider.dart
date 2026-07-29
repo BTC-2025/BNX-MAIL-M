@@ -2,43 +2,118 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/account_model.dart';
 
+import 'repositories/user_repository.dart';
+import '../core/network/token_service.dart';
+import 'email_provider.dart';
+import 'colab_provider.dart';
+import 'app_state_provider.dart';
+
 class AccountsNotifier extends StateNotifier<List<AccountModel>> {
   AccountsNotifier()
-      : super([
-          AccountModel(
-            id: 'acc_1',
-            name: 'Ravi Kumar C',
-            email: 'ravikumar123@bnxmail.com',
-            avatarColor: const Color(0xFF1D4ED8),
-            unreadCount: 12,
-            isActive: true,
-            designation: 'Flutter Developer',
-            experience: 'Experienced with Riverpod, Bloc, dynamic UI, and local databases',
-            dob: DateTime(1996, 7, 15),
-          ),
-          AccountModel(
-            id: 'acc_2',
-            name: 'Ravi Work',
-            email: 'ravi.work@techcorp.com',
-            avatarColor: const Color(0xFF059669),
-            unreadCount: 5,
-            isActive: false,
-            designation: 'Lead Architect',
-            experience: 'Specialized in building micro-services and scalable backend systems',
-            dob: DateTime(1993, 3, 20),
-          ),
-          AccountModel(
-            id: 'acc_3',
-            name: 'Ravi Personal',
-            email: 'ravi.personal@gmail.com',
-            avatarColor: const Color(0xFF7C3AED),
-            unreadCount: 3,
-            isActive: false,
-            designation: 'UI/UX Designer',
-            experience: 'Experienced in Figma prototypes, design systems, and web aesthetics',
-            dob: DateTime(1998, 11, 5),
-          ),
-        ]);
+    : super([
+        const AccountModel(
+          id: 'loading',
+          name: 'User',
+          email: '',
+          avatarColor: Color(0xFF195BAC),
+          isActive: true,
+        ),
+      ]) {
+    loadMailboxes();
+  }
+
+  Future<void> loadMailboxes() async {
+    final loggedInEmail = (await TokenService.getUserEmail() ?? '').trim().toLowerCase();
+    final savedRegistry = await TokenService.getSavedAccountsFromRegistry();
+    final userProfile = await UserRepository.getProfile();
+
+    List<AccountModel> mergedList = [];
+
+    // 1. Build accounts from saved local registry
+    for (final reg in savedRegistry) {
+      final regEmail = (reg['email']?.toString() ?? '').trim().toLowerCase();
+      if (regEmail.isEmpty) continue;
+      final regName = reg['name']?.toString() ?? regEmail.split('@').first;
+      final savedAvatar = await TokenService.getUserAvatar(regEmail);
+
+      final isCurrentActive = (loggedInEmail.isNotEmpty && regEmail == loggedInEmail);
+
+      final avatar = (savedAvatar != null && savedAvatar.isNotEmpty)
+          ? savedAvatar
+          : ((isCurrentActive && userProfile != null && userProfile.avatarUrl != null && userProfile.avatarUrl!.isNotEmpty)
+              ? userProfile.avatarUrl
+              : (regEmail.isNotEmpty ? '/api/users/profile-picture/$regEmail' : null));
+
+      mergedList.add(AccountModel(
+        id: regEmail,
+        name: (isCurrentActive && userProfile != null && userProfile.name.isNotEmpty)
+            ? userProfile.name
+            : regName,
+        email: regEmail,
+        avatarColor: const Color(0xFF195BAC),
+        isActive: isCurrentActive || (mergedList.isEmpty && loggedInEmail.isEmpty),
+        avatarUrl: avatar,
+      ));
+    }
+
+    // 2. Fetch backend mailboxes if available and merge
+    try {
+      final list = await UserRepository.getMailboxes();
+      if (list.isNotEmpty) {
+        for (final acc in list) {
+          final accEmail = acc.email.trim().toLowerCase();
+          if (accEmail.isNotEmpty && !mergedList.any((a) => a.email.trim().toLowerCase() == accEmail)) {
+            final savedAvatar = await TokenService.getUserAvatar(accEmail);
+            final avatar = (savedAvatar != null && savedAvatar.isNotEmpty)
+                ? savedAvatar
+                : (acc.avatarUrl ?? (accEmail.isNotEmpty ? '/api/users/profile-picture/$accEmail' : null));
+            mergedList.add(acc.copyWith(
+              id: accEmail,
+              isActive: accEmail == loggedInEmail,
+              avatarUrl: avatar,
+            ));
+          }
+        }
+      }
+    } catch (_) {}
+
+    // 3. Fallback to active loggedInEmail if registry was empty
+    if (mergedList.isEmpty && loggedInEmail.isNotEmpty) {
+      final name = await TokenService.getUserName() ?? 'User';
+      final savedAvatar = await TokenService.getUserAvatar(loggedInEmail);
+      final avatar = (savedAvatar != null && savedAvatar.isNotEmpty)
+          ? savedAvatar
+          : (userProfile?.avatarUrl ?? '/api/users/profile-picture/$loggedInEmail');
+      mergedList.add(AccountModel(
+        id: loggedInEmail,
+        name: (userProfile != null && userProfile.name.isNotEmpty) ? userProfile.name : name,
+        email: loggedInEmail,
+        avatarColor: const Color(0xFF195BAC),
+        isActive: true,
+        avatarUrl: avatar,
+      ));
+    }
+
+    if (mergedList.isNotEmpty) {
+      bool hasActive = mergedList.any((a) => a.isActive);
+      if (!hasActive) {
+        mergedList[0] = mergedList[0].copyWith(isActive: true);
+      }
+      state = mergedList;
+    }
+  }
+
+  void clear() {
+    state = [
+      const AccountModel(
+        id: 'loading',
+        name: 'User',
+        email: '',
+        avatarColor: Color(0xFF195BAC),
+        isActive: true,
+      ),
+    ];
+  }
 
   String get activeAccountId =>
       state.firstWhere((a) => a.isActive, orElse: () => state.first).id;
@@ -46,8 +121,35 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
   AccountModel get activeAccount =>
       state.firstWhere((a) => a.isActive, orElse: () => state.first);
 
-  void switchAccount(String id) {
-    state = state.map((acc) => acc.copyWith(isActive: acc.id == id)).toList();
+  Future<void> switchAccount(String id, [WidgetRef? ref]) async {
+    final cleanId = id.trim().toLowerCase();
+    print('[ACCOUNT SWITCH FAST] Switching active account to: $cleanId');
+
+    // 1. Instantly update tokens locally
+    await TokenService.switchActiveAccountSession(cleanId);
+
+    // 2. Clear state caches and reset navigation folder to 'Inbox' (Mail Section)
+    if (ref != null) {
+      ref.read(emailProvider.notifier).clear();
+      ref.read(colabListProvider.notifier).clear();
+      ref.read(colabInvitationsProvider.notifier).clear();
+      ref.read(casboxMessagesProvider.notifier).clear();
+
+      // Reset active folder to 'Inbox' so app lands on Mail section
+      ref.read(appUiProvider.notifier).selectFolder('Inbox');
+      ref.read(emailProvider.notifier).loadFolder('Inbox');
+    }
+
+    // 3. Update account list state immediately
+    state = state.map((acc) {
+      final accEmail = acc.email.trim().toLowerCase();
+      final accId = acc.id.trim().toLowerCase();
+      final isTarget = (accEmail == cleanId || accId == cleanId);
+      return acc.copyWith(isActive: isTarget);
+    }).toList();
+
+    // 4. Non-blocking background call to update primary mailbox on backend
+    UserRepository.setPrimaryMailbox(id).catchError((_) {});
   }
 
   void markAccountRead(String id) {
@@ -56,31 +158,110 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
         .toList();
   }
 
-  void updateProfile(
+  Future<void> updateAccountFields(
+    String id, {
+    String? name,
+    String? recoveryEmail,
+    String? phone,
+    String? accountType,
+    String? language,
+    String? accessibility,
+    String? designation,
+    DateTime? dob,
+  }) async {
+    state = state.map((acc) {
+      if (acc.id == id) {
+        return acc.copyWith(
+          name: name ?? acc.name,
+          recoveryEmail: recoveryEmail ?? acc.recoveryEmail,
+          phone: phone ?? acc.phone,
+          accountType: accountType ?? acc.accountType,
+          language: language ?? acc.language,
+          accessibility: accessibility ?? acc.accessibility,
+          designation: designation ?? acc.designation,
+          dob: dob ?? acc.dob,
+        );
+      }
+      return acc;
+    }).toList();
+
+    final active = state.firstWhere((a) => a.id == id, orElse: () => activeAccount);
+    if (name != null && active.email.isNotEmpty) {
+      await TokenService.saveUserInfo(email: active.email, name: name);
+    }
+
+    try {
+      await UserRepository.updateProfile({
+        'name': ?name,
+        'recoveryEmail': ?recoveryEmail,
+        'phone': ?phone,
+        'accountType': ?accountType,
+        'language': ?language,
+        'accessibility': ?accessibility,
+        'designation': ?designation,
+        if (dob != null) 'dob': dob.toIso8601String(),
+        'email': active.email,
+      });
+    } catch (e) {
+      print('[PROFILE SYNC ERROR] Failed to update backend profile: $e');
+    }
+  }
+
+  Future<void> updateProfile(
     String id, {
     required String name,
     required String designation,
     required String experience,
     DateTime? dob,
-  }) {
+  }) async {
+    await updateAccountFields(
+      id,
+      name: name,
+      designation: designation,
+      dob: dob,
+    );
+  }
+
+  Future<void> updateAvatar(String id, String avatarUrl) async {
     state = state.map((acc) {
       if (acc.id == id) {
-        return acc.copyWith(
-          name: name,
-          designation: designation,
-          experience: experience,
-          dob: dob,
-        );
+        return acc.copyWith(avatarUrl: avatarUrl);
       }
       return acc;
     }).toList();
+
+    final active = state.firstWhere((a) => a.id == id, orElse: () => activeAccount);
+    if (active.email.isNotEmpty) {
+      await TokenService.saveUserAvatar(active.email, avatarUrl);
+    }
+
+    try {
+      final remoteUrl = await UserRepository.uploadAvatar(active.email, avatarUrl);
+      if (remoteUrl != null && remoteUrl.isNotEmpty) {
+        state = state.map((acc) {
+          if (acc.id == id) {
+            return acc.copyWith(avatarUrl: remoteUrl);
+          }
+          return acc;
+        }).toList();
+        await TokenService.saveUserAvatar(active.email, remoteUrl);
+
+        // Also sync the avatar url to the backend profile settings so it persists on reinstall
+        await UserRepository.updateProfile({
+          'avatarUrl': remoteUrl,
+          'avatar': remoteUrl,
+        });
+      }
+    } catch (e) {
+      print('[AVATAR SYNC ERROR] Failed to upload avatar to backend: $e');
+    }
   }
 }
 
 final accountsProvider =
     StateNotifierProvider<AccountsNotifier, List<AccountModel>>((ref) {
-  return AccountsNotifier();
-});
+      return AccountsNotifier();
+    });
 
 /// Convenience provider: returns just the active account
 final activeAccountProvider = Provider<AccountModel>((ref) {

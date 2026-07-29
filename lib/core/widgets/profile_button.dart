@@ -3,7 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'avatar_widget.dart';
 import '../../data/app_state_provider.dart';
-import '../../dummy/dummy_data.dart';
+import '../../data/account_provider.dart';
+import '../../data/email_provider.dart';
+import '../../data/repositories/auth_repository.dart';
+import '../../features/auth/presentation/notifiers/auth_notifier.dart';
 import '../theme/colors.dart';
 import '../constants/constants.dart';
 
@@ -14,7 +17,7 @@ class ProfileButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final uiState = ref.watch(appUiProvider);
     final isDark = uiState.isDarkMode;
-    final user = BNXDummyData.currentUser;
+    final user = ref.watch(activeAccountProvider);
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -44,6 +47,7 @@ class ProfileButton extends ConsumerWidget {
             children: [
               AvatarWidget(
                 name: user.name,
+                avatarUrl: user.avatarUrl,
                 size: 28,
                 fontSize: 12,
               ),
@@ -55,7 +59,9 @@ class ProfileButton extends ConsumerWidget {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: isDark ? BNXColors.darkTextPrimary : BNXColors.lightTextPrimary,
+                    color: isDark
+                        ? BNXColors.darkTextPrimary
+                        : BNXColors.lightTextPrimary,
                   ),
                 ),
                 const SizedBox(width: 4),
@@ -63,21 +69,35 @@ class ProfileButton extends ConsumerWidget {
               Icon(
                 Icons.arrow_drop_down,
                 size: 20,
-                color: isDark ? BNXColors.darkTextSecondary : BNXColors.lightTextSecondary,
+                color: isDark
+                    ? BNXColors.darkTextSecondary
+                    : BNXColors.lightTextSecondary,
               ),
             ],
           ),
         ),
-        onSelected: (value) {
-          if (value == 'settings') {
+        onSelected: (value) async {
+          if (value == 'account') {
+            context.push('/manage-account');
+          } else if (value == 'profile') {
+            ref.read(appUiProvider.notifier).selectFolder('Profile');
+            context.go('/profile');
+          } else if (value == 'settings') {
             ref.read(appUiProvider.notifier).selectFolder('Settings');
             context.go('/settings');
           } else if (value == 'theme') {
             ref.read(appUiProvider.notifier).toggleDarkMode();
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Action: $value (Mock)')),
-            );
+          } else if (value == 'logout') {
+            // Clear email cache & stop polling timer
+            ref.read(emailProvider.notifier).clear();
+            ref.read(accountsProvider.notifier).clear();
+            // Call server logout + clear tokens
+            await AuthRepository.logout();
+            // Update auth state
+            ref.read(authProvider.notifier).logout();
+            if (context.mounted) {
+              context.go('/login');
+            }
           }
         },
         itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
@@ -96,10 +116,7 @@ class ProfileButton extends ConsumerWidget {
                 ),
                 Text(
                   user.email,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey,
-                  ),
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
                 ),
                 const Divider(height: 16),
               ],

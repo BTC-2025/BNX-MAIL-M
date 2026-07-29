@@ -3,13 +3,12 @@ import '../theme/colors.dart';
 
 class LabelChip extends StatelessWidget {
   final String labelName;
+  final Color? customColor;
 
-  const LabelChip({
-    super.key,
-    required this.labelName,
-  });
+  const LabelChip({super.key, required this.labelName, this.customColor});
 
   Color _getLabelColor(String name) {
+    if (customColor != null) return customColor!;
     switch (name.toLowerCase()) {
       case 'work':
         return BNXColors.labelWork;
@@ -37,10 +36,7 @@ class LabelChip extends StatelessWidget {
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(
-          color: color.withValues(alpha: 0.24),
-          width: 1,
-        ),
+        border: Border.all(color: color.withValues(alpha: 0.24), width: 1),
       ),
       child: Text(
         labelName,

@@ -1,4 +1,8 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import '../network/api_client.dart';
+import '../network/token_service.dart';
 
 class AvatarWidget extends StatelessWidget {
   final String name;
@@ -17,7 +21,6 @@ class AvatarWidget extends StatelessWidget {
   Color _getColorForLetter(String letter) {
     if (letter.isEmpty) return Colors.blue;
     final int code = letter.toUpperCase().codeUnitAt(0);
-    // A simple hash function to assign stable colors from a premium palette
     final List<Color> palette = [
       const Color(0xFF1D4ED8), // Blue
       const Color(0xFF0D9488), // Teal
@@ -35,18 +38,87 @@ class AvatarWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String firstLetter = name.isNotEmpty ? name[0].toUpperCase() : '?';
+    String cleanName = name.replaceAll(RegExp(r'^[?\s]+'), '').trim();
+    if (cleanName.isEmpty) cleanName = 'BNX';
+    
+    String firstLetter = 'B';
+    for (int i = 0; i < cleanName.length; i++) {
+      final char = cleanName[i];
+      if (RegExp(r'[a-zA-Z0-9]').hasMatch(char)) {
+        firstLetter = char.toUpperCase();
+        break;
+      }
+    }
 
-    if (avatarUrl != null && avatarUrl!.isNotEmpty) {
+    if (avatarUrl != null && avatarUrl!.trim().isNotEmpty) {
+      final url = avatarUrl!.trim();
+      final isDataUri = url.startsWith('data:image') || url.contains(';base64,');
+      final isRelativeApi = url.startsWith('/');
+      final isNetwork = url.startsWith('http://') || url.startsWith('https://') || isRelativeApi;
+
+      Widget imageWidget;
+      if (isDataUri) {
+        try {
+          final commaIndex = url.indexOf(',');
+          final base64Str = commaIndex != -1 ? url.substring(commaIndex + 1) : url;
+          final bytes = base64Decode(base64Str.trim());
+          imageWidget = Image.memory(
+            bytes,
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) =>
+                _buildLetterAvatar(firstLetter),
+          );
+        } catch (_) {
+          imageWidget = _buildLetterAvatar(firstLetter);
+        }
+      } else if (isNetwork) {
+        final absoluteUrl = isRelativeApi ? '${ApiClient.baseUrl}$url' : url;
+        imageWidget = FutureBuilder<String?>(
+          future: TokenService.getAccessToken(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return _buildLetterAvatar(firstLetter);
+            }
+            final token = snapshot.data;
+            final headers = <String, String>{
+              'Cache-Control': 'no-cache',
+            };
+            if (token != null && token.isNotEmpty) {
+              headers['Authorization'] = 'Bearer $token';
+            }
+            return Image.network(
+              absoluteUrl,
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              headers: headers,
+              errorBuilder: (context, error, stackTrace) {
+                print('[AVATAR IMAGE LOAD ERROR] URL: $absoluteUrl | Error: $error');
+                return _buildLetterAvatar(firstLetter);
+              },
+            );
+          },
+        );
+      } else {
+        final file = File(url);
+        if (file.existsSync()) {
+          imageWidget = Image.file(
+            file,
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) =>
+                _buildLetterAvatar(firstLetter),
+          );
+        } else {
+          imageWidget = _buildLetterAvatar(firstLetter);
+        }
+      }
       return ClipRRect(
         borderRadius: BorderRadius.circular(size / 2),
-        child: Image.network(
-          avatarUrl!,
-          width: size,
-          height: size,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => _buildLetterAvatar(firstLetter),
-        ),
+        child: imageWidget,
       );
     }
     return _buildLetterAvatar(firstLetter);

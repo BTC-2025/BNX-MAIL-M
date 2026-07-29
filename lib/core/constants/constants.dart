@@ -7,7 +7,7 @@ class BNXConstants {
   static const double sidebarCollapsedWidth = 80.0;
   static const double rightSidebarWidth = 64.0;
   static const double calendarExpandedWidth = 320.0;
-  
+
   // Responsive Breakpoints
   static const double tabletBreakpoint = 900.0;
   static const double desktopBreakpoint = 1200.0;
