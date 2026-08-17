@@ -9,6 +9,7 @@ import '../notifiers/auth_notifier.dart';
 import '../../../../data/email_provider.dart';
 import '../../../../data/account_provider.dart';
 import '../../../../data/colab_provider.dart';
+import '../../../../data/app_state_provider.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -77,15 +78,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     );
 
     if (success && mounted) {
+      final newEmail = _emailController.text.trim().toLowerCase();
       // Instantly set logged in state and navigate to /home
       ref.read(authProvider.notifier).login();
       context.go('/home');
 
-      // Load mailboxes, groups, invitations, and inbox emails in parallel in the background
+      // Update provider contexts to the new account to prevent old data flashing
+      ref.read(emailProvider.notifier).switchAccountContext(newEmail);
+      ref.read(customLabelsProvider.notifier).switchAccountContext(newEmail);
+      ref.read(colabListProvider.notifier).switchAccountContext(newEmail);
+      ref.read(colabInvitationsProvider.notifier).switchAccountContext(newEmail);
+      ref.read(casboxMessagesProvider.notifier).switchAccountContext(newEmail);
+
+      // Load mailboxes in parallel
       ref.read(accountsProvider.notifier).loadMailboxes();
-      ref.read(colabListProvider.notifier).loadGroups();
-      ref.read(colabInvitationsProvider.notifier).loadInvitations();
-      ref.read(emailProvider.notifier).initialLoad();
     } else if (mounted && _loginNotifier.value.generalError != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

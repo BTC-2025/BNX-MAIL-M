@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/account_model.dart';
 
+import 'package:go_router/go_router.dart';
 import 'repositories/user_repository.dart';
+import 'repositories/auth_repository.dart';
+import '../features/auth/presentation/notifiers/auth_notifier.dart';
 import '../core/network/token_service.dart';
 import 'email_provider.dart';
 import 'colab_provider.dart';
@@ -130,14 +133,14 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
 
     // 2. Clear state caches and reset navigation folder to 'Inbox' (Mail Section)
     if (ref != null) {
-      ref.read(emailProvider.notifier).clear();
-      ref.read(colabListProvider.notifier).clear();
-      ref.read(colabInvitationsProvider.notifier).clear();
-      ref.read(casboxMessagesProvider.notifier).clear();
+      ref.read(emailProvider.notifier).switchAccountContext(cleanId);
+      ref.read(colabListProvider.notifier).switchAccountContext(cleanId);
+      ref.read(colabInvitationsProvider.notifier).switchAccountContext(cleanId);
+      ref.read(casboxMessagesProvider.notifier).switchAccountContext(cleanId);
+      ref.read(customLabelsProvider.notifier).switchAccountContext(cleanId);
 
       // Reset active folder to 'Inbox' so app lands on Mail section
       ref.read(appUiProvider.notifier).selectFolder('Inbox');
-      ref.read(emailProvider.notifier).loadFolder('Inbox');
     }
 
     // 3. Update account list state immediately
@@ -150,6 +153,67 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
 
     // 4. Non-blocking background call to update primary mailbox on backend
     UserRepository.setPrimaryMailbox(id).catchError((_) {});
+  }
+
+  /// Signs out of a single specific account.
+  /// If other accounts exist in the account list, automatically switches to the next account.
+  /// If no other account exists, clears state and navigates to the login screen.
+  Future<void> signOutSingleAccount({
+    required String targetEmail,
+    required WidgetRef ref,
+    required BuildContext context,
+  }) async {
+    final cleanTarget = targetEmail.trim().toLowerCase();
+    print('[ACCOUNT SIGN OUT] Signing out of single account: $cleanTarget');
+
+    // 1. Identify remaining accounts in state (excluding targetEmail)
+    final remainingAccounts = state.where((acc) {
+      final accEmail = acc.email.trim().toLowerCase();
+      final accId = acc.id.trim().toLowerCase();
+      return accEmail != cleanTarget && accId != cleanTarget && acc.id != 'loading';
+    }).toList();
+
+    // 2. Perform backend/local logout for the target account
+    await AuthRepository.logoutSpecificAccount(cleanTarget);
+
+    if (remainingAccounts.isNotEmpty) {
+      // 3A. Another account exists! Update state and switch to the next account automatically
+      final nextAccount = remainingAccounts.first;
+      print('[ACCOUNT SIGN OUT] Switching automatically to next account: ${nextAccount.email}');
+
+      // Remove target from account state list
+      state = remainingAccounts;
+
+      // Switch session tokens to next account
+      await switchAccount(nextAccount.id, ref);
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Signed out of $cleanTarget. Switched to ${nextAccount.email}'),
+            backgroundColor: Colors.orangeAccent,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } else {
+      // 3B. No other accounts exist! Clear all providers and navigate to login screen
+      print('[ACCOUNT SIGN OUT] No remaining accounts. Redirecting to login screen.');
+      ref.read(emailProvider.notifier).clear();
+      ref.read(accountsProvider.notifier).clear();
+      ref.read(authProvider.notifier).logout();
+
+      if (context.mounted) {
+        context.go('/login');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Signed out of $cleanTarget'),
+            backgroundColor: Colors.orangeAccent,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
 
   void markAccountRead(String id) {

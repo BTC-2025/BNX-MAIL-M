@@ -244,47 +244,56 @@ class TokenService {
     return now;
   }
 
-  static const _kAcceptedCasboxIds = 'bnx_accepted_casbox_ids';
-  static const _kRejectedCasboxIds = 'bnx_rejected_casbox_ids';
-  static const _kAcceptedCasboxSenders = 'bnx_accepted_casbox_senders';
-  static const _kRejectedCasboxSenders = 'bnx_rejected_casbox_senders';
+  static String _kAcceptedCasboxIds(String email) => 'bnx_accepted_casbox_ids_${email.trim().toLowerCase()}';
+  static String _kRejectedCasboxIds(String email) => 'bnx_rejected_casbox_ids_${email.trim().toLowerCase()}';
+  static String _kAcceptedCasboxSenders(String email) => 'bnx_accepted_casbox_senders_${email.trim().toLowerCase()}';
+  static String _kRejectedCasboxSenders(String email) => 'bnx_rejected_casbox_senders_${email.trim().toLowerCase()}';
 
-  static Future<Set<String>> getAcceptedCasboxIds() async {
-    final str = await _storage.read(key: _kAcceptedCasboxIds);
-    if (str == null || str.isEmpty) return {};
-    try {
-      final List list = jsonDecode(str);
-      return list.map((e) => e.toString()).toSet();
-    } catch (_) {
-      return {};
+  static Future<List<String>> getAcceptedCasboxIds() async {
+    final email = await getUserEmail() ?? '';
+    final str = await _storage.read(key: _kAcceptedCasboxIds(email));
+    if (str != null && str.isNotEmpty) {
+      try {
+        final list = jsonDecode(str) as List;
+        return list.map((e) => e.toString()).toList();
+      } catch (_) {}
     }
+    return [];
   }
 
   static Future<void> saveAcceptedCasboxId(String id) async {
-    final set = await getAcceptedCasboxIds();
-    set.add(id);
-    await _storage.write(key: _kAcceptedCasboxIds, value: jsonEncode(set.toList()));
-  }
-
-  static Future<Set<String>> getRejectedCasboxIds() async {
-    final str = await _storage.read(key: _kRejectedCasboxIds);
-    if (str == null || str.isEmpty) return {};
-    try {
-      final List list = jsonDecode(str);
-      return list.map((e) => e.toString()).toSet();
-    } catch (_) {
-      return {};
+    final email = await getUserEmail() ?? '';
+    final current = await getAcceptedCasboxIds();
+    if (!current.contains(id)) {
+      current.add(id);
+      await _storage.write(key: _kAcceptedCasboxIds(email), value: jsonEncode(current));
     }
   }
 
+  static Future<List<String>> getRejectedCasboxIds() async {
+    final email = await getUserEmail() ?? '';
+    final str = await _storage.read(key: _kRejectedCasboxIds(email));
+    if (str != null && str.isNotEmpty) {
+      try {
+        final list = jsonDecode(str) as List;
+        return list.map((e) => e.toString()).toList();
+      } catch (_) {}
+    }
+    return [];
+  }
+
   static Future<void> saveRejectedCasboxId(String id) async {
-    final set = await getRejectedCasboxIds();
-    set.add(id);
-    await _storage.write(key: _kRejectedCasboxIds, value: jsonEncode(set.toList()));
+    final email = await getUserEmail() ?? '';
+    final current = await getRejectedCasboxIds();
+    if (!current.contains(id)) {
+      current.add(id);
+      await _storage.write(key: _kRejectedCasboxIds(email), value: jsonEncode(current));
+    }
   }
 
   static Future<Set<String>> getAcceptedCasboxSenders() async {
-    final str = await _storage.read(key: _kAcceptedCasboxSenders);
+    final email = await getUserEmail() ?? '';
+    final str = await _storage.read(key: _kAcceptedCasboxSenders(email));
     if (str == null || str.isEmpty) return {};
     try {
       final List list = jsonDecode(str);
@@ -295,15 +304,17 @@ class TokenService {
   }
 
   static Future<void> saveAcceptedCasboxSender(String senderEmail) async {
+    final email = await getUserEmail() ?? '';
     final normalized = senderEmail.trim().toLowerCase();
     if (normalized.isEmpty) return;
     final set = await getAcceptedCasboxSenders();
     set.add(normalized);
-    await _storage.write(key: _kAcceptedCasboxSenders, value: jsonEncode(set.toList()));
+    await _storage.write(key: _kAcceptedCasboxSenders(email), value: jsonEncode(set.toList()));
   }
 
   static Future<Set<String>> getRejectedCasboxSenders() async {
-    final str = await _storage.read(key: _kRejectedCasboxSenders);
+    final email = await getUserEmail() ?? '';
+    final str = await _storage.read(key: _kRejectedCasboxSenders(email));
     if (str == null || str.isEmpty) return {};
     try {
       final List list = jsonDecode(str);
@@ -314,31 +325,35 @@ class TokenService {
   }
 
   static Future<void> saveRejectedCasboxSender(String senderEmail) async {
+    final email = await getUserEmail() ?? '';
     final normalized = senderEmail.trim().toLowerCase();
     if (normalized.isEmpty) return;
     final set = await getRejectedCasboxSenders();
     set.add(normalized);
-    await _storage.write(key: _kRejectedCasboxSenders, value: jsonEncode(set.toList()));
+    await _storage.write(key: _kRejectedCasboxSenders(email), value: jsonEncode(set.toList()));
   }
 
-  static const _kReadCasboxIds = 'bnx_read_casbox_ids';
+  static String _kReadCasboxIdsForEmail(String email) => 'bnx_read_casbox_ids_${email.trim().toLowerCase()}';
 
-  static Future<Set<String>> getReadCasboxIds() async {
-    final str = await _storage.read(key: _kReadCasboxIds);
-    if (str == null || str.isEmpty) return {};
-    try {
-      final List list = jsonDecode(str);
-      return list.map((e) => e.toString()).toSet();
-    } catch (_) {
-      return {};
+  static Future<List<String>> getReadCasboxIds() async {
+    final email = await getUserEmail() ?? '';
+    final str = await _storage.read(key: _kReadCasboxIdsForEmail(email));
+    if (str != null && str.isNotEmpty) {
+      try {
+        final list = jsonDecode(str) as List;
+        return list.map((e) => e.toString()).toList();
+      } catch (_) {}
     }
+    return [];
   }
 
-  static Future<void> saveReadCasboxId(String id) async {
-    if (id.isEmpty) return;
-    final set = await getReadCasboxIds();
-    set.add(id);
-    await _storage.write(key: _kReadCasboxIds, value: jsonEncode(set.toList()));
+  static Future<void> markCasboxRead(String id) async {
+    final email = await getUserEmail() ?? '';
+    final current = await getReadCasboxIds();
+    if (!current.contains(id)) {
+      current.add(id);
+      await _storage.write(key: _kReadCasboxIdsForEmail(email), value: jsonEncode(current));
+    }
   }
 
   // ── Persistent Label Storage ──────────────────────────────────────────────

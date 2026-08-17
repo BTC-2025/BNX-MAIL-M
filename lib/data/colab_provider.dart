@@ -133,6 +133,8 @@ class ColabListNotifier extends StateNotifier<List<ColabGroup>> {
   bool _loading = false;
   final Set<String> _fetchingMessages = {};
   final Set<String> _fetchingBroadcasts = {};
+  final Map<String, List<ColabGroup>> _accountCaches = {};
+  String _currentAccountId = 'default';
 
   void clear() {
     state = [];
@@ -140,6 +142,21 @@ class ColabListNotifier extends StateNotifier<List<ColabGroup>> {
     messagesLoadedIds.clear();
     _fetchingMessages.clear();
     _fetchingBroadcasts.clear();
+    _accountCaches.clear();
+  }
+
+  Future<void> switchAccountContext(String accountId) async {
+    if (_currentAccountId.isNotEmpty) {
+      _accountCaches[_currentAccountId] = state;
+    }
+    _currentAccountId = accountId;
+    if (_accountCaches.containsKey(accountId)) {
+      state = _accountCaches[accountId]!;
+      loadGroups(); // Background fetch
+    } else {
+      state = [];
+      loadGroups();
+    }
   }
 
   /// Fetch all groups from GET /api/chat/user/{email}
@@ -404,9 +421,26 @@ class ColabInvitationsNotifier extends StateNotifier<List<ColabInvitation>> {
   }
 
   bool _loading = false;
+  final Map<String, List<ColabInvitation>> _accountCaches = {};
+  String _currentAccountId = 'default';
 
   void clear() {
     state = [];
+    _accountCaches.clear();
+  }
+
+  Future<void> switchAccountContext(String accountId) async {
+    if (_currentAccountId.isNotEmpty) {
+      _accountCaches[_currentAccountId] = state;
+    }
+    _currentAccountId = accountId;
+    if (_accountCaches.containsKey(accountId)) {
+      state = _accountCaches[accountId]!;
+      loadInvitations(); // Background fetch
+    } else {
+      state = [];
+      loadInvitations();
+    }
   }
 
   /// Fetch invitations from GET /api/chat/invitations
@@ -638,11 +672,27 @@ class CasboxMessagesNotifier extends StateNotifier<List<CasboxMessage>> {
 
   bool isLoading = false;
   final Set<String> _readIds = {};
-  final bool _isFirstFetch = true;
+  final Map<String, List<CasboxMessage>> _accountCaches = {};
+  String _currentAccountId = 'default';
 
   void clear() {
     state = const [];
     _readIds.clear();
+    _accountCaches.clear();
+  }
+
+  Future<void> switchAccountContext(String accountId) async {
+    if (_currentAccountId.isNotEmpty) {
+      _accountCaches[_currentAccountId] = state;
+    }
+    _currentAccountId = accountId;
+    if (_accountCaches.containsKey(accountId)) {
+      state = _accountCaches[accountId]!;
+      fetchMessages(); // Background fetch
+    } else {
+      state = const [];
+      fetchMessages();
+    }
   }
 
   bool _isAcceptedStatus(String status) {
@@ -939,7 +989,7 @@ class CasboxMessagesNotifier extends StateNotifier<List<CasboxMessage>> {
   void markAsRead(dynamic messageId) {
     final strId = messageId.toString();
     _readIds.add(strId);
-    TokenService.saveReadCasboxId(strId);
+    TokenService.markCasboxRead(strId);
     state = state.map((m) {
       if (m.id == strId) {
         return m.copyWith(isRead: true, status: 'READ');
