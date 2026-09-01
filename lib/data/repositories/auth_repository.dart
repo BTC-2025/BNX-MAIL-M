@@ -1,6 +1,7 @@
 import '../../core/network/api_client.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/network/token_service.dart';
+import '../../core/notifications/notification_service.dart';
 import '../../models/user_model.dart';
 import 'user_repository.dart';
 
@@ -49,12 +50,28 @@ class AuthRepository {
         }
       }).catchError((_) {});
     }
+
+    // Register FCM device token with backend API immediately after login
+    try {
+      final fcmToken = NotificationService.instance.fcmToken;
+      if (fcmToken != null && fcmToken.isNotEmpty) {
+        UserRepository.registerDeviceToken(fcmToken).catchError((_) {});
+      }
+    } catch (_) {}
+
     return user;
   }
 
   // ── Logout ────────────────────────────────────────────────────────────────
 
   static Future<void> logout() async {
+    try {
+      final fcmToken = NotificationService.instance.fcmToken;
+      if (fcmToken != null && fcmToken.isNotEmpty) {
+        await UserRepository.unregisterDeviceToken(fcmToken);
+      }
+    } catch (_) {}
+
     try {
       await ApiClient.post('/api/auth/logout');
     } catch (_) {
@@ -65,6 +82,13 @@ class AuthRepository {
   }
 
   static Future<void> logoutSpecificAccount(String email) async {
+    try {
+      final fcmToken = NotificationService.instance.fcmToken;
+      if (fcmToken != null && fcmToken.isNotEmpty) {
+        await UserRepository.unregisterDeviceToken(fcmToken);
+      }
+    } catch (_) {}
+
     try {
       await ApiClient.post('/api/auth/logout');
     } catch (_) {}

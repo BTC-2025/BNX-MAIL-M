@@ -9,9 +9,6 @@ import '../../../core/widgets/avatar_widget.dart';
 import '../../../data/account_provider.dart';
 import '../../../data/app_state_provider.dart';
 import '../../../data/colab_provider.dart';
-import '../../../data/email_provider.dart';
-import '../../../data/repositories/auth_repository.dart';
-import '../../auth/presentation/notifiers/auth_notifier.dart';
 import '../../../models/account_model.dart';
 
 class ManageAccountScreen extends ConsumerStatefulWidget {
@@ -150,19 +147,13 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
     );
     if (confirmed != true) return;
 
-    ref.read(emailProvider.notifier).clear();
-    ref.read(accountsProvider.notifier).clear();
-    await AuthRepository.logout();
-    ref.read(authProvider.notifier).logout();
-    if (mounted) {
-      context.go('/login');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Signed out successfully.'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-    }
+    final activeAccount = ref.read(activeAccountProvider);
+    final activeEmail = activeAccount.email.isNotEmpty ? activeAccount.email : activeAccount.id;
+    await ref.read(accountsProvider.notifier).signOutSingleAccount(
+      targetEmail: activeEmail,
+      ref: ref,
+      context: context,
+    );
   }
 
   void _switchTab(int index) {

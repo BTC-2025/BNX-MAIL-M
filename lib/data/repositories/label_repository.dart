@@ -1,4 +1,5 @@
 import '../../core/network/api_client.dart';
+import '../../core/network/token_service.dart';
 import '../../models/label_model.dart';
 import '../../models/email_model.dart';
 
@@ -6,7 +7,9 @@ import '../../models/email_model.dart';
 class LabelRepository {
   static Future<List<LabelModel>> fetchLabels() async {
     try {
-      final res = await ApiClient.get('/api/mail/labels');
+      final email = await TokenService.getUserEmail();
+      final query = email != null && email.isNotEmpty ? '?userEmail=${Uri.encodeComponent(email)}' : '';
+      final res = await ApiClient.get('/api/mail/labels$query');
       final raw = res['data'] ?? res['labels'] ?? res;
       if (raw is List) {
         return raw
@@ -22,8 +25,10 @@ class LabelRepository {
 
   static Future<LabelModel?> createLabel(String name, String colorHex) async {
     try {
+      final email = await TokenService.getUserEmail();
+      final query = email != null && email.isNotEmpty ? '?userEmail=${Uri.encodeComponent(email)}' : '';
       final res = await ApiClient.post(
-        '/api/mail/labels',
+        '/api/mail/labels$query',
         body: {
           'name': name,
           'color': colorHex,
@@ -41,7 +46,9 @@ class LabelRepository {
 
   static Future<void> deleteLabel(String id) async {
     try {
-      await ApiClient.delete('/api/mail/labels/$id');
+      final email = await TokenService.getUserEmail();
+      final query = email != null && email.isNotEmpty ? '?userEmail=${Uri.encodeComponent(email)}' : '';
+      await ApiClient.delete('/api/mail/labels/$id$query');
     } catch (_) {}
   }
 
@@ -51,8 +58,10 @@ class LabelRepository {
     String colorHex,
   ) async {
     try {
+      final email = await TokenService.getUserEmail();
+      final query = email != null && email.isNotEmpty ? '?userEmail=${Uri.encodeComponent(email)}' : '';
       final res = await ApiClient.put(
-        '/api/mail/labels/$id',
+        '/api/mail/labels/$id$query',
         body: {
           'name': name,
           'color': colorHex,
@@ -74,10 +83,12 @@ class LabelRepository {
     String folder = 'Inbox',
   }) async {
     try {
+      final email = await TokenService.getUserEmail();
+      final userQuery = email != null && email.isNotEmpty ? '&userEmail=${Uri.encodeComponent(email)}' : '';
       final queryFolder = Uri.encodeComponent(folder);
       final queryLabel = Uri.encodeComponent(labelId);
       await ApiClient.post(
-        '/api/mail/labels/apply/$uid?labelId=$queryLabel&folder=$queryFolder',
+        '/api/mail/labels/apply/$uid?labelId=$queryLabel&folder=$queryFolder$userQuery',
       );
       return true;
     } catch (_) {
@@ -91,10 +102,12 @@ class LabelRepository {
     String folder = 'Inbox',
   }) async {
     try {
+      final email = await TokenService.getUserEmail();
+      final userQuery = email != null && email.isNotEmpty ? '&userEmail=${Uri.encodeComponent(email)}' : '';
       final queryFolder = Uri.encodeComponent(folder);
       final queryLabel = Uri.encodeComponent(labelId);
       await ApiClient.delete(
-        '/api/mail/labels/remove/$uid?labelId=$queryLabel&folder=$queryFolder',
+        '/api/mail/labels/remove/$uid?labelId=$queryLabel&folder=$queryFolder$userQuery',
       );
       return true;
     } catch (_) {

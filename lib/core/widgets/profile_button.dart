@@ -88,16 +88,13 @@ class ProfileButton extends ConsumerWidget {
           } else if (value == 'theme') {
             ref.read(appUiProvider.notifier).toggleDarkMode();
           } else if (value == 'logout') {
-            // Clear email cache & stop polling timer
-            ref.read(emailProvider.notifier).clear();
-            ref.read(accountsProvider.notifier).clear();
-            // Call server logout + clear tokens
-            await AuthRepository.logout();
-            // Update auth state
-            ref.read(authProvider.notifier).logout();
-            if (context.mounted) {
-              context.go('/login');
-            }
+            final activeAccount = ref.read(accountsProvider.notifier).activeAccount;
+            final activeEmail = activeAccount.email.isNotEmpty ? activeAccount.email : activeAccount.id;
+            await ref.read(accountsProvider.notifier).signOutSingleAccount(
+              targetEmail: activeEmail,
+              ref: ref,
+              context: context,
+            );
           }
         },
         itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[

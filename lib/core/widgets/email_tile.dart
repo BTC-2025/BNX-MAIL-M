@@ -89,6 +89,8 @@ class _EmailTileState extends ConsumerState<EmailTile> {
 
     final bool isDraftItem = email.isDraft || email.memberOfFolders.contains('Draft');
     final bool isScheduledItem = email.isScheduled || email.memberOfFolders.contains('Scheduled');
+    final bool isSentFolderView = uiState.activeFolder == 'Sent';
+    final bool isSentItem = isSentFolderView || (email.isSent && !email.memberOfFolders.contains('Inbox'));
 
     final String tileSenderName = isScheduledItem
         ? (email.recipient.trim().isNotEmpty
@@ -98,7 +100,7 @@ class _EmailTileState extends ConsumerState<EmailTile> {
             ? (email.recipient.trim().isNotEmpty
                 ? 'Draft: ${email.recipient.trim()}'
                 : 'Draft')
-            : email.isSent
+            : isSentItem
                 ? (email.recipient.isNotEmpty ? 'To: ${email.recipient}' : email.senderName)
                 : (email.senderName.isNotEmpty && email.senderName != 'BNX Mail'
                     ? email.senderName
@@ -108,7 +110,7 @@ class _EmailTileState extends ConsumerState<EmailTile> {
         ? (email.recipient.trim().isNotEmpty ? email.recipient.trim() : 'Scheduled')
         : isDraftItem
             ? (email.recipient.trim().isNotEmpty ? email.recipient.trim() : 'Draft')
-            : email.isSent
+            : isSentItem
                 ? (email.recipient.isNotEmpty ? email.recipient : email.senderName)
                 : (email.senderName.isNotEmpty && email.senderName != 'BNX Mail'
                     ? email.senderName

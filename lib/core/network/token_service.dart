@@ -14,25 +14,25 @@ class TokenService {
   static const _kEmail = 'bnx_user_email';
   static const _kName = 'bnx_user_name';
 
+  static String? cachedAccessToken;
+
   // ── Write ────────────────────────────────────────────────────────────────
 
   static Future<void> saveTokens({
     required String accessToken,
     required String refreshToken,
   }) async {
-    await Future.wait([
-      _storage.write(key: _kAccess, value: accessToken),
-      _storage.write(key: _kRefresh, value: refreshToken),
-    ]);
+    cachedAccessToken = accessToken;
+    await _storage.write(key: _kAccess, value: accessToken);
+    await _storage.write(key: _kRefresh, value: refreshToken);
   }
 
   static Future<void> clearTokens() async {
-    await Future.wait([
-      _storage.delete(key: _kAccess),
-      _storage.delete(key: _kRefresh),
-      _storage.delete(key: _kEmail),
-      _storage.delete(key: _kName),
-    ]);
+    cachedAccessToken = null;
+    await _storage.delete(key: _kAccess);
+    await _storage.delete(key: _kRefresh);
+    await _storage.delete(key: _kEmail);
+    await _storage.delete(key: _kName);
   }
 
   static Future<void> saveUserInfo({
@@ -40,10 +40,8 @@ class TokenService {
     required String name,
   }) async {
     final cleanEmail = email.trim().toLowerCase();
-    await Future.wait([
-      _storage.write(key: _kEmail, value: cleanEmail),
-      _storage.write(key: _kName, value: name),
-    ]);
+    await _storage.write(key: _kEmail, value: cleanEmail);
+    await _storage.write(key: _kName, value: name);
     final token = await getAccessToken();
     if (token != null && token.isNotEmpty && cleanEmail.isNotEmpty) {
       await saveAccountToRegistry(
@@ -117,10 +115,8 @@ class TokenService {
 
       if (accessToken.isNotEmpty) {
         await saveTokens(accessToken: accessToken, refreshToken: refreshToken);
-        await Future.wait([
-          _storage.write(key: _kEmail, value: cleanEmail),
-          _storage.write(key: _kName, value: name),
-        ]);
+        await _storage.write(key: _kEmail, value: cleanEmail);
+        await _storage.write(key: _kName, value: name);
         if (avatar.isNotEmpty) {
           await saveUserAvatar(cleanEmail, avatar);
         }
@@ -139,7 +135,11 @@ class TokenService {
 
   // ── Read ─────────────────────────────────────────────────────────────────
 
-  static Future<String?> getAccessToken() async => _storage.read(key: _kAccess);
+  static Future<String?> getAccessToken() async {
+    if (cachedAccessToken != null) return cachedAccessToken;
+    cachedAccessToken = await _storage.read(key: _kAccess);
+    return cachedAccessToken;
+  }
   static Future<String?> getRefreshToken() async =>
       _storage.read(key: _kRefresh);
   static Future<String?> getUserEmail() async => _storage.read(key: _kEmail);

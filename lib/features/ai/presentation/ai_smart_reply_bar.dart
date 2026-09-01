@@ -251,11 +251,14 @@ class _SmartReplyChip extends ConsumerWidget {
             color: isDark ? BNXColors.darkPrimary : BNXColors.lightPrimary,
           ),
           const SizedBox(width: 8),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              color: isDark ? Colors.white : BNXColors.lightTextPrimary,
+          Flexible(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                color: isDark ? Colors.white : BNXColors.lightTextPrimary,
+              ),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],

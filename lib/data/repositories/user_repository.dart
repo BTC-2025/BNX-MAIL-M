@@ -351,4 +351,35 @@ class UserRepository {
       await ApiClient.post('/api/user/sessions/revoke', body: {'sessionId': sessionId});
     } catch (_) {}
   }
+
+  // ── Device Token API for FCM Push Notifications ──────────────────────────
+
+  /// Registers FCM device token with backend API after login or token refresh.
+  static Future<void> registerDeviceToken(String deviceToken) async {
+    if (deviceToken.trim().isEmpty) return;
+    final deviceType = Platform.isIOS ? 'ios' : 'android';
+    try {
+      print('[DEVICE TOKEN API] Registering FCM device token with backend...');
+      await ApiClient.post('/api/users/device-token', body: {
+        'deviceToken': deviceToken.trim(),
+        'deviceType': deviceType,
+      });
+      print('[DEVICE TOKEN API] FCM device token registered successfully');
+    } catch (e) {
+      print('[DEVICE TOKEN API ERROR] Failed to register device token: $e');
+    }
+  }
+
+  /// Unregisters FCM device token from backend API on logout.
+  static Future<void> unregisterDeviceToken(String deviceToken) async {
+    if (deviceToken.trim().isEmpty) return;
+    try {
+      print('[DEVICE TOKEN API] Unregistering FCM device token from backend...');
+      final encodedToken = Uri.encodeComponent(deviceToken.trim());
+      await ApiClient.delete('/api/users/device-token/$encodedToken');
+      print('[DEVICE TOKEN API] FCM device token unregistered successfully');
+    } catch (e) {
+      print('[DEVICE TOKEN API ERROR] Failed to unregister device token: $e');
+    }
+  }
 }

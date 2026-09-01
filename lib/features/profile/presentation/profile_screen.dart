@@ -254,27 +254,35 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             // Account rows
                             ...accounts.map((acc) {
                               final isSelected = acc.id == activeAccount.id;
-                              return GestureDetector(
+                                return GestureDetector(
                                 onTap: () async {
                                   if (!isSelected) {
+                                    // Close dropdown immediately for instant visual feedback
+                                    setState(() => _isExpanded = false);
+
                                     final targetId = acc.email.isNotEmpty ? acc.email : acc.id;
+                                    // Switch account — updates tokens & all provider caches
                                     await ref
                                         .read(accountsProvider.notifier)
                                         .switchAccount(targetId, ref);
+
                                     if (context.mounted) {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
+                                      // Navigate directly to /home (inside DashboardShell).
+                                      // NEVER go to '/' — that is the SplashScreen and causes
+                                      // a double-navigation black screen (/ → splash → /home).
+                                      context.go('/home');
+                                      ScaffoldMessenger.of(context).showSnackBar(
                                         SnackBar(
-                                          content: Text('Switched to ${acc.email.isNotEmpty ? acc.email : acc.name}... Reloading'),
+                                          content: Text('Switched to ${acc.email.isNotEmpty ? acc.email : acc.name}'),
                                           duration: const Duration(seconds: 1),
                                         ),
                                       );
-                                      context.go('/');
                                     }
+                                  } else {
+                                    setState(() => _isExpanded = false);
                                   }
-                                  setState(() => _isExpanded = false);
                                 },
+
                                 child: Container(
                                   margin: const EdgeInsets.only(bottom: 8),
                                   padding: const EdgeInsets.symmetric(
@@ -460,25 +468,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     isDark: isDark,
                     onTap: () async {
                       final activeEmail = activeAccount.email.isNotEmpty ? activeAccount.email : activeAccount.id;
-
-                      // Clear local state providers
-                      ref.read(emailProvider.notifier).clear();
-                      ref.read(accountsProvider.notifier).clear();
-                      ref.read(allInboxesProvider.notifier).clear();
-
-                      // Remove specific account from registry & clear active tokens
-                      await AuthRepository.logoutSpecificAccount(activeEmail);
-                      ref.read(authProvider.notifier).logout();
-
-                      if (context.mounted) {
-                        context.go('/login');
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Signed out of $activeEmail'),
-                            backgroundColor: Colors.orangeAccent,
-                          ),
-                        );
-                      }
+                      await ref.read(accountsProvider.notifier).signOutSingleAccount(
+                        targetEmail: activeEmail,
+                        ref: ref,
+                        context: context,
+                      );
                     },
                   ),
 
@@ -489,16 +483,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     color: Colors.redAccent,
                     isDark: isDark,
                     onTap: () async {
-                      // Clear local state providers
+                      // Wipe all session tokens & saved account registries completely
+                      await AuthRepository.logout();
+
+                      // Clear local state providers AFTER await (not during build)
                       ref.read(emailProvider.notifier).clear();
                       ref.read(accountsProvider.notifier).clear();
                       ref.read(allInboxesProvider.notifier).clear();
-
-                      // Wipe all session tokens & saved account registries completely
-                      await AuthRepository.logout();
                       ref.read(authProvider.notifier).logout();
 
                       if (context.mounted) {
+                        // Navigate to login directly — no splash bounce
                         context.go('/login');
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(

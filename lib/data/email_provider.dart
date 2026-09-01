@@ -7,6 +7,8 @@ import 'repositories/mail_repository.dart';
 import 'repositories/label_repository.dart';
 import '../models/label_model.dart';
 import '../core/network/token_service.dart';
+import '../core/notifications/notification_service.dart';
+import '../core/notifications/notification_model.dart';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -39,6 +41,9 @@ class EmailState {
 // ── Notifier ──────────────────────────────────────────────────────────────────
 
 class EmailNotifier extends StateNotifier<EmailState> {
+  final Map<String, EmailState> _accountCaches = {};
+  String _currentAccountId = 'default';
+
   EmailNotifier() : super(const EmailState()) {
     _startPolling();
   }
@@ -50,23 +55,52 @@ class EmailNotifier extends StateNotifier<EmailState> {
   void clear() {
     _pollingTimer?.cancel();
     state = const EmailState();
+    _accountCaches.clear();
+  }
+
+  Future<void> switchAccountContext(String accountId) async {
+    if (_currentAccountId.isNotEmpty) {
+      _accountCaches[_currentAccountId] = state;
+    }
+    _currentAccountId = accountId;
+    if (_accountCaches.containsKey(accountId)) {
+      state = _accountCaches[accountId]!;
+      initialLoad(background: true);
+    } else {
+      state = const EmailState();
+      initialLoad();
+    }
   }
 
   // ── Initial load (called right after successful login) ──────────────────
 
   /// Fetches all folders in parallel so sidebar badge counts work.
   /// Fetches Inbox immediately so user sees Primary Inbox in <150ms, then hydrates remaining folders in background.
-  Future<void> initialLoad() async {
-    state = const EmailState(isLoading: true);
+  Future<void> initialLoad({bool background = false}) async {
+    if (!background) {
+      state = state.copyWith(isLoading: true, error: null);
+    }
     try {
       print('[FAST LOAD] Fetching Primary Inbox first...');
       final inboxList = await MailRepository.fetchFolder('Inbox', limit: 50).catchError((_) => <EmailModel>[]);
 
       final merged = <String, EmailModel>{};
+      for (final e in state.emails) {
+        merged[e.canonicalKey] = e;
+      }
       for (final e in inboxList) {
-        merged[e.canonicalKey] = e.copyWith(
-          memberOfFolders: e.memberOfFolders.isEmpty ? {'Inbox'} : e.memberOfFolders,
-        );
+        final key = e.canonicalKey;
+        if (merged.containsKey(key)) {
+          final existing = merged[key]!;
+          final updatedFolders = existing.memberOfFolders.union(
+            e.memberOfFolders.isEmpty ? {'Inbox'} : e.memberOfFolders,
+          );
+          merged[key] = e.copyWith(memberOfFolders: updatedFolders);
+        } else {
+          merged[key] = e.copyWith(
+            memberOfFolders: e.memberOfFolders.isEmpty ? {'Inbox'} : e.memberOfFolders,
+          );
+        }
       }
 
       final savedLabelsMap = await TokenService.getAssignedEmailLabels();
@@ -181,6 +215,10 @@ class EmailNotifier extends StateNotifier<EmailState> {
 
     _isSyncing = true;
     try {
+      final token = NotificationService.instance.fcmToken;
+      if (token != null && token.isNotEmpty) {
+        print('[FCM TOKEN] Device Token: $token');
+      }
       final fetched = await MailRepository.fetchFolder('Inbox', limit: 50);
       if (fetched.isEmpty) {
         _isSyncing = false;
@@ -232,6 +270,21 @@ class EmailNotifier extends StateNotifier<EmailState> {
             'IsDateFallback: ${e.isDateFallback}, LocalDeviceTime: ${now.toIso8601String()}',
           );
           merged[key] = e;
+
+          // Trigger System Notification pop-up for newly synced emails
+          if (!e.isSent) {
+            NotificationService.instance.showNotification(
+              NotificationEvent(
+                type: 'new_email',
+                emailId: e.id,
+                senderName: e.senderName.isNotEmpty ? e.senderName : e.senderEmail,
+                senderEmail: e.senderEmail,
+                subject: e.subject.isNotEmpty ? e.subject : 'New Email',
+                preview: e.body.isNotEmpty ? e.body : 'You have received a new email.',
+                timestamp: e.date,
+              ),
+            );
+          }
         }
       }
 
@@ -252,9 +305,12 @@ class EmailNotifier extends StateNotifier<EmailState> {
 
   // ── Load a specific folder (lazy) ───────────────────────────────────────
 
-  Future<void> loadFolder(String folder) async {
-    if (state.loadedFolders.contains(folder)) return; // already cached
-    state = state.copyWith(isLoading: true, error: null);
+  Future<void> loadFolder(String folder, {bool background = false}) async {
+    if (state.isLoading && !background) return;
+
+    if (!background) {
+      state = state.copyWith(isLoading: true, error: null);
+    }
     try {
       final fetched = await MailRepository.fetchFolder(folder, limit: 50);
       final merged = <String, EmailModel>{};
@@ -901,6 +957,7 @@ class EmailNotifier extends StateNotifier<EmailState> {
     String? bcc,
     List<String> labels = const [],
     bool isDraft = false,
+    bool isHtml = false,
     DateTime? scheduledAt,
     List<AttachmentModel> attachments = const [],
   }) async {
@@ -959,6 +1016,7 @@ class EmailNotifier extends StateNotifier<EmailState> {
           to: to,
           subject: subject.isEmpty ? '(No Subject)' : subject,
           content: body,
+          isHtml: isHtml,
           cc: cc,
           bcc: bcc,
           attachments: attachments,

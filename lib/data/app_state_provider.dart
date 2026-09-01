@@ -271,6 +271,9 @@ final fabExtensionProvider = StateProvider<bool>((ref) => true);
 class CustomLabelsNotifier extends StateNotifier<List<LabelModel>> {
   final Ref ref;
 
+  final Map<String, List<LabelModel>> _accountCaches = {};
+  String _currentAccountId = 'default';
+
   CustomLabelsNotifier(this.ref) : super(const []) {
     fetchLabels();
   }
@@ -278,6 +281,25 @@ class CustomLabelsNotifier extends StateNotifier<List<LabelModel>> {
   Future<void> fetchLabels() async {
     final remote = await LabelRepository.fetchLabels();
     state = remote;
+  }
+
+  Future<void> switchAccountContext(String accountId) async {
+    if (_currentAccountId.isNotEmpty) {
+      _accountCaches[_currentAccountId] = state;
+    }
+    _currentAccountId = accountId;
+    if (_accountCaches.containsKey(accountId)) {
+      state = _accountCaches[accountId]!;
+      fetchLabels(); // Background fetch
+    } else {
+      state = const [];
+      fetchLabels();
+    }
+  }
+
+  void clear() {
+    state = const [];
+    _accountCaches.clear();
   }
 
   Future<void> addLabel(String name, Color color) async {

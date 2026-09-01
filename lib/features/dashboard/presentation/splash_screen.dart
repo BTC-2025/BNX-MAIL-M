@@ -43,25 +43,27 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     _progressController.forward();
     _fadeController.forward();
 
-    Timer(const Duration(milliseconds: 2800), () async {
-      if (mounted) {
-        final isLoggedIn = await TokenService.hasToken();
-        if (isLoggedIn) {
-          ref.read(authProvider.notifier).login();
-          await ref.read(accountsProvider.notifier).loadMailboxes();
-          await ref.read(colabListProvider.notifier).loadGroups();
-          ref.read(colabInvitationsProvider.notifier).loadInvitations();
-          // Pre-fetch all emails from backend to populate inbox, sent, draft folders
-          ref.read(emailProvider.notifier).initialLoad();
-          if (mounted) {
-            context.go('/home');
-          }
-        } else {
-          ref.read(authProvider.notifier).logout();
-          context.go('/login');
-        }
-      }
-    });
+    _initializeApp();
+  }
+
+  Future<void> _initializeApp() async {
+    final isLoggedIn = await TokenService.hasToken();
+    if (!mounted) return;
+
+    if (isLoggedIn) {
+      ref.read(authProvider.notifier).login();
+      // Start backend fetches asynchronously without blocking the UI thread
+      ref.read(accountsProvider.notifier).loadMailboxes();
+      ref.read(colabListProvider.notifier).loadGroups();
+      ref.read(colabInvitationsProvider.notifier).loadInvitations();
+      // Pre-fetch all emails from backend to populate inbox, sent, draft folders
+      ref.read(emailProvider.notifier).initialLoad();
+      
+      context.go('/home');
+    } else {
+      ref.read(authProvider.notifier).logout();
+      context.go('/login');
+    }
   }
 
   @override

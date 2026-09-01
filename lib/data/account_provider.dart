@@ -204,6 +204,7 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
       ref.read(authProvider.notifier).logout();
 
       if (context.mounted) {
+        // We are already past an await so this is safe — no addPostFrameCallback needed
         context.go('/login');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

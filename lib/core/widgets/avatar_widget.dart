@@ -75,30 +75,22 @@ class AvatarWidget extends StatelessWidget {
         }
       } else if (isNetwork) {
         final absoluteUrl = isRelativeApi ? '${ApiClient.baseUrl}$url' : url;
-        imageWidget = FutureBuilder<String?>(
-          future: TokenService.getAccessToken(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return _buildLetterAvatar(firstLetter);
-            }
-            final token = snapshot.data;
-            final headers = <String, String>{
-              'Cache-Control': 'no-cache',
-            };
-            if (token != null && token.isNotEmpty) {
-              headers['Authorization'] = 'Bearer $token';
-            }
-            return Image.network(
-              absoluteUrl,
-              width: size,
-              height: size,
-              fit: BoxFit.cover,
-              headers: headers,
-              errorBuilder: (context, error, stackTrace) {
-                print('[AVATAR IMAGE LOAD ERROR] URL: $absoluteUrl | Error: $error');
-                return _buildLetterAvatar(firstLetter);
-              },
-            );
+        final token = TokenService.cachedAccessToken;
+        final headers = <String, String>{
+          'Cache-Control': 'no-cache',
+        };
+        if (token != null && token.isNotEmpty) {
+          headers['Authorization'] = 'Bearer $token';
+        }
+        imageWidget = Image.network(
+          absoluteUrl,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          headers: headers,
+          errorBuilder: (context, error, stackTrace) {
+            print('[AVATAR IMAGE LOAD ERROR] URL: $absoluteUrl | Error: $error');
+            return _buildLetterAvatar(firstLetter);
           },
         );
       } else {

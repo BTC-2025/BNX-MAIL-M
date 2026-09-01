@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "232524620605",
+    "project_id": "flutterbnx",
+    "storage_bucket": "flutterbnx.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:232524620605:android:9a5514278390b1d5d3db54",
+        "android_client_info": {
+          "package_name": "com.example.flutter_bnx_mail"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB3HbA8S3cUb_yDkQwp3FId53AuYOiggSs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

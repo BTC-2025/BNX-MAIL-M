@@ -177,7 +177,7 @@ class DashboardShell extends ConsumerWidget {
                   uiState.activeFolder != 'Templates' &&
                   uiState.activeFolder != 'Settings')
               ? Padding(
-                  padding: const EdgeInsets.only(bottom: 68.0),
+                  padding: const EdgeInsets.only(bottom: 92.0),
                   child: (() {
                     final isFabExtended = ref.watch(fabExtensionProvider);
                     return isFabExtended

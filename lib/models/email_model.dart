@@ -25,7 +25,7 @@ String _stripHtml(String html) {
 }
 
 bool _looksLikeHtml(String s) => RegExp(
-  r'<(html|body|div|p|span|table|br|a|b|i|ul|ol|li|h[1-6])\b',
+  r'<(html|body|div|p|span|table|br|a|b|i|u|s|strong|em|del|strike|ul|ol|li|h[1-6])\b',
   caseSensitive: false,
 ).hasMatch(s);
 
@@ -36,6 +36,7 @@ class EmailModel {
   final String recipient;
   final String subject;
   final String body;
+  final String htmlBody; // raw HTML for rich rendering
   final DateTime date;
   final bool isRead;
   final bool isStarred;
@@ -66,6 +67,7 @@ class EmailModel {
     required this.recipient,
     required this.subject,
     required this.body,
+    this.htmlBody = '',
     required this.date,
     this.messageId,
     this.isRead = false,
@@ -181,13 +183,18 @@ class EmailModel {
     }
 
     // ── Body ─────────────────────────────────────────────────────────────
-    final rawBody =
-        json['content']?.toString() ??
-        json['body']?.toString() ??
-        json['html']?.toString() ??
-        json['text']?.toString() ??
-        '';
-    final bodyText = _looksLikeHtml(rawBody) ? _stripHtml(rawBody) : rawBody;
+    final h = json['html']?.toString();
+    final c = json['content']?.toString();
+    final b = json['body']?.toString();
+    final t = json['text']?.toString();
+
+    // Prefer explicit 'html' field if it exists, otherwise fallback to others
+    final rawHtml = (h != null && h.isNotEmpty) ? h : (c ?? b ?? t ?? '');
+    final htmlBody = rawHtml;
+
+    // For snippets, we want plain text
+    final bodyStr = t ?? c ?? b ?? h ?? '';
+    final bodyText = _looksLikeHtml(bodyStr) ? _stripHtml(bodyStr) : bodyStr;
 
     // ── Date ─────────────────────────────────────────────────────────────
     final rawDate = json['date'] ??
@@ -310,10 +317,10 @@ class EmailModel {
         (json['sendAt'] != null && json['sendAt'].toString().isNotEmpty && folder != 'Sent')
     );
 
-    final bool isSent = !isTrash && !isArchive && !isSpam && !isScheduled && (
+    final bool isSent = !isTrash && !isArchive && !isSpam && !isScheduled && (folder != 'Inbox') && (
         (folder == 'Sent') ||
-        (json['status']?.toString().toUpperCase() == 'SENT') ||
-        (json['isSent'] == true)
+        (json['status']?.toString().toUpperCase() == 'SENT' && folder == 'Sent') ||
+        (json['isSent'] == true && folder != 'Inbox')
     );
 
     final bool isDraft = !isTrash && !isArchive && !isSpam && !isScheduled && (
@@ -389,6 +396,7 @@ class EmailModel {
       recipient: recipient,
       subject: json['subject']?.toString() ?? '(No Subject)',
       body: bodyText,
+      htmlBody: htmlBody,
       date: date,
       isRead: (isDraft || folder == 'Draft') ? true : isRead,
       isStarred: isStarred,
@@ -426,6 +434,7 @@ class EmailModel {
     'recipient': recipient,
     'subject': subject,
     'body': body,
+    'htmlBody': htmlBody,
     'date': date.toIso8601String(),
     'isRead': isRead,
     'isStarred': isStarred,
@@ -447,6 +456,7 @@ class EmailModel {
     String? recipient,
     String? subject,
     String? body,
+    String? htmlBody,
     DateTime? date,
     bool? isRead,
     bool? isStarred,
@@ -474,6 +484,7 @@ class EmailModel {
       recipient: recipient ?? this.recipient,
       subject: subject ?? this.subject,
       body: body ?? this.body,
+      htmlBody: htmlBody ?? this.htmlBody,
       date: date ?? this.date,
       isRead: isRead ?? this.isRead,
       isStarred: isStarred ?? this.isStarred,

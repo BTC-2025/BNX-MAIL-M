@@ -8,11 +8,218 @@ import '../../models/attachment_model.dart';
 import '../theme/colors.dart';
 import 'package:file_picker/file_picker.dart';
 
+/// Stores one formatting range (e.g. characters 5-12 are bold).
+class _FmtRange {
+  int start;
+  int end;
+  final String type; // 'bold' | 'italic' | 'underline' | 'strike'
+  _FmtRange(this.start, this.end, this.type);
+}
+
+/// A TextEditingController that keeps text CLEAN (no tags) and stores
+/// formatting as separate [_FmtRange]s.  [buildTextSpan] renders the
+/// styled segments; the underlying [text] never contains `**` etc.
+class RichTextEditingController extends TextEditingController {
+  RichTextEditingController({super.text});
+
+  final List<_FmtRange> formats = [];
+
+  // ── intercept text mutations to adjust range offsets ──────────
+  @override
+  set value(TextEditingValue newValue) {
+    final oldText = text;
+    final newText = newValue.text;
+    if (oldText != newText && formats.isNotEmpty) {
+      _adjustRanges(oldText, newText);
+    }
+    super.value = newValue;
+  }
+
+  void _adjustRanges(String oldT, String newT) {
+    // common prefix
+    int p = 0;
+    final mn = oldT.length < newT.length ? oldT.length : newT.length;
+    while (p < mn && oldT[p] == newT[p]) p++;
+    // common suffix
+    int s = 0;
+    while (s < mn - p &&
+        oldT[oldT.length - 1 - s] == newT[newT.length - 1 - s]) {
+      s++;
+    }
+    final delStart = p;
+    final delEnd = oldT.length - s;
+    final insLen = newT.length - s - p;
+    final delLen = delEnd - delStart;
+
+    formats.removeWhere((f) {
+      // entirely within deletion → remove
+      if (f.start >= delStart && f.end <= delEnd) return true;
+
+      if (f.end <= delStart) {
+        // before change → no shift
+      } else if (f.start >= delEnd) {
+        // after change → shift
+        f.start += insLen - delLen;
+        f.end += insLen - delLen;
+      } else if (f.start < delStart && f.end > delEnd) {
+        // spans change → shrink/grow
+        f.end += insLen - delLen;
+      } else if (f.start < delStart) {
+        // overlaps start of deletion
+        f.end = delStart;
+      } else {
+        // overlaps end of deletion
+        final surviving = f.end - delEnd;
+        f.start = delStart + insLen;
+        f.end = f.start + surviving;
+      }
+      return f.start >= f.end;
+    });
+  }
+
+  // ── public API for adding / removing / querying formats ──────
+  void addFormat(int start, int end, String type) {
+    formats.add(_FmtRange(start, end, type));
+    notifyListeners();
+  }
+
+  void removeFormat(int start, int end, String type) {
+    final toRemove = <_FmtRange>[];
+    final toAdd = <_FmtRange>[];
+    for (final f in formats) {
+      if (f.type != type) continue;
+      if (f.end <= start || f.start >= end) continue; // no overlap
+      if (f.start >= start && f.end <= end) {
+        toRemove.add(f);
+      } else if (f.start < start && f.end > end) {
+        toRemove.add(f);
+        toAdd.add(_FmtRange(f.start, start, type));
+        toAdd.add(_FmtRange(end, f.end, type));
+      } else if (f.start < start) {
+        f.end = start;
+      } else {
+        f.start = end;
+      }
+    }
+    formats.removeWhere(toRemove.contains);
+    formats.addAll(toAdd);
+    notifyListeners();
+  }
+
+  bool isRangeFormatted(int start, int end, String type) {
+    for (final f in formats) {
+      if (f.type == type && f.start <= start && f.end >= end) return true;
+    }
+    return false;
+  }
+
+  void clearAllFormats() {
+    formats.clear();
+    notifyListeners();
+  }
+
+  // ── visual rendering ────────────────────────────────────────
+  @override
+  TextSpan buildTextSpan({
+    required BuildContext context,
+    TextStyle? style,
+    required bool withComposing,
+  }) {
+    final base = style ?? const TextStyle();
+    if (text.isEmpty || formats.isEmpty) {
+      return TextSpan(text: text, style: base);
+    }
+
+    // collect boundary positions
+    final bSet = <int>{0, text.length};
+    for (final f in formats) {
+      bSet.add(f.start.clamp(0, text.length));
+      bSet.add(f.end.clamp(0, text.length));
+    }
+    final bounds = bSet.toList()..sort();
+
+    final spans = <TextSpan>[];
+    for (int i = 0; i < bounds.length - 1; i++) {
+      final segS = bounds[i];
+      final segE = bounds[i + 1];
+      if (segS >= segE) continue;
+
+      bool b = false, it = false, u = false, st = false;
+      for (final f in formats) {
+        if (f.start <= segS && f.end >= segE) {
+          switch (f.type) {
+            case 'bold':      b = true;
+            case 'italic':    it = true;
+            case 'underline': u = true;
+            case 'strike':    st = true;
+          }
+        }
+      }
+
+      TextStyle seg = base;
+      if (b)  seg = seg.copyWith(fontWeight: FontWeight.bold);
+      if (it) seg = seg.copyWith(fontStyle: FontStyle.italic);
+      final decs = <TextDecoration>[];
+      if (u)  decs.add(TextDecoration.underline);
+      if (st) decs.add(TextDecoration.lineThrough);
+      if (decs.isNotEmpty) {
+        seg = seg.copyWith(decoration: TextDecoration.combine(decs));
+      }
+
+      spans.add(TextSpan(text: text.substring(segS, segE), style: seg));
+    }
+    return TextSpan(style: base, children: spans);
+  }
+
+  // ── convert text + format ranges to HTML for sending ──────
+  String toHtml() {
+    String _esc(String s) => s
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('\n', '<br>');
+
+    if (text.isEmpty) return '';
+    if (formats.isEmpty) return '<p>${_esc(text)}</p>';
+
+    final bSet = <int>{0, text.length};
+    for (final f in formats) {
+      bSet.add(f.start.clamp(0, text.length));
+      bSet.add(f.end.clamp(0, text.length));
+    }
+    final bounds = bSet.toList()..sort();
+
+    final buf = StringBuffer('<p>');
+    for (int i = 0; i < bounds.length - 1; i++) {
+      final segS = bounds[i];
+      final segE = bounds[i + 1];
+      if (segS >= segE) continue;
+
+      bool b = false, it = false, u = false, st = false;
+      for (final f in formats) {
+        if (f.start <= segS && f.end >= segE) {
+          switch (f.type) {
+            case 'bold':      b = true;
+            case 'italic':    it = true;
+            case 'underline': u = true;
+            case 'strike':    st = true;
+          }
+        }
+      }
+
+      String seg = _esc(text.substring(segS, segE));
+      if (b)  seg = '<b>$seg</b>';
+      if (it) seg = '<i>$seg</i>';
+      if (u)  seg = '<u>$seg</u>';
+      if (st) seg = '<s>$seg</s>';
+      buf.write(seg);
+    }
+    buf.write('</p>');
+    return buf.toString();
+  }
+}
+
 class _Fmt {
-  bool bold = false;
-  bool italic = false;
-  bool underline = false;
-  bool strike = false;
   String style = 'Normal';
 }
 
@@ -28,12 +235,15 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
 
   final _toCtrl = TextEditingController();
   final _subCtrl = TextEditingController();
-  final _bodyCtrl = TextEditingController();
+  final _bodyCtrl = RichTextEditingController();
   final _ccCtrl = TextEditingController();
   final _bccCtrl = TextEditingController();
   final _cbToCtrl = TextEditingController();
   final _cbSubCtrl = TextEditingController();
-  final _cbBodyCtrl = TextEditingController();
+  final _cbBodyCtrl = RichTextEditingController();
+
+  final _bodyFocus = FocusNode();
+  final _cbBodyFocus = FocusNode();
 
   bool _showCcBcc = false;
   final List<AttachmentModel> _emailFiles = [];
@@ -41,10 +251,24 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
   final _fmt = _Fmt();
   String? _sig;
 
+  /// Remembers the last non-collapsed selection so toolbar taps
+  /// (which steal focus and collapse the selection) can still
+  /// operate on the previously-highlighted text.
+  TextSelection? _savedSelection;
+
+  void _trackSelection() {
+    final ctrl = _activeBodyCtrl;
+    if (ctrl.selection.isValid && !ctrl.selection.isCollapsed) {
+      _savedSelection = ctrl.selection;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     _tab = TabController(length: 2, vsync: this);
+    _bodyCtrl.addListener(_trackSelection);
+    _cbBodyCtrl.addListener(_trackSelection);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final s = ref.read(appUiProvider);
@@ -63,6 +287,10 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
 
   @override
   void dispose() {
+    _bodyCtrl.removeListener(_trackSelection);
+    _cbBodyCtrl.removeListener(_trackSelection);
+    _bodyFocus.dispose();
+    _cbBodyFocus.dispose();
     _tab.dispose();
     for (final c in [
       _toCtrl,
@@ -112,14 +340,24 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
     final isCasboxTab = _tab.index == 1;
     final toText = isCasboxTab ? _cbToCtrl.text.trim() : _toCtrl.text.trim();
     final subText = isCasboxTab ? _cbSubCtrl.text.trim() : _subCtrl.text.trim();
-    final bodyRaw = isCasboxTab ? _cbBodyCtrl.text : _bodyCtrl.text;
+    final bodyCtrl = isCasboxTab ? _cbBodyCtrl : _bodyCtrl;
+    final hasFormatting = bodyCtrl.formats.isNotEmpty;
+    // Build body: use HTML when formatting exists, otherwise plain text
+    final bodyRaw = hasFormatting ? bodyCtrl.toHtml() : bodyCtrl.text;
 
     if (toText.isEmpty) {
       _snack('Please add a recipient.');
       return;
     }
 
-    final body = _sig != null ? '$bodyRaw\n\n--\n$_sig' : bodyRaw;
+    final String body;
+    if (_sig != null) {
+      body = hasFormatting
+          ? '$bodyRaw<br><br>--<br>${_sig!.replaceAll('\n', '<br>')}'
+          : '$bodyRaw\n\n--\n$_sig';
+    } else {
+      body = bodyRaw;
+    }
     final attachmentsToSend = List<AttachmentModel>.from(
       isCasboxTab ? _casboxFiles : _emailFiles,
     );
@@ -142,6 +380,7 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
               to: toText,
               subject: subText,
               body: body,
+              isHtml: hasFormatting,
               attachments: attachmentsToSend,
             );
         if (draftId.isNotEmpty) {
@@ -333,7 +572,8 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
                     .composeEmail(
                       to: _toCtrl.text,
                       subject: _subCtrl.text,
-                      body: _bodyCtrl.text,
+                      body: _bodyCtrl.formats.isNotEmpty ? _bodyCtrl.toHtml() : _bodyCtrl.text,
+                      isHtml: _bodyCtrl.formats.isNotEmpty,
                       isDraft: true,
                       attachments: List.from(_emailFiles),
                     );
@@ -595,28 +835,20 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
     );
   }
 
+  FocusNode get _activeBodyFocusNode =>
+      _tab.index == 0 ? _bodyFocus : _cbBodyFocus;
+
   Widget _bodyArea(
     TextEditingController ctrl,
     bool isDark, {
     ValueChanged<String>? onChanged,
   }) {
-    double fs = 14.0;
-    FontWeight fw = _fmt.bold ? FontWeight.bold : FontWeight.normal;
-    if (_fmt.style == 'Heading 1') {
-      fs = 24.0;
-      fw = FontWeight.bold;
-    } else if (_fmt.style == 'Heading 2') {
-      fs = 20.0;
-      fw = FontWeight.bold;
-    } else if (_fmt.style == 'Heading 3') {
-      fs = 17.0;
-      fw = FontWeight.bold;
-    }
-
+    final focusNode = ctrl == _bodyCtrl ? _bodyFocus : _cbBodyFocus;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14),
       child: TextField(
         controller: ctrl,
+        focusNode: focusNode,
         maxLines: null,
         expands: true,
         onChanged: onChanged,
@@ -626,29 +858,23 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
 
           buttonItems.insertAll(0, [
             ContextMenuButtonItem(
-              label: _fmt.bold ? 'Unbold' : 'Bold',
+              label: 'Bold',
               onPressed: () {
-                setState(() {
-                  _fmt.bold = !_fmt.bold;
-                });
+                _applyFormat('bold');
                 editableTextState.hideToolbar();
               },
             ),
             ContextMenuButtonItem(
-              label: _fmt.italic ? 'Regular' : 'Italic',
+              label: 'Italic',
               onPressed: () {
-                setState(() {
-                  _fmt.italic = !_fmt.italic;
-                });
+                _applyFormat('italic');
                 editableTextState.hideToolbar();
               },
             ),
             ContextMenuButtonItem(
-              label: _fmt.underline ? 'No Line' : 'Underline',
+              label: 'Underline',
               onPressed: () {
-                setState(() {
-                  _fmt.underline = !_fmt.underline;
-                });
+                _applyFormat('underline');
                 editableTextState.hideToolbar();
               },
             ),
@@ -660,14 +886,7 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
           );
         },
         style: TextStyle(
-          fontSize: fs,
-          fontWeight: fw,
-          fontStyle: _fmt.italic ? FontStyle.italic : FontStyle.normal,
-          decoration: _fmt.underline
-              ? TextDecoration.underline
-              : _fmt.strike
-              ? TextDecoration.lineThrough
-              : TextDecoration.none,
+          fontSize: 14.0,
           color: isDark ? Colors.white : Colors.black87,
         ),
         decoration: InputDecoration(
@@ -738,29 +957,29 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
             _vDiv(isDark),
             _fmtBtn(
               Icons.format_bold_rounded,
-              _fmt.bold,
-              () => setState(() => _fmt.bold = !_fmt.bold),
+              false,
+              () => _applyFormat('bold'),
               'Bold',
               isDark,
             ),
             _fmtBtn(
               Icons.format_italic_rounded,
-              _fmt.italic,
-              () => setState(() => _fmt.italic = !_fmt.italic),
+              false,
+              () => _applyFormat('italic'),
               'Italic',
               isDark,
             ),
             _fmtBtn(
               Icons.format_underlined_rounded,
-              _fmt.underline,
-              () => setState(() => _fmt.underline = !_fmt.underline),
+              false,
+              () => _applyFormat('underline'),
               'Underline',
               isDark,
             ),
             _fmtBtn(
               Icons.format_strikethrough_rounded,
-              _fmt.strike,
-              () => setState(() => _fmt.strike = !_fmt.strike),
+              false,
+              () => _applyFormat('strike'),
               'Strike',
               isDark,
             ),
@@ -805,13 +1024,10 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
             _fmtBtn(
               Icons.format_clear_rounded,
               false,
-              () => setState(() {
-                _fmt.bold = false;
-                _fmt.italic = false;
-                _fmt.underline = false;
-                _fmt.strike = false;
-                _fmt.style = 'Normal';
-              }),
+              () {
+                (_activeBodyCtrl as RichTextEditingController).clearAllFormats();
+                setState(() => _fmt.style = 'Normal');
+              },
               'Clear',
               isDark,
             ),
@@ -874,9 +1090,9 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
   ) {
     return Tooltip(
       message: tip,
-      child: InkWell(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: fn,
-        borderRadius: BorderRadius.circular(8),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           width: 36,
@@ -1049,7 +1265,8 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
                       .composeEmail(
                         to: _toCtrl.text,
                         subject: _subCtrl.text,
-                        body: _bodyCtrl.text,
+                        body: _bodyCtrl.formats.isNotEmpty ? _bodyCtrl.toHtml() : _bodyCtrl.text,
+                        isHtml: _bodyCtrl.formats.isNotEmpty,
                         isDraft: true,
                         attachments: List.from(_emailFiles),
                       );
@@ -1370,7 +1587,8 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
             await ref.read(emailProvider.notifier).composeEmail(
                   to: _toCtrl.text.trim(),
                   subject: _subCtrl.text,
-                  body: _bodyCtrl.text,
+                  body: _bodyCtrl.formats.isNotEmpty ? _bodyCtrl.toHtml() : _bodyCtrl.text,
+                  isHtml: _bodyCtrl.formats.isNotEmpty,
                   cc: _ccCtrl.text.isNotEmpty ? _ccCtrl.text : null,
                   bcc: _bccCtrl.text.isNotEmpty ? _bccCtrl.text : null,
                   isDraft: false,
@@ -1426,119 +1644,113 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
   TextEditingController get _activeBodyCtrl =>
       _tab.index == 0 ? _bodyCtrl : _cbBodyCtrl;
 
-  void _toggleQuote() {
+  /// Applies or removes a format type ('bold','italic','underline','strike')
+  /// on the currently selected text.  Text content is NEVER modified;
+  /// only the format-range metadata inside the controller changes.
+  void _applyFormat(String formatType) {
+    final ctrl = _activeBodyCtrl as RichTextEditingController;
+    final text = ctrl.text;
+
+    // Determine selection (live first, then saved fallback)
+    TextSelection sel;
+    if (ctrl.selection.isValid && !ctrl.selection.isCollapsed) {
+      sel = ctrl.selection;
+    } else if (_savedSelection != null &&
+        _savedSelection!.isValid &&
+        !_savedSelection!.isCollapsed &&
+        _savedSelection!.end <= text.length) {
+      sel = _savedSelection!;
+    } else {
+      return; // nothing selected → nothing to format
+    }
+
+    final start = sel.start;
+    final end = sel.end;
+
+    // Toggle: already formatted → remove, otherwise → add
+    if (ctrl.isRangeFormatted(start, end, formatType)) {
+      ctrl.removeFormat(start, end, formatType);
+    } else {
+      ctrl.addFormat(start, end, formatType);
+    }
+
+    _savedSelection = null;
+    _activeBodyFocusNode.requestFocus();
+    // Restore the selection so the user can apply more formats
+    ctrl.selection = TextSelection(baseOffset: start, extentOffset: end);
+  }
+
+  void _modifyLines(String Function(int index, String line) modifier) {
     final ctrl = _activeBodyCtrl;
     final text = ctrl.text;
     final selection = ctrl.selection;
-    if (selection.isValid && selection.start != selection.end) {
-      final selectedText = selection.textInside(text);
-      final newText = text.replaceRange(
-        selection.start,
-        selection.end,
-        '“$selectedText”',
-      );
+
+    int start = selection.isValid && selection.start >= 0 ? selection.start : text.length;
+    int end = selection.isValid && selection.end >= 0 ? selection.end : text.length;
+
+    // Find line boundaries
+    int lineStart = start;
+    while (lineStart > 0 && text[lineStart - 1] != '\n') lineStart--;
+    
+    int lineEnd = end;
+    while (lineEnd < text.length && text[lineEnd] != '\n') lineEnd++;
+
+    final selectedLinesText = text.substring(lineStart, lineEnd);
+    final lines = selectedLinesText.split('\n');
+    
+    final newLines = <String>[];
+    for (int i = 0; i < lines.length; i++) {
+      newLines.add(modifier(i, lines[i]));
+    }
+    
+    final replaced = newLines.join('\n');
+    final newText = text.replaceRange(lineStart, lineEnd, replaced);
+    
+    ctrl.value = ctrl.value.copyWith(
+      text: newText,
+      selection: TextSelection(
+        baseOffset: lineStart,
+        extentOffset: lineStart + replaced.length,
+      ),
+    );
+  }
+
+  void _toggleQuote() {
+    final ctrl = _activeBodyCtrl;
+    if (ctrl.selection.isValid && !ctrl.selection.isCollapsed) {
+      final text = ctrl.text;
+      final sel = ctrl.selection;
+      final selectedText = sel.textInside(text);
+      final newText = text.replaceRange(sel.start, sel.end, '“$selectedText”');
       ctrl.value = ctrl.value.copyWith(
         text: newText,
-        selection: TextSelection.collapsed(
-          offset: selection.start + 1 + selectedText.length + 1,
-        ),
+        selection: TextSelection.collapsed(offset: sel.start + 1 + selectedText.length + 1),
       );
     } else {
-      final insertion = '\n> ';
-      if (selection.isValid) {
-        final newText = text.replaceRange(
-          selection.start,
-          selection.end,
-          insertion,
-        );
-        ctrl.value = ctrl.value.copyWith(
-          text: newText,
-          selection: TextSelection.collapsed(
-            offset: selection.start + insertion.length,
-          ),
-        );
-      } else {
-        ctrl.text += insertion;
-      }
+      _modifyLines((i, line) => '> $line');
     }
   }
 
   void _toggleNumbered() {
-    final ctrl = _activeBodyCtrl;
-    final text = ctrl.text;
-    final selection = ctrl.selection;
-    final insertion = '\n1. ';
-    if (selection.isValid) {
-      final newText = text.replaceRange(
-        selection.start,
-        selection.end,
-        insertion,
-      );
-      ctrl.value = ctrl.value.copyWith(
-        text: newText,
-        selection: TextSelection.collapsed(
-          offset: selection.start + insertion.length,
-        ),
-      );
-    } else {
-      ctrl.text += insertion;
-    }
+    _modifyLines((i, line) => '${i + 1}. $line');
   }
 
   void _toggleBullet() {
-    final ctrl = _activeBodyCtrl;
-    final text = ctrl.text;
-    final selection = ctrl.selection;
-    final insertion = '\n• ';
-    if (selection.isValid) {
-      final newText = text.replaceRange(
-        selection.start,
-        selection.end,
-        insertion,
-      );
-      ctrl.value = ctrl.value.copyWith(
-        text: newText,
-        selection: TextSelection.collapsed(
-          offset: selection.start + insertion.length,
-        ),
-      );
-    } else {
-      ctrl.text += insertion;
-    }
+    _modifyLines((i, line) => '• $line');
   }
 
   void _indentIncrease() {
-    final ctrl = _activeBodyCtrl;
-    final text = ctrl.text;
-    final selection = ctrl.selection;
-    final insertion = '    ';
-    if (selection.isValid) {
-      final newText = text.replaceRange(
-        selection.start,
-        selection.end,
-        insertion,
-      );
-      ctrl.value = ctrl.value.copyWith(
-        text: newText,
-        selection: TextSelection.collapsed(
-          offset: selection.start + insertion.length,
-        ),
-      );
-    } else {
-      ctrl.text += insertion;
-    }
+    _modifyLines((i, line) => '    $line');
   }
 
   void _indentDecrease() {
-    final ctrl = _activeBodyCtrl;
-    final text = ctrl.text;
-    if (text.endsWith('    ')) {
-      ctrl.text = text.substring(0, text.length - 4);
-    } else if (text.endsWith('  ')) {
-      ctrl.text = text.substring(0, text.length - 2);
-    } else if (text.endsWith(' ')) {
-      ctrl.text = text.substring(0, text.length - 1);
-    }
+    _modifyLines((i, line) {
+      if (line.startsWith('    ')) return line.substring(4);
+      if (line.startsWith('   ')) return line.substring(3);
+      if (line.startsWith('  ')) return line.substring(2);
+      if (line.startsWith(' ')) return line.substring(1);
+      return line;
+    });
   }
 }
 

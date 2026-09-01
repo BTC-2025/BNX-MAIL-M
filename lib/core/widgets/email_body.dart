@@ -9,6 +9,7 @@ import 'avatar_widget.dart';
 import 'label_chip.dart';
 import '../../models/email_model.dart';
 import '../../models/attachment_model.dart';
+import '../../models/label_model.dart';
 import '../../data/email_provider.dart';
 import '../../data/all_inboxes_provider.dart';
 import '../../data/app_state_provider.dart';
@@ -567,12 +568,28 @@ class EmailBody extends ConsumerWidget {
                 ),
                 if (email.labels.isNotEmpty) ...[
                   const SizedBox(width: 8),
-                  Wrap(
-                    spacing: 4,
-                    children: email.labels
-                        .map((l) => LabelChip(labelName: l))
-                        .toList(),
-                  ),
+                  () {
+                    final customLabels = ref.watch(customLabelsProvider);
+                    return Wrap(
+                      spacing: 4,
+                      children: email.labels.map((l) {
+                        final matched = customLabels.firstWhere(
+                          (cl) =>
+                              cl.name.trim().toLowerCase() == l.trim().toLowerCase() ||
+                              cl.id.trim().toLowerCase() == l.trim().toLowerCase(),
+                          orElse: () => LabelModel(
+                            id: l,
+                            name: l,
+                            color: const Color(0xFF195BAC),
+                          ),
+                        );
+                        return LabelChip(
+                          labelName: matched.name,
+                          customColor: matched.color,
+                        );
+                      }).toList(),
+                    );
+                  }(),
                 ],
               ],
             ),
@@ -1228,20 +1245,186 @@ class EmailBody extends ConsumerWidget {
       );
     }
 
+    // ── lightweight HTML → TextSpan parser ─────────────────────────────
+    TextSpan _parseHtmlToSpan(String raw) {
+      const baseStyle = TextStyle(
+        fontSize: 14,
+        height: 1.55,
+        letterSpacing: 0.15,
+      );
+
+      if (raw.trim().isEmpty) {
+        return const TextSpan(text: '(No Content)', style: baseStyle);
+      }
+
+      // Decode HTML entities
+      String _decodeEntities(String s) => s
+          .replaceAll('&amp;', '&')
+          .replaceAll('&lt;', '<')
+          .replaceAll('&gt;', '>')
+          .replaceAll('&quot;', '"')
+          .replaceAll('&nbsp;', ' ')
+          .replaceAll('&#39;', "'")
+          .replaceAll('&rsquo;', "'")
+          .replaceAll('&lsquo;', "'")
+          .replaceAll('&ldquo;', '"')
+          .replaceAll('&rdquo;', '"')
+          .replaceAll('&ndash;', '-')
+          .replaceAll('&mdash;', '—');
+
+      // Check if content is actually HTML
+      final isHtml = RegExp(
+        r'<(html|body|div|p|span|table|br|a|b|i|u|s|strong|em|del|strike|ul|ol|li|h[1-6])\b',
+        caseSensitive: false,
+      ).hasMatch(raw);
+
+      // Simple markdown parser for plain text
+      TextSpan _parseMarkdownToSpan(String text, TextStyle baseStyle) {
+        final spans = <InlineSpan>[];
+        // Match asterisks for bold, underscores for italic across multiple lines
+        final RegExp re = RegExp(r'(\*\*|\*)(.*?)\1|(__|_)(.*?)\3', dotAll: true);
+        int cursor = 0;
+        
+        for (final match in re.allMatches(text)) {
+          if (match.start > cursor) {
+            spans.add(TextSpan(text: text.substring(cursor, match.start), style: baseStyle));
+          }
+          final isBold = match.group(1) != null; // matched asterisks
+          final content = isBold ? match.group(2)! : match.group(4)!;
+          
+          final style = baseStyle.copyWith(
+            fontWeight: isBold ? FontWeight.bold : null,
+            fontStyle: !isBold ? FontStyle.italic : null,
+          );
+          spans.add(TextSpan(text: content, style: style));
+          cursor = match.end;
+        }
+        
+        if (cursor < text.length) {
+          spans.add(TextSpan(text: text.substring(cursor), style: baseStyle));
+        }
+        
+        return spans.length == 1 ? spans.first as TextSpan : TextSpan(children: spans);
+      }
+
+      if (!isHtml) {
+        // Plain text — preserve exact line breaks and parse basic markdown
+        String cleaned = _decodeEntities(raw);
+        cleaned = cleaned.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+        return _parseMarkdownToSpan(cleaned.trim(), baseStyle);
+      }
+
+      // ── HTML parsing → styled TextSpans ──────────────────────────────
+      final spans = <InlineSpan>[];
+
+      // Regex that splits on HTML tags, keeping the tags as separate matches
+      final tagRe = RegExp(r'<(/?)(\w+)([^>]*?)(/?)>', caseSensitive: false);
+      final parts = <_HtmlPart>[];
+      int cursor = 0;
+      for (final m in tagRe.allMatches(raw)) {
+        if (m.start > cursor) {
+          parts.add(_HtmlPart.text(raw.substring(cursor, m.start)));
+        }
+        final isClose = m.group(1) == '/';
+        final tag = m.group(2)!.toLowerCase();
+        final attrs = m.group(3) ?? '';
+        final isSelf = m.group(4) == '/';
+        parts.add(_HtmlPart.tag(tag, attributes: attrs, isClose: isClose, isSelfClosing: isSelf));
+        cursor = m.end;
+      }
+      if (cursor < raw.length) {
+        parts.add(_HtmlPart.text(raw.substring(cursor)));
+      }
+
+      // Walk through parts, tracking active styles using a stack for nested tags
+      final styleStack = <_HtmlPart>[];
+      int boldCount = 0, italicCount = 0, underlineCount = 0, strikeCount = 0;
+
+      for (final part in parts) {
+        if (part.isTag) {
+          final t = part.tagName!;
+          final opening = !part.isClose;
+          final attrs = part.attributes ?? '';
+
+          // Block-level tags → insert line break
+          if (['p', 'div', 'li', 'tr', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+               'blockquote', 'section', 'article'].contains(t)) {
+            if (part.isClose) {
+              spans.add(const TextSpan(text: '\n'));
+            }
+            continue;
+          }
+          if (t == 'br') {
+            spans.add(const TextSpan(text: '\n'));
+            continue;
+          }
+
+          // Inline style tags and styles
+          if (opening) {
+            bool isB = t == 'b' || t == 'strong' || RegExp(r'font-weight:\s*bold', caseSensitive: false).hasMatch(attrs);
+            bool isI = t == 'i' || t == 'em' || RegExp(r'font-style:\s*italic', caseSensitive: false).hasMatch(attrs);
+            bool isU = t == 'u' || RegExp(r'text-decoration:\s*underline', caseSensitive: false).hasMatch(attrs);
+            bool isS = t == 's' || t == 'del' || t == 'strike' || RegExp(r'text-decoration:\s*line-through', caseSensitive: false).hasMatch(attrs);
+
+            // Store the computed flags in the attributes field for easy removal
+            styleStack.add(_HtmlPart.tag(t, attributes: '$isB,$isI,$isU,$isS'));
+            if (isB) boldCount++;
+            if (isI) italicCount++;
+            if (isU) underlineCount++;
+            if (isS) strikeCount++;
+          } else {
+            for (int i = styleStack.length - 1; i >= 0; i--) {
+              if (styleStack[i].tagName == t) {
+                final removed = styleStack.removeAt(i);
+                final flags = removed.attributes!.split(',');
+                if (flags[0] == 'true') boldCount--;
+                if (flags[1] == 'true') italicCount--;
+                if (flags[2] == 'true') underlineCount--;
+                if (flags[3] == 'true') strikeCount--;
+                break;
+              }
+            }
+          }
+        } else {
+          // Text node
+          String txt = _decodeEntities(part.text!);
+          if (txt.isEmpty) continue;
+
+          TextStyle style = baseStyle;
+          if (boldCount > 0) style = style.copyWith(fontWeight: FontWeight.bold);
+          if (italicCount > 0) style = style.copyWith(fontStyle: FontStyle.italic);
+          final decs = <TextDecoration>[];
+          if (underlineCount > 0) decs.add(TextDecoration.underline);
+          if (strikeCount > 0) decs.add(TextDecoration.lineThrough);
+          if (decs.isNotEmpty) {
+            style = style.copyWith(decoration: TextDecoration.combine(decs));
+          }
+          spans.add(TextSpan(text: txt, style: style));
+        }
+      }
+
+      if (spans.isEmpty) {
+        return TextSpan(text: _decodeEntities(raw).trim(), style: baseStyle);
+      }
+      return TextSpan(children: spans);
+    }
+
+    // ── build the widget tree ─────────────────────────────────────────
+    final bodySource = email.htmlBody.isNotEmpty ? email.htmlBody : email.body;
+
     return Column(
       children: [
         buildToolbar(),
         Expanded(
           child: ListView(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 110),
             children: [
               buildHeaderSection(),
               const Divider(),
               const SizedBox(height: 16),
               // Email Body Content
-              SelectableText(
-                email.body,
-                style: const TextStyle(fontSize: 14, height: 1.6),
+              SelectableText.rich(
+                _parseHtmlToSpan(bodySource),
               ),
               buildAttachments(),
               // Feature 1: AI Smart Reply bar
@@ -1494,4 +1677,17 @@ class AttachmentDownloader {
       return null;
     }
   }
+}
+
+class _HtmlPart {
+  final String? text;
+  final String? tagName;
+  final String? attributes;
+  final bool isClose;
+  final bool isSelfClosing;
+
+  bool get isTag => tagName != null;
+
+  _HtmlPart.text(this.text) : tagName = null, attributes = null, isClose = false, isSelfClosing = false;
+  _HtmlPart.tag(this.tagName, {this.attributes, this.isClose = false, this.isSelfClosing = false}) : text = null;
 }

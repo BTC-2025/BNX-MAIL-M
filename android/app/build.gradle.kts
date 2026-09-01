@@ -1,5 +1,7 @@
 plugins {
     id("com.android.application")
+    // Add the Google services Gradle plugin
+    id("com.google.gms.google-services")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
@@ -44,6 +46,15 @@ flutter {
     source = "../.."
 }
 
+dependencies {
+    // Import the Firebase BoM
+    implementation(platform("com.google.firebase:firebase-bom:34.17.0"))
+
+    // Add the dependencies for Firebase products
+    implementation("com.google.firebase:firebase-analytics")
+    implementation("com.google.firebase:firebase-messaging")
+}
+
 tasks.register<Copy>("copyLogo") {
     from("C:/Users/RAVI KUMAR C/.gemini/antigravity-ide/brain/ffc2f011-4ab5-4123-997d-5ff6094d169a/media__1782899402953.jpg")
     into("../../assets")
@@ -59,3 +70,4 @@ tasks.configureEach {
         dependsOn("copyLogo")
     }
 }
+
