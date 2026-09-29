@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/dashboard/presentation/dashboard_shell.dart';
 import '../../features/dashboard/presentation/splash_screen.dart';
@@ -71,16 +72,34 @@ final goRouter = GoRouter(
         ),
         GoRoute(
           path: '/email/:id',
-          builder: (context, state) {
+          pageBuilder: (context, state) {
             final id = state.pathParameters['id']!;
-            return EmailBody(emailId: id);
+            if (defaultTargetPlatform == TargetPlatform.macOS) {
+              return NoTransitionPage(
+                key: state.pageKey,
+                child: EmailBody(emailId: id),
+              );
+            }
+            return MaterialPage(
+              key: state.pageKey,
+              child: EmailBody(emailId: id),
+            );
           },
         ),
         GoRoute(
           path: '/draft/:id',
-          builder: (context, state) {
+          pageBuilder: (context, state) {
             final id = state.pathParameters['id']!;
-            return DraftDetailScreen(draftId: id);
+            if (defaultTargetPlatform == TargetPlatform.macOS) {
+              return NoTransitionPage(
+                key: state.pageKey,
+                child: DraftDetailScreen(draftId: id),
+              );
+            }
+            return MaterialPage(
+              key: state.pageKey,
+              child: DraftDetailScreen(draftId: id),
+            );
           },
         ),
         GoRoute(

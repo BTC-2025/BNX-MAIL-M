@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'avatar_widget.dart';
 import 'label_chip.dart';
@@ -403,7 +404,9 @@ class _EmailTileState extends ConsumerState<EmailTile> {
           ref.read(appUiProvider.notifier).toggleEmailSelection(email.id);
         },
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
+          duration: defaultTargetPlatform == TargetPlatform.macOS
+              ? Duration.zero
+              : const Duration(milliseconds: 200),
           decoration: BoxDecoration(
             color: widget.isSelected
                 ? (isDark ? const Color(0xFF1E293B) : const Color(0xFFEAF1FB))
@@ -591,25 +594,34 @@ class _EmailTileState extends ConsumerState<EmailTile> {
                     ],
                     const SizedBox(width: 8),
                     SizedBox(
-                      width: 76,
+                      width: 112,
                       child: Align(
                         alignment: Alignment.centerRight,
                         child: AnimatedCrossFade(
-                          duration: BNXConstants.animationDurationFast,
+                          duration: defaultTargetPlatform == TargetPlatform.macOS
+                              ? Duration.zero
+                              : BNXConstants.animationDurationFast,
                           crossFadeState: _isHovered
                               ? CrossFadeState.showSecond
                               : CrossFadeState.showFirst,
-                          firstChild: Text(
-                            _formatDate(email.date),
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: textWeight,
-                              color: isDark
-                                  ? BNXColors.darkTextSecondary
-                                  : BNXColors.lightTextSecondary,
+                          firstChild: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerRight,
+                            child: Text(
+                              _formatDate(email.date),
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: textWeight,
+                                color: isDark
+                                    ? BNXColors.darkTextSecondary
+                                    : BNXColors.lightTextSecondary,
+                              ),
                             ),
                           ),
-                          secondChild: Row(
+                          secondChild: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerRight,
+                            child: Row(
                             mainAxisAlignment: MainAxisAlignment.end,
                             mainAxisSize: MainAxisSize.min,
                             children: isScheduledItem
@@ -727,6 +739,7 @@ class _EmailTileState extends ConsumerState<EmailTile> {
                         ),
                       ),
                     ),
+                  ),
                   ],
                 ),
               ),
@@ -748,7 +761,7 @@ class _EmailTileState extends ConsumerState<EmailTile> {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Padding(
-          padding: const EdgeInsets.all(6.0),
+          padding: const EdgeInsets.symmetric(horizontal: 5.0, vertical: 4.0),
           child: Icon(icon, size: 18, color: Colors.grey),
         ),
       ),
