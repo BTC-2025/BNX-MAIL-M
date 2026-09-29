@@ -82,11 +82,12 @@ class EmailBody extends ConsumerWidget {
       _handledDetailIds.add(email.id);
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         String? ownerToken;
-        if (email.ownerEmail != null && email.ownerEmail!.isNotEmpty) {
+        final ownerEmail = email.ownerEmail;
+        if (ownerEmail != null && ownerEmail.isNotEmpty) {
           final registry = await TokenService.getSavedAccountsFromRegistry();
           for (final item in registry) {
             final regEmail = item['email']?.toString().trim().toLowerCase() ?? '';
-            if (regEmail == email.ownerEmail!.trim().toLowerCase()) {
+            if (regEmail == ownerEmail.trim().toLowerCase()) {
               ownerToken = item['accessToken']?.toString();
               break;
             }
@@ -1246,7 +1247,7 @@ class EmailBody extends ConsumerWidget {
     }
 
     // ── lightweight HTML → TextSpan parser ─────────────────────────────
-    TextSpan _parseHtmlToSpan(String raw) {
+    TextSpan parseHtmlToSpan(String raw) {
       const baseStyle = TextStyle(
         fontSize: 14,
         height: 1.55,
@@ -1258,7 +1259,7 @@ class EmailBody extends ConsumerWidget {
       }
 
       // Decode HTML entities
-      String _decodeEntities(String s) => s
+      String decodeEntities(String s) => s
           .replaceAll('&amp;', '&')
           .replaceAll('&lt;', '<')
           .replaceAll('&gt;', '>')
@@ -1279,7 +1280,7 @@ class EmailBody extends ConsumerWidget {
       ).hasMatch(raw);
 
       // Simple markdown parser for plain text
-      TextSpan _parseMarkdownToSpan(String text, TextStyle baseStyle) {
+      TextSpan parseMarkdownToSpan(String text, TextStyle baseStyle) {
         final spans = <InlineSpan>[];
         // Match asterisks for bold, underscores for italic across multiple lines
         final RegExp re = RegExp(r'(\*\*|\*)(.*?)\1|(__|_)(.*?)\3', dotAll: true);
@@ -1309,9 +1310,9 @@ class EmailBody extends ConsumerWidget {
 
       if (!isHtml) {
         // Plain text — preserve exact line breaks and parse basic markdown
-        String cleaned = _decodeEntities(raw);
+        String cleaned = decodeEntities(raw);
         cleaned = cleaned.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
-        return _parseMarkdownToSpan(cleaned.trim(), baseStyle);
+        return parseMarkdownToSpan(cleaned.trim(), baseStyle);
       }
 
       // ── HTML parsing → styled TextSpans ──────────────────────────────
@@ -1387,7 +1388,7 @@ class EmailBody extends ConsumerWidget {
           }
         } else {
           // Text node
-          String txt = _decodeEntities(part.text!);
+          String txt = decodeEntities(part.text!);
           if (txt.isEmpty) continue;
 
           TextStyle style = baseStyle;
@@ -1404,7 +1405,7 @@ class EmailBody extends ConsumerWidget {
       }
 
       if (spans.isEmpty) {
-        return TextSpan(text: _decodeEntities(raw).trim(), style: baseStyle);
+        return TextSpan(text: decodeEntities(raw).trim(), style: baseStyle);
       }
       return TextSpan(children: spans);
     }
@@ -1424,7 +1425,7 @@ class EmailBody extends ConsumerWidget {
               const SizedBox(height: 16),
               // Email Body Content
               SelectableText.rich(
-                _parseHtmlToSpan(bodySource),
+                parseHtmlToSpan(bodySource),
               ),
               buildAttachments(),
               // Feature 1: AI Smart Reply bar

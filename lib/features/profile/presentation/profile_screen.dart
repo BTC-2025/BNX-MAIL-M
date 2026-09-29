@@ -11,7 +11,6 @@ import '../../../core/widgets/avatar_widget.dart';
 import '../../../data/app_state_provider.dart';
 import '../../../data/account_provider.dart';
 import '../../auth/presentation/notifiers/auth_notifier.dart';
-import '../../../models/account_model.dart';
 import '../../../data/email_provider.dart';
 import '../../../data/all_inboxes_provider.dart';
 import '../../../data/repositories/auth_repository.dart';
@@ -42,7 +41,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           final base64String = 'data:$mime;base64,${base64Encode(bytes)}';
 
           final activeAccount = ref.read(activeAccountProvider);
-          
+
           // Update Riverpod account state immediately (handles server upload & settings synchronization)
           await ref
               .read(accountsProvider.notifier)
@@ -122,7 +121,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             size: 22,
                           ),
                           onPressed: () {
-                            ref.read(appUiProvider.notifier).selectFolder('Settings');
+                            ref
+                                .read(appUiProvider.notifier)
+                                .selectFolder('Settings');
                             context.go('/settings');
                           },
                           tooltip: 'Settings',
@@ -254,13 +255,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             // Account rows
                             ...accounts.map((acc) {
                               final isSelected = acc.id == activeAccount.id;
-                                return GestureDetector(
+                              return GestureDetector(
                                 onTap: () async {
                                   if (!isSelected) {
                                     // Close dropdown immediately for instant visual feedback
                                     setState(() => _isExpanded = false);
 
-                                    final targetId = acc.email.isNotEmpty ? acc.email : acc.id;
+                                    final targetId = acc.email.isNotEmpty
+                                        ? acc.email
+                                        : acc.id;
                                     // Switch account — updates tokens & all provider caches
                                     await ref
                                         .read(accountsProvider.notifier)
@@ -271,9 +274,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                       // NEVER go to '/' — that is the SplashScreen and causes
                                       // a double-navigation black screen (/ → splash → /home).
                                       context.go('/home');
-                                      ScaffoldMessenger.of(context).showSnackBar(
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
                                         SnackBar(
-                                          content: Text('Switched to ${acc.email.isNotEmpty ? acc.email : acc.name}'),
+                                          content: Text(
+                                            'Switched to ${acc.email.isNotEmpty ? acc.email : acc.name}',
+                                          ),
                                           duration: const Duration(seconds: 1),
                                         ),
                                       );
@@ -467,12 +474,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     color: Colors.orangeAccent,
                     isDark: isDark,
                     onTap: () async {
-                      final activeEmail = activeAccount.email.isNotEmpty ? activeAccount.email : activeAccount.id;
-                      await ref.read(accountsProvider.notifier).signOutSingleAccount(
-                        targetEmail: activeEmail,
-                        ref: ref,
-                        context: context,
-                      );
+                      final activeEmail = activeAccount.email.isNotEmpty
+                          ? activeAccount.email
+                          : activeAccount.id;
+                      await ref
+                          .read(accountsProvider.notifier)
+                          .signOutSingleAccount(
+                            targetEmail: activeEmail,
+                            ref: ref,
+                            context: context,
+                          );
                     },
                   ),
 
@@ -497,7 +508,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         context.go('/login');
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('Logged out of all accounts successfully.'),
+                            content: Text(
+                              'Logged out of all accounts successfully.',
+                            ),
                             backgroundColor: Colors.redAccent,
                           ),
                         );
@@ -554,284 +567,4 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  void _showEditProfileDialog(
-    BuildContext context,
-    WidgetRef ref,
-    AccountModel account,
-    bool isDark,
-  ) {
-    final nameController = TextEditingController();
-    final designationController = TextEditingController();
-    final experienceController = TextEditingController();
-    DateTime? selectedDob;
-
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            String dobText = selectedDob == null
-                ? 'Select DOB'
-                : '${selectedDob!.day}/${selectedDob!.month}/${selectedDob!.year}';
-
-            return Dialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20.0),
-              ),
-              backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-              child: Container(
-                constraints: const BoxConstraints(maxWidth: 460),
-                padding: const EdgeInsets.all(24.0),
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Edit Personal Details',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: isDark
-                              ? Colors.white
-                              : BNXColors.lightTextPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      Text(
-                        'Full Name',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: isDark
-                              ? Colors.white70
-                              : BNXColors.lightTextSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      TextField(
-                        controller: nameController,
-                        decoration: InputDecoration(
-                          hintText: 'Enter name...',
-                          contentPadding: const EdgeInsets.all(12),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: BorderSide(
-                              color: isDark
-                                  ? Colors.white24
-                                  : Colors.grey.shade300,
-                            ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: const BorderSide(
-                              color: BNXColors.lightPrimary,
-                              width: 2,
-                            ),
-                          ),
-                        ),
-                        style: TextStyle(
-                          color: isDark ? Colors.white : Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      Text(
-                        'Designation',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: isDark
-                              ? Colors.white70
-                              : BNXColors.lightTextSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      TextField(
-                        controller: designationController,
-                        decoration: InputDecoration(
-                          hintText: 'e.g. Flutter Developer...',
-                          contentPadding: const EdgeInsets.all(12),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: BorderSide(
-                              color: isDark
-                                  ? Colors.white24
-                                  : Colors.grey.shade300,
-                            ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: const BorderSide(
-                              color: BNXColors.lightPrimary,
-                              width: 2,
-                            ),
-                          ),
-                        ),
-                        style: TextStyle(
-                          color: isDark ? Colors.white : Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      Text(
-                        'Professional Experience',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: isDark
-                              ? Colors.white70
-                              : BNXColors.lightTextSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      TextField(
-                        controller: experienceController,
-                        maxLines: 3,
-                        decoration: InputDecoration(
-                          hintText: 'Describe your professional experience...',
-                          contentPadding: const EdgeInsets.all(12),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: BorderSide(
-                              color: isDark
-                                  ? Colors.white24
-                                  : Colors.grey.shade300,
-                            ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: const BorderSide(
-                              color: BNXColors.lightPrimary,
-                              width: 2,
-                            ),
-                          ),
-                        ),
-                        style: TextStyle(
-                          color: isDark ? Colors.white : Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      Text(
-                        'Date of Birth',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: isDark
-                              ? Colors.white70
-                              : BNXColors.lightTextSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      InkWell(
-                        onTap: () async {
-                          final DateTime? picked = await showDatePicker(
-                            context: context,
-                            initialDate: selectedDob ?? DateTime(1995, 1, 1),
-                            firstDate: DateTime(1950),
-                            lastDate: DateTime.now(),
-                          );
-                          if (picked != null) {
-                            setState(() {
-                              selectedDob = picked;
-                            });
-                          }
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 14,
-                          ),
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                              color: isDark
-                                  ? Colors.white24
-                                  : Colors.grey.shade300,
-                            ),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                dobText,
-                                style: TextStyle(
-                                  color: selectedDob == null
-                                      ? Colors.grey
-                                      : (isDark
-                                            ? Colors.white
-                                            : Colors.black87),
-                                  fontSize: 14,
-                                ),
-                              ),
-                              Icon(
-                                Icons.calendar_today_rounded,
-                                size: 18,
-                                color: isDark ? Colors.white54 : Colors.grey,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          TextButton(
-                            onPressed: () => Navigator.of(context).pop(),
-                            child: const Text('Cancel'),
-                          ),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: BNXColors.lightPrimary,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            onPressed: () async {
-                              final newName = nameController.text.trim();
-                              await ref
-                                  .read(accountsProvider.notifier)
-                                  .updateProfile(
-                                    account.id,
-                                    name: newName.isNotEmpty
-                                        ? newName
-                                        : account.name,
-                                    designation: designationController.text
-                                        .trim(),
-                                    experience: experienceController.text
-                                        .trim(),
-                                    dob: selectedDob ?? account.dob,
-                                  );
-
-                              if (context.mounted) {
-                                Navigator.of(context).pop();
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Profile details updated & synchronized successfully!'),
-                                    backgroundColor: Color(0xFF195BAC),
-                                  ),
-                                );
-                              }
-                            },
-                            child: const Text(
-                              'Save Details',
-                              style: TextStyle(color: Colors.white),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
 }

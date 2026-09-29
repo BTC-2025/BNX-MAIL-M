@@ -33,7 +33,6 @@ class _RegisterAccountTypeScreenState
 
   // Validation errors (Business)
   String? _businessNameError;
-  String? _customDomainError;
   String? _ownerFirstNameError;
   String? _ownerLastNameError;
   String? _adminUsernameError;
@@ -49,7 +48,6 @@ class _RegisterAccountTypeScreenState
   String? _childPasswordError;
   String? _childRetypePasswordError;
   String? _parentEmailError;
-  String? _securityAnswerError;
 
   bool _isRegistering = false;
 
@@ -120,13 +118,6 @@ class _RegisterAccountTypeScreenState
   bool _obscureChildPassword = true;
   bool _obscureChildRetypePassword = true;
 
-  final List<String> _securityQuestions = [
-    'What is your favorite animal?',
-    'What is the name of your first pet?',
-    'What is your favorite book?',
-    'What is the name of your school?',
-    'What is your favorite game?',
-  ];
 
   @override
   void dispose() {
@@ -162,7 +153,11 @@ class _RegisterAccountTypeScreenState
   }
 
   Future<void> _fetchSuggestions(
-      String firstName, String lastName, String dob, bool isStep3) async {
+    String firstName,
+    String lastName,
+    String dob,
+    bool isStep3,
+  ) async {
     final suggestions = await AuthRepository.getUsernameSuggestions(
       firstName: firstName,
       lastName: lastName,
@@ -200,7 +195,10 @@ class _RegisterAccountTypeScreenState
       if (!mounted) return;
       setState(() {
         _isSendingParentOtp = false;
-        _parentOtpError = e.toString().replaceAll('Exception: ', '').replaceAll('ApiException(400): ', '');
+        _parentOtpError = e
+            .toString()
+            .replaceAll('Exception: ', '')
+            .replaceAll('ApiException(400): ', '');
       });
     }
   }
@@ -228,7 +226,10 @@ class _RegisterAccountTypeScreenState
       if (!mounted) return;
       setState(() {
         _isVerifyingParentOtp = false;
-        _parentOtpError = e.toString().replaceAll('Exception: ', '').replaceAll('ApiException(400): ', '');
+        _parentOtpError = e
+            .toString()
+            .replaceAll('Exception: ', '')
+            .replaceAll('ApiException(400): ', '');
       });
     }
   }
@@ -237,32 +238,32 @@ class _RegisterAccountTypeScreenState
     final String password = _selectedType == 'business'
         ? _adminPasswordController.text
         : _selectedType == 'child'
-            ? _childPasswordController.text
-            : _passwordController.text;
+        ? _childPasswordController.text
+        : _passwordController.text;
 
     final String firstName = _selectedType == 'business'
         ? _ownerFirstNameController.text.trim()
         : _selectedType == 'child'
-            ? _childFirstNameController.text.trim()
-            : _firstNameController.text.trim();
+        ? _childFirstNameController.text.trim()
+        : _firstNameController.text.trim();
 
     final String lastName = _selectedType == 'business'
         ? _ownerLastNameController.text.trim()
         : _selectedType == 'child'
-            ? ''
-            : _lastNameController.text.trim();
+        ? ''
+        : _lastNameController.text.trim();
 
     final String username = _selectedType == 'business'
         ? _adminUsernameController.text.trim()
         : _selectedType == 'child'
-            ? _childUsernameController.text.trim()
-            : _usernameController.text.trim();
+        ? _childUsernameController.text.trim()
+        : _usernameController.text.trim();
 
     final String dob = _selectedType == 'business'
         ? DateTime.now().toIso8601String().substring(0, 10)
         : _selectedType == 'child'
-            ? _childDobController.text.trim()
-            : _dobController.text.trim();
+        ? _childDobController.text.trim()
+        : _dobController.text.trim();
 
     setState(() {
       _isRegistering = true;
@@ -286,8 +287,7 @@ class _RegisterAccountTypeScreenState
         parentEmail: _selectedType == 'child'
             ? _parentEmailController.text.trim()
             : null,
-        securityQuestion:
-            _selectedType == 'child' ? _securityQuestion : null,
+        securityQuestion: _selectedType == 'child' ? _securityQuestion : null,
         securityAnswer: _selectedType == 'child'
             ? _securityAnswerController.text.trim()
             : null,
@@ -306,7 +306,10 @@ class _RegisterAccountTypeScreenState
     } catch (e) {
       if (!mounted) return;
       setState(() => _isRegistering = false);
-      final errorMsg = e.toString().replaceAll('Exception: ', '').replaceAll('ApiException(400): ', '');
+      final errorMsg = e
+          .toString()
+          .replaceAll('Exception: ', '')
+          .replaceAll('ApiException(400): ', '');
 
       if (errorMsg.toLowerCase().contains('username') ||
           errorMsg.toLowerCase().contains('exists') ||
@@ -353,26 +356,26 @@ class _RegisterAccountTypeScreenState
     final String password = _selectedType == 'business'
         ? _adminPasswordController.text
         : _selectedType == 'child'
-            ? _childPasswordController.text
-            : _passwordController.text;
+        ? _childPasswordController.text
+        : _passwordController.text;
 
     final String firstName = _selectedType == 'business'
         ? _ownerFirstNameController.text.trim()
         : _selectedType == 'child'
-            ? _childFirstNameController.text.trim()
-            : _firstNameController.text.trim();
+        ? _childFirstNameController.text.trim()
+        : _firstNameController.text.trim();
 
     final String lastName = _selectedType == 'business'
         ? _ownerLastNameController.text.trim()
         : _selectedType == 'child'
-            ? ''
-            : _lastNameController.text.trim();
+        ? ''
+        : _lastNameController.text.trim();
 
     final String dob = _selectedType == 'business'
         ? DateTime.now().toIso8601String().substring(0, 10)
         : _selectedType == 'child'
-            ? _childDobController.text.trim()
-            : _dobController.text.trim();
+        ? _childDobController.text.trim()
+        : _dobController.text.trim();
 
     final cleanHandle = handle.contains('@') ? handle.split('@').first : handle;
 
@@ -393,13 +396,17 @@ class _RegisterAccountTypeScreenState
     } catch (e) {
       if (!mounted) return;
       setState(() => _isRegistering = false);
-      final errorMsg = e.toString().replaceAll('Exception: ', '').replaceAll('ApiException(400): ', '');
+      final errorMsg = e
+          .toString()
+          .replaceAll('Exception: ', '')
+          .replaceAll('ApiException(400): ', '');
 
       if (errorMsg.toLowerCase().contains('username') ||
           errorMsg.toLowerCase().contains('exists') ||
           errorMsg.toLowerCase().contains('taken')) {
         setState(() {
-          _emailHandleError = 'Email handle "$cleanHandle" is already taken. Pick a suggestion below:';
+          _emailHandleError =
+              'Email handle "$cleanHandle" is already taken. Pick a suggestion below:';
         });
         await _fetchSuggestions(firstName, lastName, dob, true);
       } else {
@@ -414,7 +421,9 @@ class _RegisterAccountTypeScreenState
   }
 
   Widget _buildSuggestionChips(
-      List<String> suggestions, Function(String) onSelect) {
+    List<String> suggestions,
+    Function(String) onSelect,
+  ) {
     if (suggestions.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
@@ -435,7 +444,11 @@ class _RegisterAccountTypeScreenState
             runSpacing: 8,
             children: suggestions.map((s) {
               return ActionChip(
-                avatar: const Icon(Icons.add, size: 14, color: Color(0xFF195BAC)),
+                avatar: const Icon(
+                  Icons.add,
+                  size: 14,
+                  color: Color(0xFF195BAC),
+                ),
                 label: Text(
                   s,
                   style: const TextStyle(
@@ -814,7 +827,8 @@ class _RegisterAccountTypeScreenState
                                   _step = 1;
                                 });
                               }
-                            } else if (_selectedType == 'business' && _step == 2) {
+                            } else if (_selectedType == 'business' &&
+                                _step == 2) {
                               if (_businessStep > 1) {
                                 setState(() {
                                   _businessStep--;
@@ -876,8 +890,8 @@ class _RegisterAccountTypeScreenState
                 _selectedType == 'child' && _step == 2
                     ? 'Step $_childStep of 5'
                     : (_selectedType == 'personal' && _step == 2
-                        ? 'Step $_personalStep of 3'
-                        : 'Step $_step of 3'),
+                          ? 'Step $_personalStep of 3'
+                          : 'Step $_step of 3'),
                 style: TextStyle(
                   fontSize: 13,
                   color: Colors.grey.shade600,
@@ -1136,21 +1150,28 @@ class _RegisterAccountTypeScreenState
                     final phone = _phoneController.text.trim();
 
                     setState(() {
-                      _ownerFirstNameError =
-                          oFName.isEmpty ? 'Owner First Name is required' : null;
-                      _ownerLastNameError =
-                          oLName.isEmpty ? 'Owner Last Name is required' : null;
-                      _businessNameError =
-                          bReg.isEmpty ? 'Registration Number is required' : null;
-                      _phoneError =
-                          phone.isEmpty ? 'Phone Number is required' : null;
+                      _ownerFirstNameError = oFName.isEmpty
+                          ? 'Owner First Name is required'
+                          : null;
+                      _ownerLastNameError = oLName.isEmpty
+                          ? 'Owner Last Name is required'
+                          : null;
+                      _businessNameError = bReg.isEmpty
+                          ? 'Registration Number is required'
+                          : null;
+                      _phoneError = phone.isEmpty
+                          ? 'Phone Number is required'
+                          : null;
                     });
 
                     if (_ownerFirstNameError == null &&
                         _ownerLastNameError == null &&
                         _businessNameError == null &&
                         _phoneError == null) {
-                      final today = DateTime.now().toIso8601String().substring(0, 10);
+                      final today = DateTime.now().toIso8601String().substring(
+                        0,
+                        10,
+                      );
                       await _fetchSuggestions(oFName, oLName, today, false);
                       setState(() {
                         _businessStep = 2;
@@ -1273,7 +1294,8 @@ class _RegisterAccountTypeScreenState
                   ),
                   onPressed: () {
                     setState(() {
-                      _obscureRetypeAdminPassword = !_obscureRetypeAdminPassword;
+                      _obscureRetypeAdminPassword =
+                          !_obscureRetypeAdminPassword;
                     });
                   },
                 ),
@@ -1304,12 +1326,16 @@ class _RegisterAccountTypeScreenState
                             _adminUsernameError = aUName.isEmpty
                                 ? 'Admin Username is required'
                                 : null;
-                            _adminPasswordError = validatePasswordStrength(aPass);
+                            _adminPasswordError = validatePasswordStrength(
+                              aPass,
+                            );
 
                             if (aRepass.isEmpty) {
-                              _retypeAdminPasswordError = 'Please retype your password';
+                              _retypeAdminPasswordError =
+                                  'Please retype your password';
                             } else if (aPass != aRepass) {
-                              _retypeAdminPasswordError = 'Passwords do not match';
+                              _retypeAdminPasswordError =
+                                  'Passwords do not match';
                             } else {
                               _retypeAdminPasswordError = null;
                             }
@@ -1332,7 +1358,10 @@ class _RegisterAccountTypeScreenState
                         )
                       : const Text(
                           'Register Account',
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                 ),
               ),
@@ -1415,9 +1444,7 @@ class _RegisterAccountTypeScreenState
                 errorText: _childDobError,
                 readOnly: false, // Typing enabled
                 keyboardType: TextInputType.datetime,
-                inputFormatters: [
-                  DateInputFormatter(),
-                ],
+                inputFormatters: [DateInputFormatter()],
                 onChanged: (val) {
                   if (_childDobError != null) {
                     setState(() => _childDobError = null);
@@ -1425,7 +1452,10 @@ class _RegisterAccountTypeScreenState
                   setState(() {});
                 },
                 suffixIcon: IconButton(
-                  icon: const Icon(Icons.calendar_month_outlined, color: Color(0xFF195BAC)),
+                  icon: const Icon(
+                    Icons.calendar_month_outlined,
+                    color: Color(0xFF195BAC),
+                  ),
                   onPressed: () async {
                     final DateTime? picked = await showDatePicker(
                       context: context,
@@ -1479,7 +1509,10 @@ class _RegisterAccountTypeScreenState
                       const SizedBox(height: 4),
                       const Text(
                         'Child accounts are designed for users under 18.',
-                        style: TextStyle(fontSize: 12, color: Color(0xFF1E3A8A)),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF1E3A8A),
+                        ),
                       ),
                       const SizedBox(height: 8),
                       TextButton.icon(
@@ -1492,8 +1525,10 @@ class _RegisterAccountTypeScreenState
                             _selectedType = 'personal';
                             _step = 2;
                             _personalStep = 1;
-                            _firstNameController.text = _childFirstNameController.text;
-                            _lastNameController.text = _childLastNameController.text;
+                            _firstNameController.text =
+                                _childFirstNameController.text;
+                            _lastNameController.text =
+                                _childLastNameController.text;
                             _dobController.text = _childDobController.text;
                             _personalGender = _childGender;
                           });
@@ -1501,7 +1536,10 @@ class _RegisterAccountTypeScreenState
                         icon: const Icon(Icons.arrow_forward_rounded, size: 16),
                         label: const Text(
                           'Create a Personal Account instead',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
                         ),
                       ),
                     ],
@@ -1529,14 +1567,19 @@ class _RegisterAccountTypeScreenState
                     final dob = _childDobController.text.trim();
 
                     setState(() {
-                      _childFirstNameError = fName.isEmpty ? 'First Name is required' : null;
-                      _childLastNameError = lName.isEmpty ? 'Last Name is required' : null;
+                      _childFirstNameError = fName.isEmpty
+                          ? 'First Name is required'
+                          : null;
+                      _childLastNameError = lName.isEmpty
+                          ? 'Last Name is required'
+                          : null;
 
                       final dobErr = validateDob(dob);
                       if (dobErr != null) {
                         _childDobError = dobErr;
                       } else if (calculateAge(dob) >= 18) {
-                        _childDobError = 'Child account is only for users under 18';
+                        _childDobError =
+                            'Child account is only for users under 18';
                       } else {
                         _childDobError = null;
                       }
@@ -1617,8 +1660,8 @@ class _RegisterAccountTypeScreenState
                         color: _parentOtpError != null
                             ? Colors.redAccent
                             : (_parentOtpVerified
-                                ? const Color(0xFF22C55E)
-                                : Colors.grey.shade600),
+                                  ? const Color(0xFF22C55E)
+                                  : Colors.grey.shade600),
                         fontWeight: FontWeight.w500,
                       ),
                       maxLines: 1,
@@ -1628,7 +1671,10 @@ class _RegisterAccountTypeScreenState
                   const SizedBox(width: 8),
                   TextButton.icon(
                     style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
@@ -1637,8 +1683,10 @@ class _RegisterAccountTypeScreenState
                         : () async {
                             final email = _parentEmailController.text.trim();
                             if (email.isEmpty || !email.contains('@')) {
-                              setState(() =>
-                                  _parentEmailError = 'Please enter a valid Parent Email address');
+                              setState(
+                                () => _parentEmailError =
+                                    'Please enter a valid Parent Email address',
+                              );
                               return;
                             }
                             await _sendParentOtp();
@@ -1703,8 +1751,10 @@ class _RegisterAccountTypeScreenState
                           final otp = _parentOtpController.text.trim();
 
                           if (pEmail.isEmpty || !pEmail.contains('@')) {
-                            setState(() => _parentEmailError =
-                                'Please enter a valid Parent Email address');
+                            setState(
+                              () => _parentEmailError =
+                                  'Please enter a valid Parent Email address',
+                            );
                             return;
                           }
 
@@ -1712,8 +1762,10 @@ class _RegisterAccountTypeScreenState
                             if (_parentOtpMessage == null) {
                               await _sendParentOtp();
                             } else {
-                              setState(() => _parentOtpError =
-                                  'Please enter the 6-digit Consent Code');
+                              setState(
+                                () => _parentOtpError =
+                                    'Please enter the 6-digit Consent Code',
+                              );
                             }
                             return;
                           }
@@ -1740,8 +1792,10 @@ class _RegisterAccountTypeScreenState
                         )
                       : const Text(
                           'Verify & Continue',
-                          style:
-                              TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                 ),
               ),
@@ -1822,7 +1876,9 @@ class _RegisterAccountTypeScreenState
                   onPressed: () {
                     final uName = _childUsernameController.text.trim();
                     setState(() {
-                      _childUsernameError = uName.isEmpty ? 'Username is required' : null;
+                      _childUsernameError = uName.isEmpty
+                          ? 'Username is required'
+                          : null;
                     });
                     if (_childUsernameError == null) {
                       setState(() {
@@ -1915,7 +1971,8 @@ class _RegisterAccountTypeScreenState
                   ),
                   onPressed: () {
                     setState(() {
-                      _obscureChildRetypePassword = !_obscureChildRetypePassword;
+                      _obscureChildRetypePassword =
+                          !_obscureChildRetypePassword;
                     });
                   },
                 ),
@@ -1942,19 +1999,25 @@ class _RegisterAccountTypeScreenState
                           final repass = _childRetypePasswordController.text;
 
                           setState(() {
-                            _childPasswordError = validatePasswordStrength(pass);
+                            _childPasswordError = validatePasswordStrength(
+                              pass,
+                            );
                             _childRetypePasswordError = repass.isEmpty
                                 ? 'Please confirm your password'
-                                : (pass != repass ? 'Passwords do not match' : null);
+                                : (pass != repass
+                                      ? 'Passwords do not match'
+                                      : null);
                           });
 
-                          if (_childPasswordError == null && _childRetypePasswordError == null) {
+                          if (_childPasswordError == null &&
+                              _childRetypePasswordError == null) {
                             setState(() => _isRegistering = true);
                             try {
                               // Register the Child account
                               final token = await AuthRepository.register(
                                 mode: 'CHILD',
-                                firstName: _childFirstNameController.text.trim(),
+                                firstName: _childFirstNameController.text
+                                    .trim(),
                                 lastName: _childLastNameController.text.trim(),
                                 username: _childUsernameController.text.trim(),
                                 password: pass,
@@ -1975,7 +2038,9 @@ class _RegisterAccountTypeScreenState
 
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
-                                  content: Text('Child Account successfully created! Please log in.'),
+                                  content: Text(
+                                    'Child Account successfully created! Please log in.',
+                                  ),
                                   backgroundColor: Color(0xFF22C55E),
                                 ),
                               );
@@ -1983,22 +2048,35 @@ class _RegisterAccountTypeScreenState
                             } catch (e) {
                               if (!mounted) return;
                               setState(() => _isRegistering = false);
-                              final errorMsg = e.toString().replaceAll('Exception: ', '').replaceAll('ApiException(400): ', '');
+                              final errorMsg = e
+                                  .toString()
+                                  .replaceAll('Exception: ', '')
+                                  .replaceAll('ApiException(400): ', '');
                               if (errorMsg.toLowerCase().contains('username') ||
                                   errorMsg.toLowerCase().contains('exists') ||
                                   errorMsg.toLowerCase().contains('taken')) {
                                 setState(() {
-                                  _childUsernameError = 'Username is already taken';
+                                  _childUsernameError =
+                                      'Username is already taken';
                                   _childStep = 4; // Go back to handle selection
                                 });
-                                final fName = _childFirstNameController.text.trim();
-                                final lName = _childLastNameController.text.trim();
+                                final fName = _childFirstNameController.text
+                                    .trim();
+                                final lName = _childLastNameController.text
+                                    .trim();
                                 final dob = _childDobController.text.trim();
-                                await _fetchSuggestions(fName, lName, dob, false);
+                                await _fetchSuggestions(
+                                  fName,
+                                  lName,
+                                  dob,
+                                  false,
+                                );
                               } else {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
-                                    content: Text('Registration failed: $errorMsg'),
+                                    content: Text(
+                                      'Registration failed: $errorMsg',
+                                    ),
                                     backgroundColor: Colors.redAccent,
                                   ),
                                 );
@@ -2017,7 +2095,10 @@ class _RegisterAccountTypeScreenState
                         )
                       : const Text(
                           'Complete Setup',
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                 ),
               ),
@@ -2091,9 +2172,7 @@ class _RegisterAccountTypeScreenState
                 errorText: _dobError,
                 readOnly: false, // Typing enabled
                 keyboardType: TextInputType.datetime,
-                inputFormatters: [
-                  DateInputFormatter(),
-                ],
+                inputFormatters: [DateInputFormatter()],
                 onChanged: (val) {
                   if (_dobError != null) {
                     setState(() => _dobError = null);
@@ -2101,7 +2180,10 @@ class _RegisterAccountTypeScreenState
                   setState(() {});
                 },
                 suffixIcon: IconButton(
-                  icon: const Icon(Icons.calendar_month_outlined, color: Color(0xFF195BAC)),
+                  icon: const Icon(
+                    Icons.calendar_month_outlined,
+                    color: Color(0xFF195BAC),
+                  ),
                   onPressed: () async {
                     final DateTime? picked = await showDatePicker(
                       context: context,
@@ -2169,7 +2251,10 @@ class _RegisterAccountTypeScreenState
                       const SizedBox(height: 4),
                       const Text(
                         'Personal accounts are designed for users 18 and older.',
-                        style: TextStyle(fontSize: 12, color: Color(0xFF1E3A8A)),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF1E3A8A),
+                        ),
                       ),
                       const SizedBox(height: 8),
                       TextButton.icon(
@@ -2183,8 +2268,10 @@ class _RegisterAccountTypeScreenState
                             _step = 2;
                             _personalStep = 1;
                             _childStep = 1;
-                            _childFirstNameController.text = _firstNameController.text;
-                            _childLastNameController.text = _lastNameController.text;
+                            _childFirstNameController.text =
+                                _firstNameController.text;
+                            _childLastNameController.text =
+                                _lastNameController.text;
                             _childDobController.text = _dobController.text;
                             _childGender = _personalGender;
                           });
@@ -2192,7 +2279,10 @@ class _RegisterAccountTypeScreenState
                         icon: const Icon(Icons.arrow_forward_rounded, size: 16),
                         label: const Text(
                           'Create a Child Account instead',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
                         ),
                       ),
                     ],
@@ -2220,9 +2310,13 @@ class _RegisterAccountTypeScreenState
                     final dob = _dobController.text.trim();
 
                     setState(() {
-                      _firstNameError = fName.isEmpty ? 'First Name is required' : null;
-                      _lastNameError = lName.isEmpty ? 'Last Name is required' : null;
-                      
+                      _firstNameError = fName.isEmpty
+                          ? 'First Name is required'
+                          : null;
+                      _lastNameError = lName.isEmpty
+                          ? 'Last Name is required'
+                          : null;
+
                       final dobErr = validateDob(dob);
                       if (dobErr != null) {
                         _dobError = dobErr;
@@ -2231,7 +2325,9 @@ class _RegisterAccountTypeScreenState
                       }
                     });
 
-                    if (_firstNameError == null && _lastNameError == null && _dobError == null) {
+                    if (_firstNameError == null &&
+                        _lastNameError == null &&
+                        _dobError == null) {
                       final age = calculateAge(dob);
                       if (age < 18) {
                         setState(() {
@@ -2250,13 +2346,15 @@ class _RegisterAccountTypeScreenState
                         });
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('Personal accounts are for users 18 and older. Redirected to Child Account registration.'),
+                            content: Text(
+                              'Personal accounts are for users 18 and older. Redirected to Child Account registration.',
+                            ),
                             backgroundColor: Color(0xFF195BAC),
                           ),
                         );
                         return;
                       }
-                      
+
                       // Fetch suggestions proactively
                       await _fetchSuggestions(fName, lName, dob, false);
                       setState(() {
@@ -2347,7 +2445,9 @@ class _RegisterAccountTypeScreenState
                   onPressed: () {
                     final uName = _usernameController.text.trim();
                     setState(() {
-                      _usernameError = uName.isEmpty ? 'Username is required' : null;
+                      _usernameError = uName.isEmpty
+                          ? 'Username is required'
+                          : null;
                     });
                     if (_usernameError == null) {
                       setState(() {
@@ -2470,10 +2570,13 @@ class _RegisterAccountTypeScreenState
                             _passwordError = validatePasswordStrength(pass);
                             _retypePasswordError = repass.isEmpty
                                 ? 'Please confirm your password'
-                                : (pass != repass ? 'Passwords do not match' : null);
+                                : (pass != repass
+                                      ? 'Passwords do not match'
+                                      : null);
                           });
 
-                          if (_passwordError == null && _retypePasswordError == null) {
+                          if (_passwordError == null &&
+                              _retypePasswordError == null) {
                             setState(() => _isRegistering = true);
                             try {
                               // Register the account
@@ -2499,7 +2602,9 @@ class _RegisterAccountTypeScreenState
 
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
-                                  content: Text('Account successfully created! Please log in.'),
+                                  content: Text(
+                                    'Account successfully created! Please log in.',
+                                  ),
                                   backgroundColor: Color(0xFF22C55E),
                                 ),
                               );
@@ -2507,22 +2612,33 @@ class _RegisterAccountTypeScreenState
                             } catch (e) {
                               if (!mounted) return;
                               setState(() => _isRegistering = false);
-                              final errorMsg = e.toString().replaceAll('Exception: ', '').replaceAll('ApiException(400): ', '');
+                              final errorMsg = e
+                                  .toString()
+                                  .replaceAll('Exception: ', '')
+                                  .replaceAll('ApiException(400): ', '');
                               if (errorMsg.toLowerCase().contains('username') ||
                                   errorMsg.toLowerCase().contains('exists') ||
                                   errorMsg.toLowerCase().contains('taken')) {
                                 setState(() {
                                   _usernameError = 'Username is already taken';
-                                  _personalStep = 2; // Go back to username selection step
+                                  _personalStep =
+                                      2; // Go back to username selection step
                                 });
                                 final fName = _firstNameController.text.trim();
                                 final lName = _lastNameController.text.trim();
                                 final dob = _dobController.text.trim();
-                                await _fetchSuggestions(fName, lName, dob, false);
+                                await _fetchSuggestions(
+                                  fName,
+                                  lName,
+                                  dob,
+                                  false,
+                                );
                               } else {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
-                                    content: Text('Registration failed: $errorMsg'),
+                                    content: Text(
+                                      'Registration failed: $errorMsg',
+                                    ),
                                     backgroundColor: Colors.redAccent,
                                   ),
                                 );
@@ -2541,7 +2657,10 @@ class _RegisterAccountTypeScreenState
                         )
                       : const Text(
                           'Complete Setup',
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                 ),
               ),
@@ -2760,9 +2879,7 @@ class _RegisterAccountTypeScreenState
     final isBusiness = _selectedType == 'business' && _step == 2;
     final activeStep = isChild
         ? _childStep
-        : (isPersonal
-            ? _personalStep
-            : (isBusiness ? _businessStep : _step));
+        : (isPersonal ? _personalStep : (isBusiness ? _businessStep : _step));
     final totalSteps = isChild ? 4 : (isBusiness ? 2 : 3);
 
     return Row(
@@ -2774,7 +2891,9 @@ class _RegisterAccountTypeScreenState
           width: activeStep == stepNum ? 24 : 6,
           height: 6,
           decoration: BoxDecoration(
-            color: activeStep == stepNum ? const Color(0xFF195BAC) : Colors.grey.shade300,
+            color: activeStep == stepNum
+                ? const Color(0xFF195BAC)
+                : Colors.grey.shade300,
             borderRadius: BorderRadius.circular(10),
           ),
         );

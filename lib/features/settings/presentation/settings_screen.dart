@@ -38,10 +38,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _enable2FA = false;
   bool _enableBiometrics = true;
 
-  final TextEditingController _currentPasswordController = TextEditingController();
+  final TextEditingController _currentPasswordController =
+      TextEditingController();
   final TextEditingController _newPasswordController = TextEditingController();
 
-  final TextEditingController _recoveryEmailController = TextEditingController();
+  final TextEditingController _recoveryEmailController =
+      TextEditingController();
   final TextEditingController _backupPhoneController = TextEditingController();
 
   // ── Labels & Sidebar State ─────────────────────────────────────────────────
@@ -108,7 +110,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _enableHapticVibration = settings['enableHapticVibration'] == true;
         }
         if (settings.containsKey('muteNotificationsSchedule')) {
-          _muteNotificationsSchedule = settings['muteNotificationsSchedule'] == true;
+          _muteNotificationsSchedule =
+              settings['muteNotificationsSchedule'] == true;
         }
         if (settings['undoSendDelay'] != null) {
           final val = settings['undoSendDelay'];
@@ -155,7 +158,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             if (item is String && item.trim().isNotEmpty) {
               loadedSigs.add(item.trim());
             } else if (item is Map) {
-              final content = item['content'] ?? item['name'] ?? item['signature'];
+              final content =
+                  item['content'] ?? item['name'] ?? item['signature'];
               if (content != null && content.toString().trim().isNotEmpty) {
                 loadedSigs.add(content.toString().trim());
               }
@@ -171,7 +175,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           if (apiSigs.isNotEmpty) {
             final loaded = <String>[];
             for (final item in apiSigs) {
-              final content = item['content'] ?? item['name'] ?? item['signature'];
+              final content =
+                  item['content'] ?? item['name'] ?? item['signature'];
               if (content != null && content.toString().trim().isNotEmpty) {
                 loaded.add(content.toString().trim());
               }
@@ -193,7 +198,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         if (settings['backupPhone'] != null) {
           _backupPhoneController.text = settings['backupPhone'].toString();
         }
-        if (settings['recoveryEmail'] != null && settings['recoveryEmail'].toString().isNotEmpty) {
+        if (settings['recoveryEmail'] != null &&
+            settings['recoveryEmail'].toString().isNotEmpty) {
           _recoveryEmailController.text = settings['recoveryEmail'].toString();
         }
         if (settings['sidebarLabels'] is Map) {
@@ -208,10 +214,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       // 3. Fetch recovery details from GET /api/users/recovery
       final recovery = await UserRepository.getRecovery();
       if (recovery != null) {
-        if (recovery['recoveryEmail'] != null && recovery['recoveryEmail'].toString().isNotEmpty) {
+        if (recovery['recoveryEmail'] != null &&
+            recovery['recoveryEmail'].toString().isNotEmpty) {
           _recoveryEmailController.text = recovery['recoveryEmail'].toString();
         }
-        if (recovery['phoneNumber'] != null && recovery['phoneNumber'].toString().isNotEmpty) {
+        if (recovery['phoneNumber'] != null &&
+            recovery['phoneNumber'].toString().isNotEmpty) {
           _backupPhoneController.text = recovery['phoneNumber'].toString();
         }
       }
@@ -219,7 +227,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       // 4. Fetch signatures from GET /api/signatures
       final sigs = await UserRepository.getSignatures();
       if (sigs.isNotEmpty) {
-        final fetchedSigs = sigs.map((s) => s['content']?.toString() ?? s['name']?.toString() ?? '').where((s) => s.isNotEmpty).toList();
+        final fetchedSigs = sigs
+            .map((s) => s['content']?.toString() ?? s['name']?.toString() ?? '')
+            .where((s) => s.isNotEmpty)
+            .toList();
         if (fetchedSigs.isNotEmpty) {
           _signatures = fetchedSigs;
         }
@@ -259,7 +270,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         content: Row(
           children: [
             Icon(
-              isError ? Icons.error_outline_rounded : Icons.check_circle_rounded,
+              isError
+                  ? Icons.error_outline_rounded
+                  : Icons.check_circle_rounded,
               color: Colors.white,
               size: 20,
             ),
@@ -267,12 +280,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             Expanded(
               child: Text(
                 message,
-                style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
               ),
             ),
           ],
         ),
-        backgroundColor: isError ? Colors.red.shade600 : const Color(0xFF195BAC),
+        backgroundColor: isError
+            ? Colors.red.shade600
+            : const Color(0xFF195BAC),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
@@ -304,16 +322,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           style: TextStyle(color: isDark ? Colors.white : Colors.black87),
           decoration: InputDecoration(
             hintText: 'Regards,\nJohn Doe\nSenior Developer',
-            hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.grey.shade400),
+            hintStyle: TextStyle(
+              color: isDark ? Colors.white38 : Colors.grey.shade400,
+            ),
             filled: true,
-            fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+            fillColor: isDark
+                ? const Color(0xFF0F172A)
+                : const Color(0xFFF8FAFC),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: isDark ? Colors.white24 : Colors.grey.shade300),
+              borderSide: BorderSide(
+                color: isDark ? Colors.white24 : Colors.grey.shade300,
+              ),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFF195BAC), width: 1.5),
+              borderSide: const BorderSide(
+                color: Color(0xFF195BAC),
+                width: 1.5,
+              ),
             ),
           ),
         ),
@@ -322,13 +349,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             onPressed: () => Navigator.pop(ctx),
             child: Text(
               'Cancel',
-              style: TextStyle(color: isDark ? Colors.white60 : Colors.grey.shade600),
+              style: TextStyle(
+                color: isDark ? Colors.white60 : Colors.grey.shade600,
+              ),
             ),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF195BAC),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             ),
             onPressed: () async {
@@ -344,14 +375,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     content: newSig,
                     isDefault: true,
                   );
-                  await UserRepository.updateSettings({'signatures': _signatures});
+                  await UserRepository.updateSettings({
+                    'signatures': _signatures,
+                  });
                   _showSnackBar('Signature saved to backend!');
                 } catch (_) {
                   _showSnackBar('Signature added locally.');
                 }
               }
             },
-            child: const Text('Add', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            child: const Text(
+              'Add',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ],
       ),
@@ -368,34 +407,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         : 'ravinew2004@bnxmail.com';
 
     final categories = [
-      {
-        'title': 'Accounts & Mailboxes',
-        'icon': Icons.email_outlined,
-      },
-      {
-        'title': 'General & Composing',
-        'icon': Icons.settings_outlined,
-      },
-      {
-        'title': 'Notifications & Quiet',
-        'icon': Icons.notifications_outlined,
-      },
-      {
-        'title': 'Appearance & Layout',
-        'icon': Icons.palette_outlined,
-      },
-      {
-        'title': 'Security & Recovery',
-        'icon': Icons.shield_outlined,
-      },
-      {
-        'title': 'Labels & Sidebar',
-        'icon': Icons.label_outlined,
-      },
-      {
-        'title': 'Active Sessions & Logs',
-        'icon': Icons.devices_outlined,
-      },
+      {'title': 'Accounts & Mailboxes', 'icon': Icons.email_outlined},
+      {'title': 'General & Composing', 'icon': Icons.settings_outlined},
+      {'title': 'Notifications & Quiet', 'icon': Icons.notifications_outlined},
+      {'title': 'Appearance & Layout', 'icon': Icons.palette_outlined},
+      {'title': 'Security & Recovery', 'icon': Icons.shield_outlined},
+      {'title': 'Labels & Sidebar', 'icon': Icons.label_outlined},
+      {'title': 'Active Sessions & Logs', 'icon': Icons.devices_outlined},
     ];
 
     return PopScope(
@@ -406,10 +424,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         context.go('/home');
       },
       child: Scaffold(
-        backgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFEBF3FA),
+        backgroundColor: isDark
+            ? const Color(0xFF0F172A)
+            : const Color(0xFFEBF3FA),
         body: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 12.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 12.0,
+              vertical: 12.0,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -422,10 +445,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       },
                       borderRadius: BorderRadius.circular(8),
                       child: const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 4.0, horizontal: 2.0),
+                        padding: EdgeInsets.symmetric(
+                          vertical: 4.0,
+                          horizontal: 2.0,
+                        ),
                         child: Row(
                           children: [
-                            Icon(Icons.arrow_back, color: Color(0xFF195BAC), size: 16),
+                            Icon(
+                              Icons.arrow_back,
+                              color: Color(0xFF195BAC),
+                              size: 16,
+                            ),
                             SizedBox(width: 6),
                             Text(
                               'Back',
@@ -466,7 +496,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       return Material(
                         color: Colors.transparent,
                         child: InkWell(
-                          onTap: () => setState(() => _selectedTabIndex = index),
+                          onTap: () =>
+                              setState(() => _selectedTabIndex = index),
                           borderRadius: BorderRadius.circular(24),
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 180),
@@ -476,13 +507,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             ),
                             decoration: BoxDecoration(
                               color: isSelected
-                                  ? (isDark ? const Color(0xFF1E3A5F) : const Color(0xFFE3F2FD))
-                                  : (isDark ? const Color(0xFF1E293B) : Colors.white),
+                                  ? (isDark
+                                        ? const Color(0xFF1E3A5F)
+                                        : const Color(0xFFE3F2FD))
+                                  : (isDark
+                                        ? const Color(0xFF1E293B)
+                                        : Colors.white),
                               borderRadius: BorderRadius.circular(24),
                               border: Border.all(
                                 color: isSelected
                                     ? const Color(0xFF195BAC)
-                                    : (isDark ? Colors.white12 : Colors.grey.shade200),
+                                    : (isDark
+                                          ? Colors.white12
+                                          : Colors.grey.shade200),
                                 width: isSelected ? 1.5 : 1.0,
                               ),
                             ),
@@ -494,7 +531,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                   size: 18,
                                   color: isSelected
                                       ? const Color(0xFF195BAC)
-                                      : (isDark ? Colors.white70 : Colors.black87),
+                                      : (isDark
+                                            ? Colors.white70
+                                            : Colors.black87),
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
@@ -506,7 +545,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                         : FontWeight.w500,
                                     color: isSelected
                                         ? const Color(0xFF195BAC)
-                                        : (isDark ? Colors.white : Colors.black87),
+                                        : (isDark
+                                              ? Colors.white
+                                              : Colors.black87),
                                   ),
                                 ),
                               ],
@@ -543,8 +584,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               ),
                             )
                           : SingleChildScrollView(
-                              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
-                              child: _buildTabContent(_selectedTabIndex, isDark, userEmail),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16.0,
+                                vertical: 20.0,
+                              ),
+                              child: _buildTabContent(
+                                _selectedTabIndex,
+                                isDark,
+                                userEmail,
+                              ),
                             ),
                     ),
                   ),
@@ -584,7 +632,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final accounts = ref.watch(accountsProvider);
     final displayAccounts = accounts.isNotEmpty
         ? accounts
-        : [AccountModel(id: '1', name: 'Primary Account', email: userEmail, avatarColor: const Color(0xFF195BAC), isActive: true)];
+        : [
+            AccountModel(
+              id: '1',
+              name: 'Primary Account',
+              email: userEmail,
+              avatarColor: const Color(0xFF195BAC),
+              isActive: true,
+            ),
+          ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -615,7 +671,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             decoration: BoxDecoration(
               color: isCurrentActive
                   ? (isDark ? const Color(0xFF1E3A5F) : const Color(0xFFE3F2FD))
-                  : (isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC)),
+                  : (isDark
+                        ? const Color(0xFF0F172A)
+                        : const Color(0xFFF8FAFC)),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
                 color: isCurrentActive
@@ -646,7 +704,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           acc.name,
                           style: TextStyle(
                             fontSize: 12,
-                            color: isDark ? Colors.white54 : Colors.grey.shade600,
+                            color: isDark
+                                ? Colors.white54
+                                : Colors.grey.shade600,
                           ),
                         ),
                       ],
@@ -656,11 +716,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 const SizedBox(width: 8),
                 if (isCurrentActive)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 5,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFFE3F2FD),
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: const Color(0xFF195BAC).withValues(alpha: 0.3)),
+                      border: Border.all(
+                        color: const Color(0xFF195BAC).withValues(alpha: 0.3),
+                      ),
                     ),
                     child: const Text(
                       'Active',
@@ -674,13 +739,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 else
                   TextButton(
                     onPressed: () async {
-                      await ref.read(accountsProvider.notifier).switchAccount(acc.id, ref);
-                      if (context.mounted) {
+                      await ref
+                          .read(accountsProvider.notifier)
+                          .switchAccount(acc.id, ref);
+                      if (mounted) {
                         context.go('/');
                         _showSnackBar('Switched to ${acc.email}');
                       }
                     },
-                    child: const Text('Make Active', style: TextStyle(color: Color(0xFF195BAC), fontWeight: FontWeight.bold)),
+                    child: const Text(
+                      'Make Active',
+                      style: TextStyle(
+                        color: Color(0xFF195BAC),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
               ],
             ),
@@ -722,11 +795,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFE3F2FD),
                 elevation: 0,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
               ),
               onPressed: _showAddSignatureDialog,
-              icon: const Icon(Icons.add_rounded, size: 16, color: Color(0xFF195BAC)),
+              icon: const Icon(
+                Icons.add_rounded,
+                size: 16,
+                color: Color(0xFF195BAC),
+              ),
               label: const Text(
                 'Add Signature',
                 style: TextStyle(
@@ -749,35 +831,49 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
         ] else ...[
-          ..._signatures.map((sig) => Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: isDark ? Colors.white24 : Colors.grey.shade300),
+          ..._signatures.map(
+            (sig) => Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? const Color(0xFF0F172A)
+                    : const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isDark ? Colors.white24 : Colors.grey.shade300,
                 ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        sig,
-                        style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      sig,
+                      style: TextStyle(
+                        color: isDark ? Colors.white : Colors.black87,
                       ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
-                      onPressed: () async {
-                        setState(() => _signatures.remove(sig));
-                        try {
-                          await UserRepository.updateSettings({'signatures': _signatures});
-                          _showSnackBar('Signature removed!');
-                        } catch (_) {}
-                      },
+                  ),
+                  IconButton(
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      color: Colors.red,
+                      size: 20,
                     ),
-                  ],
-                ),
-              )),
+                    onPressed: () async {
+                      setState(() => _signatures.remove(sig));
+                      try {
+                        await UserRepository.updateSettings({
+                          'signatures': _signatures,
+                        });
+                        _showSnackBar('Signature removed!');
+                      } catch (_) {}
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
         const SizedBox(height: 6),
         Text(
@@ -816,13 +912,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
               ),
-              items: [
-                'Disabled (Send instantly)',
-                '5 Seconds',
-                '10 Seconds',
-                '20 Seconds',
-                '30 Seconds',
-              ].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
+              items:
+                  [
+                        'Disabled (Send instantly)',
+                        '5 Seconds',
+                        '10 Seconds',
+                        '20 Seconds',
+                        '30 Seconds',
+                      ]
+                      .map(
+                        (val) => DropdownMenuItem(value: val, child: Text(val)),
+                      )
+                      .toList(),
               onChanged: (val) {
                 if (val != null) setState(() => _undoSendDelay = val);
               },
@@ -843,7 +944,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             backgroundColor: const Color(0xFF195BAC),
             elevation: 0,
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 13),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
           ),
           onPressed: () async {
             try {
@@ -894,7 +997,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         _buildSwitchTile('Inbox Mail Alerts', _inboxMailAlerts, (val) {
           setState(() => _inboxMailAlerts = val);
         }, isDark),
-        _buildSwitchTile('Sent Confirmation Alerts', _sentConfirmationAlerts, (val) {
+        _buildSwitchTile('Sent Confirmation Alerts', _sentConfirmationAlerts, (
+          val,
+        ) {
           setState(() => _sentConfirmationAlerts = val);
         }, isDark),
         _buildSwitchTile('Starred Emails Alerts', _starredEmailsAlerts, (val) {
@@ -903,28 +1008,43 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         _buildSwitchTile('Snoozed Reminders', _snoozedReminders, (val) {
           setState(() => _snoozedReminders = val);
         }, isDark),
-        Divider(height: 32, color: isDark ? Colors.white12 : Colors.grey.shade200),
+        Divider(
+          height: 32,
+          color: isDark ? Colors.white12 : Colors.grey.shade200,
+        ),
         _buildSectionHeader('VIBRATION & SOUNDS', isDark),
         const SizedBox(height: 10),
         _buildSwitchTile('Play Alert Sound', _playAlertSound, (val) {
           setState(() => _playAlertSound = val);
         }, isDark),
-        _buildSwitchTile('Enable Haptic Vibration', _enableHapticVibration, (val) {
+        _buildSwitchTile('Enable Haptic Vibration', _enableHapticVibration, (
+          val,
+        ) {
           setState(() => _enableHapticVibration = val);
         }, isDark),
-        Divider(height: 32, color: isDark ? Colors.white12 : Colors.grey.shade200),
+        Divider(
+          height: 32,
+          color: isDark ? Colors.white12 : Colors.grey.shade200,
+        ),
         _buildSectionHeader('QUIET HOURS SCHEDULE', isDark),
         const SizedBox(height: 10),
-        _buildSwitchTile('Mute Notifications Schedule', _muteNotificationsSchedule, (val) {
-          setState(() => _muteNotificationsSchedule = val);
-        }, isDark),
+        _buildSwitchTile(
+          'Mute Notifications Schedule',
+          _muteNotificationsSchedule,
+          (val) {
+            setState(() => _muteNotificationsSchedule = val);
+          },
+          isDark,
+        ),
         const SizedBox(height: 28),
         ElevatedButton(
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF195BAC),
             elevation: 0,
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 13),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
           ),
           onPressed: () async {
             try {
@@ -989,9 +1109,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               borderRadius: BorderRadius.circular(16),
               child: Container(
                 constraints: const BoxConstraints(minWidth: 120),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
                 decoration: BoxDecoration(
-                  color: !isDark ? const Color(0xFFE3F2FD) : const Color(0xFF0F172A),
+                  color: !isDark
+                      ? const Color(0xFFE3F2FD)
+                      : const Color(0xFF0F172A),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
                     color: !isDark ? const Color(0xFF195BAC) : Colors.white24,
@@ -1001,16 +1126,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.wb_sunny_outlined,
-                        size: 18,
-                        color: !isDark ? const Color(0xFF195BAC) : Colors.white70),
+                    Icon(
+                      Icons.wb_sunny_outlined,
+                      size: 18,
+                      color: !isDark ? const Color(0xFF195BAC) : Colors.white70,
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       'Light Mode',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 13,
-                        color: !isDark ? const Color(0xFF195BAC) : Colors.white70,
+                        color: !isDark
+                            ? const Color(0xFF195BAC)
+                            : Colors.white70,
                       ),
                     ),
                   ],
@@ -1024,28 +1153,39 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               borderRadius: BorderRadius.circular(16),
               child: Container(
                 constraints: const BoxConstraints(minWidth: 120),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF1E3A5F) : const Color(0xFFFAFAFA),
+                  color: isDark
+                      ? const Color(0xFF1E3A5F)
+                      : const Color(0xFFFAFAFA),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: isDark ? const Color(0xFF195BAC) : Colors.grey.shade300,
+                    color: isDark
+                        ? const Color(0xFF195BAC)
+                        : Colors.grey.shade300,
                     width: 1.5,
                   ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.dark_mode_outlined,
-                        size: 18,
-                        color: isDark ? const Color(0xFF195BAC) : Colors.black87),
+                    Icon(
+                      Icons.dark_mode_outlined,
+                      size: 18,
+                      color: isDark ? const Color(0xFF195BAC) : Colors.black87,
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       'Dark Mode',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 13,
-                        color: isDark ? const Color(0xFF195BAC) : Colors.black87,
+                        color: isDark
+                            ? const Color(0xFF195BAC)
+                            : Colors.black87,
                       ),
                     ),
                   ],
@@ -1075,16 +1215,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   label: Text(d),
                   selected: isSel,
                   selectedColor: const Color(0xFFE3F2FD),
-                  backgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFFAFAFA),
+                  backgroundColor: isDark
+                      ? const Color(0xFF0F172A)
+                      : const Color(0xFFFAFAFA),
                   labelStyle: TextStyle(
-                    color: isSel ? const Color(0xFF195BAC) : (isDark ? Colors.white70 : Colors.black87),
+                    color: isSel
+                        ? const Color(0xFF195BAC)
+                        : (isDark ? Colors.white70 : Colors.black87),
                     fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
                     fontSize: 13,
                   ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
                     side: BorderSide(
-                      color: isSel ? const Color(0xFF195BAC) : (isDark ? Colors.white12 : Colors.grey.shade300),
+                      color: isSel
+                          ? const Color(0xFF195BAC)
+                          : (isDark ? Colors.white12 : Colors.grey.shade300),
                     ),
                   ),
                   onSelected: (val) {
@@ -1132,12 +1278,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         const SizedBox(height: 12),
         _buildInputField('Phone Contact', _phoneContactController, isDark),
 
-        Divider(height: 32, color: isDark ? Colors.white12 : Colors.grey.shade200),
+        Divider(
+          height: 32,
+          color: isDark ? Colors.white12 : Colors.grey.shade200,
+        ),
 
         _buildSectionHeader('MULTI-FACTOR AUTHENTICATOR', isDark),
         const SizedBox(height: 10),
-        _buildSwitchTile(
-            'Enable Two-Factor Authentication (2FA)', _enable2FA, (val) {
+        _buildSwitchTile('Enable Two-Factor Authentication (2FA)', _enable2FA, (
+          val,
+        ) {
           setState(() => _enable2FA = val);
         }, isDark),
         _buildSwitchTile('Enable Biometrics Access', _enableBiometrics, (val) {
@@ -1149,7 +1299,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             backgroundColor: const Color(0xFF195BAC),
             elevation: 0,
             padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
           ),
           onPressed: () async {
             try {
@@ -1169,24 +1321,43 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           },
           child: const Text(
             'Save Security Preferences',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+            ),
           ),
         ),
 
-        Divider(height: 32, color: isDark ? Colors.white12 : Colors.grey.shade200),
+        Divider(
+          height: 32,
+          color: isDark ? Colors.white12 : Colors.grey.shade200,
+        ),
 
         _buildSectionHeader('UPDATE ACCOUNT PASSWORD', isDark),
         const SizedBox(height: 12),
-        _buildInputField('Current Password', _currentPasswordController, isDark, isPassword: true),
+        _buildInputField(
+          'Current Password',
+          _currentPasswordController,
+          isDark,
+          isPassword: true,
+        ),
         const SizedBox(height: 10),
-        _buildInputField('New Password', _newPasswordController, isDark, isPassword: true),
+        _buildInputField(
+          'New Password',
+          _newPasswordController,
+          isDark,
+          isPassword: true,
+        ),
         const SizedBox(height: 14),
         ElevatedButton(
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF195BAC),
             elevation: 0,
             padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
           ),
           onPressed: () async {
             final oldPass = _currentPasswordController.text;
@@ -1206,21 +1377,40 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           },
           child: const Text(
             'Update Password',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+            ),
           ),
         ),
 
-        Divider(height: 32, color: isDark ? Colors.white12 : Colors.grey.shade200),
+        Divider(
+          height: 32,
+          color: isDark ? Colors.white12 : Colors.grey.shade200,
+        ),
 
         _buildSectionHeader('BACKUP ACCOUNT RECOVERY', isDark),
         const SizedBox(height: 12),
-        Text('Recovery Email Address',
-            style: TextStyle(fontSize: 13, color: isDark ? Colors.white70 : Colors.black87, fontWeight: FontWeight.w500)),
+        Text(
+          'Recovery Email Address',
+          style: TextStyle(
+            fontSize: 13,
+            color: isDark ? Colors.white70 : Colors.black87,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
         const SizedBox(height: 6),
         _buildInputField('', _recoveryEmailController, isDark),
         const SizedBox(height: 12),
-        Text('Backup Phone Number',
-            style: TextStyle(fontSize: 13, color: isDark ? Colors.white70 : Colors.black87, fontWeight: FontWeight.w500)),
+        Text(
+          'Backup Phone Number',
+          style: TextStyle(
+            fontSize: 13,
+            color: isDark ? Colors.white70 : Colors.black87,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
         const SizedBox(height: 6),
         _buildInputField('', _backupPhoneController, isDark),
         const SizedBox(height: 14),
@@ -1229,7 +1419,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             backgroundColor: const Color(0xFF195BAC),
             elevation: 0,
             padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
           ),
           onPressed: () async {
             try {
@@ -1244,7 +1436,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           },
           child: const Text(
             'Save Recovery Details',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+            ),
           ),
         ),
       ],
@@ -1273,45 +1469,53 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
         ),
         const SizedBox(height: 20),
-        ..._sidebarLabels.keys.map((label) => Container(
-              margin: const EdgeInsets.only(bottom: 10),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF0F172A) : const Color(0xFFFAFAFA),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: isDark ? Colors.white12 : Colors.grey.shade200,
+        ..._sidebarLabels.keys.map(
+          (label) => Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF0F172A) : const Color(0xFFFAFAFA),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isDark ? Colors.white12 : Colors.grey.shade200,
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
                 ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.white : Colors.black87,
-                    ),
-                  ),
-                  Switch(
-                    value: _sidebarLabels[label]!,
-                    onChanged: (val) async {
-                      setState(() => _sidebarLabels[label] = val);
-                      ref.read(appUiProvider.notifier).setSidebarLabel(label, val);
-                      final email = ref.read(activeAccountProvider).email;
-                      if (email.isNotEmpty) {
-                        await TokenService.saveUserSettings(email, {'sidebarLabels': _sidebarLabels});
-                      }
-                      try {
-                        await UserRepository.updateSettings({'sidebarLabels': _sidebarLabels});
-                      } catch (_) {}
-                    },
-                    activeThumbColor: const Color(0xFF195BAC),
-                  ),
-                ],
-              ),
-            )),
+                Switch(
+                  value: _sidebarLabels[label]!,
+                  onChanged: (val) async {
+                    setState(() => _sidebarLabels[label] = val);
+                    ref
+                        .read(appUiProvider.notifier)
+                        .setSidebarLabel(label, val);
+                    final email = ref.read(activeAccountProvider).email;
+                    if (email.isNotEmpty) {
+                      await TokenService.saveUserSettings(email, {
+                        'sidebarLabels': _sidebarLabels,
+                      });
+                    }
+                    try {
+                      await UserRepository.updateSettings({
+                        'sidebarLabels': _sidebarLabels,
+                      });
+                    } catch (_) {}
+                  },
+                  activeThumbColor: const Color(0xFF195BAC),
+                ),
+              ],
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -1345,11 +1549,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             decoration: BoxDecoration(
               color: isDark ? const Color(0xFF0F172A) : const Color(0xFFFAFAFA),
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: isDark ? Colors.white12 : Colors.grey.shade200),
+              border: Border.all(
+                color: isDark ? Colors.white12 : Colors.grey.shade200,
+              ),
             ),
             child: Column(
               children: [
-                const Icon(Icons.devices_rounded, size: 36, color: Color(0xFF195BAC)),
+                const Icon(
+                  Icons.devices_rounded,
+                  size: 36,
+                  color: Color(0xFF195BAC),
+                ),
                 const SizedBox(height: 10),
                 Text(
                   'Current Active Session',
@@ -1371,63 +1581,74 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
         ] else ...[
-          ..._activeDeviceSessions.map((sess) => Container(
-                width: double.infinity,
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF0F172A) : const Color(0xFFFAFAFA),
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(
-                    color: isDark ? Colors.white12 : Colors.grey.shade200,
-                  ),
+          ..._activeDeviceSessions.map(
+            (sess) => Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? const Color(0xFF0F172A)
+                    : const Color(0xFFFAFAFA),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: isDark ? Colors.white12 : Colors.grey.shade200,
                 ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            sess['title']!,
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: isDark ? Colors.white : Colors.black87,
-                            ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          sess['title']!,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.white : Colors.black87,
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '${sess['ip']!} —',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: isDark ? Colors.white70 : Colors.grey.shade700,
-                            ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${sess['ip']!} —',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark
+                                ? Colors.white70
+                                : Colors.grey.shade700,
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            sess['lastActive']!,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: isDark ? Colors.white38 : Colors.grey.shade500,
-                            ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          sess['lastActive']!,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark
+                                ? Colors.white38
+                                : Colors.grey.shade500,
                           ),
-                        ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (sess['id'] != null && sess['id']!.isNotEmpty)
+                    TextButton(
+                      onPressed: () async {
+                        final sid = sess['id']!;
+                        setState(() => _activeDeviceSessions.remove(sess));
+                        await UserRepository.revokeSession(sid);
+                        _showSnackBar('Session revoked');
+                      },
+                      child: const Text(
+                        'Revoke',
+                        style: TextStyle(color: Colors.red),
                       ),
                     ),
-                    if (sess['id'] != null && sess['id']!.isNotEmpty)
-                      TextButton(
-                        onPressed: () async {
-                          final sid = sess['id']!;
-                          setState(() => _activeDeviceSessions.remove(sess));
-                          await UserRepository.revokeSession(sid);
-                          _showSnackBar('Session revoked');
-                        },
-                        child: const Text('Revoke', style: TextStyle(color: Colors.red)),
-                      ),
-                  ],
-                ),
-              )),
+                ],
+              ),
+            ),
+          ),
         ],
       ],
     );
@@ -1501,24 +1722,42 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         TextField(
           controller: controller,
           obscureText: isPassword,
-          style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontSize: 13),
+          style: TextStyle(
+            color: isDark ? Colors.white : Colors.black87,
+            fontSize: 13,
+          ),
           decoration: InputDecoration(
             hintText: isPassword ? 'Enter password' : null,
-            hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.grey.shade400, fontSize: 13),
+            hintStyle: TextStyle(
+              color: isDark ? Colors.white38 : Colors.grey.shade400,
+              fontSize: 13,
+            ),
             filled: true,
-            fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFFAFAFA),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            fillColor: isDark
+                ? const Color(0xFF0F172A)
+                : const Color(0xFFFAFAFA),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 12,
+            ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(color: isDark ? Colors.white12 : Colors.grey.shade200),
+              borderSide: BorderSide(
+                color: isDark ? Colors.white12 : Colors.grey.shade200,
+              ),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(color: isDark ? Colors.white12 : Colors.grey.shade200),
+              borderSide: BorderSide(
+                color: isDark ? Colors.white12 : Colors.grey.shade200,
+              ),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(color: Color(0xFF195BAC), width: 1.5),
+              borderSide: const BorderSide(
+                color: Color(0xFF195BAC),
+                width: 1.5,
+              ),
             ),
           ),
         ),

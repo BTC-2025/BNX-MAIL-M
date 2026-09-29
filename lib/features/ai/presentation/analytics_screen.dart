@@ -35,10 +35,7 @@ class AnalyticsScreen extends ConsumerWidget {
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
                           gradient: const LinearGradient(
-                            colors: [
-                              Color(0xFF3B82F6),
-                              Color(0xFF1D4ED8),
-                            ],
+                            colors: [Color(0xFF3B82F6), Color(0xFF1D4ED8)],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           ),
@@ -62,7 +59,9 @@ class AnalyticsScreen extends ConsumerWidget {
                               style: TextStyle(
                                 fontSize: 20,
                                 fontWeight: FontWeight.bold,
-                                color: isDark ? Colors.white : const Color(0xFF1E293B),
+                                color: isDark
+                                    ? Colors.white
+                                    : const Color(0xFF1E293B),
                               ),
                             ),
                             Text(
@@ -71,7 +70,9 @@ class AnalyticsScreen extends ConsumerWidget {
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 fontSize: 12,
-                                color: isDark ? Colors.white54 : Colors.grey.shade600,
+                                color: isDark
+                                    ? Colors.white54
+                                    : Colors.grey.shade600,
                               ),
                             ),
                           ],
@@ -139,9 +140,11 @@ class AnalyticsScreen extends ConsumerWidget {
 
   // ── 1. Mailbox Composition Donut PieChart ─────────────────────────────────
 
-  Widget _buildMailboxCompositionCard(EmailAnalyticsData data, bool isDark, bool isMobile) {
-    final total = data.inbox + data.sent + data.archive + data.drafts + data.spam + data.trash;
-
+  Widget _buildMailboxCompositionCard(
+    EmailAnalyticsData data,
+    bool isDark,
+    bool isMobile,
+  ) {
     final slices = [
       _PieSlice('INBOX', data.inbox, const Color(0xFFEF4444)),
       _PieSlice('Sent', data.sent, const Color(0xFF8B5CF6)),
@@ -176,8 +179,8 @@ class AnalyticsScreen extends ConsumerWidget {
                   );
                 }).toList(),
               ),
-              swapAnimationDuration: const Duration(milliseconds: 500),
-              swapAnimationCurve: Curves.easeInOutCubic,
+              duration: const Duration(milliseconds: 500),
+              curve: Curves.easeInOutCubic,
             ),
           ),
           const SizedBox(height: 24),
@@ -188,7 +191,6 @@ class AnalyticsScreen extends ConsumerWidget {
             spacing: 16,
             runSpacing: 10,
             children: slices.map((s) {
-              final pct = total > 0 ? (s.count / total * 100).toStringAsFixed(0) : '0';
               return Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -225,8 +227,7 @@ class AnalyticsScreen extends ConsumerWidget {
     final allDates = <String>{
       ...data.receivedByDate.keys,
       ...data.sentByDate.keys,
-    }.toList()
-      ..sort();
+    }.toList()..sort();
 
     if (allDates.isEmpty) {
       return _buildCardContainer(
@@ -238,7 +239,9 @@ class AnalyticsScreen extends ConsumerWidget {
     }
 
     // Limit to last 6 dates on mobile for clear non-congested spacing
-    final displayDates = allDates.length > 6 ? allDates.sublist(allDates.length - 6) : allDates;
+    final displayDates = allDates.length > 6
+        ? allDates.sublist(allDates.length - 6)
+        : allDates;
 
     double maxY = 0;
     for (final d in displayDates) {
@@ -274,7 +277,8 @@ class AnalyticsScreen extends ConsumerWidget {
                 maxY: maxY * 1.25,
                 barTouchData: BarTouchData(
                   touchTooltipData: BarTouchTooltipData(
-                    getTooltipColor: (_) => isDark ? const Color(0xFF1E293B) : Colors.white,
+                    getTooltipColor: (_) =>
+                        isDark ? const Color(0xFF1E293B) : Colors.white,
                     getTooltipItem: (group, groupIndex, rod, rodIndex) {
                       final d = displayDates[group.x.toInt()];
                       final label = rodIndex == 0 ? 'Received' : 'Sent';
@@ -291,18 +295,26 @@ class AnalyticsScreen extends ConsumerWidget {
                 ),
                 titlesData: FlTitlesData(
                   show: true,
-                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  topTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
                   bottomTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
                       reservedSize: 32,
                       getTitlesWidget: (value, meta) {
                         final idx = value.toInt();
-                        if (idx < 0 || idx >= displayDates.length) return const SizedBox.shrink();
+                        if (idx < 0 || idx >= displayDates.length) {
+                          return const SizedBox.shrink();
+                        }
                         final dStr = displayDates[idx];
                         final parts = dStr.split('-');
-                        final shortLabel = parts.length >= 3 ? '${parts[1]}/${parts[2]}' : dStr;
+                        final shortLabel = parts.length >= 3
+                            ? '${parts[1]}/${parts[2]}'
+                            : dStr;
                         return Padding(
                           padding: const EdgeInsets.only(top: 8),
                           child: Text(
@@ -310,7 +322,9 @@ class AnalyticsScreen extends ConsumerWidget {
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
-                              color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                              color: isDark
+                                  ? Colors.white60
+                                  : const Color(0xFF64748B),
                             ),
                           ),
                         );
@@ -327,7 +341,9 @@ class AnalyticsScreen extends ConsumerWidget {
                           value.toInt().toString(),
                           style: TextStyle(
                             fontSize: 11,
-                            color: isDark ? Colors.white54 : Colors.grey.shade600,
+                            color: isDark
+                                ? Colors.white54
+                                : Colors.grey.shade600,
                           ),
                         );
                       },
@@ -356,20 +372,24 @@ class AnalyticsScreen extends ConsumerWidget {
                         toY: recvVal,
                         color: const Color(0xFF2563EB),
                         width: 10,
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(4),
+                        ),
                       ),
                       BarChartRodData(
                         toY: sentVal,
                         color: const Color(0xFF10B981),
                         width: 10,
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(4),
+                        ),
                       ),
                     ],
                   );
                 }).toList(),
               ),
-              swapAnimationDuration: const Duration(milliseconds: 450),
-              swapAnimationCurve: Curves.easeOutCubic,
+              duration: const Duration(milliseconds: 450),
+              curve: Curves.easeOutCubic,
             ),
           ),
         ],
@@ -383,8 +403,7 @@ class AnalyticsScreen extends ConsumerWidget {
     final allMonths = <String>{
       ...data.receivedByMonth.keys,
       ...data.sentByMonth.keys,
-    }.toList()
-      ..sort();
+    }.toList()..sort();
 
     if (allMonths.isEmpty) {
       return _buildCardContainer(
@@ -395,7 +414,9 @@ class AnalyticsScreen extends ConsumerWidget {
       );
     }
 
-    final displayMonths = allMonths.length > 5 ? allMonths.sublist(allMonths.length - 5) : allMonths;
+    final displayMonths = allMonths.length > 5
+        ? allMonths.sublist(allMonths.length - 5)
+        : allMonths;
 
     double maxY = 0;
     for (final m in displayMonths) {
@@ -430,15 +451,21 @@ class AnalyticsScreen extends ConsumerWidget {
                 maxY: maxY * 1.25,
                 titlesData: FlTitlesData(
                   show: true,
-                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  topTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
                   bottomTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
                       reservedSize: 32,
                       getTitlesWidget: (value, meta) {
                         final idx = value.toInt();
-                        if (idx < 0 || idx >= displayMonths.length) return const SizedBox.shrink();
+                        if (idx < 0 || idx >= displayMonths.length) {
+                          return const SizedBox.shrink();
+                        }
                         return Padding(
                           padding: const EdgeInsets.only(top: 8),
                           child: Text(
@@ -446,7 +473,9 @@ class AnalyticsScreen extends ConsumerWidget {
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
-                              color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                              color: isDark
+                                  ? Colors.white60
+                                  : const Color(0xFF64748B),
                             ),
                           ),
                         );
@@ -463,7 +492,9 @@ class AnalyticsScreen extends ConsumerWidget {
                           value.toInt().toString(),
                           style: TextStyle(
                             fontSize: 11,
-                            color: isDark ? Colors.white54 : Colors.grey.shade600,
+                            color: isDark
+                                ? Colors.white54
+                                : Colors.grey.shade600,
                           ),
                         );
                       },
@@ -492,20 +523,24 @@ class AnalyticsScreen extends ConsumerWidget {
                         toY: recvVal,
                         color: const Color(0xFF6366F1),
                         width: 12,
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(4),
+                        ),
                       ),
                       BarChartRodData(
                         toY: sentVal,
                         color: const Color(0xFF14B8A6),
                         width: 12,
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(4),
+                        ),
                       ),
                     ],
                   );
                 }).toList(),
               ),
-              swapAnimationDuration: const Duration(milliseconds: 450),
-              swapAnimationCurve: Curves.easeOutCubic,
+              duration: const Duration(milliseconds: 450),
+              curve: Curves.easeOutCubic,
             ),
           ),
         ],
@@ -545,7 +580,9 @@ class AnalyticsScreen extends ConsumerWidget {
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
-                                color: isDark ? Colors.white.withValues(alpha: 0.87) : Colors.grey.shade800,
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.87)
+                                    : Colors.grey.shade800,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -555,7 +592,9 @@ class AnalyticsScreen extends ConsumerWidget {
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
-                              color: isDark ? Colors.white70 : Colors.grey.shade600,
+                              color: isDark
+                                  ? Colors.white70
+                                  : Colors.grey.shade600,
                             ),
                           ),
                         ],
@@ -566,8 +605,12 @@ class AnalyticsScreen extends ConsumerWidget {
                         child: LinearProgressIndicator(
                           value: ratio,
                           minHeight: 6,
-                          backgroundColor: isDark ? Colors.white10 : Colors.grey.shade200,
-                          valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF2563EB)),
+                          backgroundColor: isDark
+                              ? Colors.white10
+                              : Colors.grey.shade200,
+                          valueColor: const AlwaysStoppedAnimation<Color>(
+                            Color(0xFF2563EB),
+                          ),
                         ),
                       ),
                     ],
@@ -610,7 +653,9 @@ class AnalyticsScreen extends ConsumerWidget {
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
-                                color: isDark ? Colors.white.withValues(alpha: 0.87) : Colors.grey.shade800,
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.87)
+                                    : Colors.grey.shade800,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -620,7 +665,9 @@ class AnalyticsScreen extends ConsumerWidget {
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
-                              color: isDark ? Colors.white70 : Colors.grey.shade600,
+                              color: isDark
+                                  ? Colors.white70
+                                  : Colors.grey.shade600,
                             ),
                           ),
                         ],
@@ -631,8 +678,12 @@ class AnalyticsScreen extends ConsumerWidget {
                         child: LinearProgressIndicator(
                           value: ratio,
                           minHeight: 6,
-                          backgroundColor: isDark ? Colors.white10 : Colors.grey.shade200,
-                          valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF10B981)),
+                          backgroundColor: isDark
+                              ? Colors.white10
+                              : Colors.grey.shade200,
+                          valueColor: const AlwaysStoppedAnimation<Color>(
+                            Color(0xFF10B981),
+                          ),
                         ),
                       ),
                     ],
@@ -652,10 +703,7 @@ class AnalyticsScreen extends ConsumerWidget {
         Container(
           width: 8,
           height: 8,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-          ),
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 5),
         Text(

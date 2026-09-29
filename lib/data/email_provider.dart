@@ -82,7 +82,10 @@ class EmailNotifier extends StateNotifier<EmailState> {
     }
     try {
       print('[FAST LOAD] Fetching Primary Inbox first...');
-      final inboxList = await MailRepository.fetchFolder('Inbox', limit: 50).catchError((_) => <EmailModel>[]);
+      final inboxList = await MailRepository.fetchFolder(
+        'Inbox',
+        limit: 50,
+      ).catchError((_) => <EmailModel>[]);
 
       final merged = <String, EmailModel>{};
       for (final e in state.emails) {
@@ -98,7 +101,9 @@ class EmailNotifier extends StateNotifier<EmailState> {
           merged[key] = e.copyWith(memberOfFolders: updatedFolders);
         } else {
           merged[key] = e.copyWith(
-            memberOfFolders: e.memberOfFolders.isEmpty ? {'Inbox'} : e.memberOfFolders,
+            memberOfFolders: e.memberOfFolders.isEmpty
+                ? {'Inbox'}
+                : e.memberOfFolders,
           );
         }
       }
@@ -107,7 +112,9 @@ class EmailNotifier extends StateNotifier<EmailState> {
       if (savedLabelsMap.isNotEmpty) {
         for (final entry in merged.entries) {
           final e = entry.value;
-          final stored = savedLabelsMap[e.id] ?? (e.messageId != null ? savedLabelsMap[e.messageId] : null);
+          final stored =
+              savedLabelsMap[e.id] ??
+              (e.messageId != null ? savedLabelsMap[e.messageId] : null);
           if (stored != null && stored.isNotEmpty) {
             final combined = Set<String>.from(e.labels)..addAll(stored);
             merged[entry.key] = e.copyWith(labels: combined.toList());
@@ -117,24 +124,41 @@ class EmailNotifier extends StateNotifier<EmailState> {
 
       // Render Primary Inbox IMMEDIATELY!
       state = state.copyWith(
-        emails: merged.values.toList()..sort((a, b) => b.date.compareTo(a.date)),
+        emails: merged.values.toList()
+          ..sort((a, b) => b.date.compareTo(a.date)),
         isLoading: false,
         loadedFolders: {'Inbox'},
       );
 
-      print('[FAST LOAD] Primary Inbox rendered (${inboxList.length} emails). Hydrating secondary folders in background...');
+      print(
+        '[FAST LOAD] Primary Inbox rendered (${inboxList.length} emails). Hydrating secondary folders in background...',
+      );
 
       // Hydrate remaining folders in parallel in background without blocking UI
-      final remainingFolders = ['Sent', 'Draft', 'Starred', 'Archive', 'Spam', 'Trash', 'Snoozed', 'Scheduled'];
-      
-      Future.wait(remainingFolders.map((folderName) async {
-        try {
-          final list = await MailRepository.fetchFolder(folderName, limit: 30);
-          if (list.isNotEmpty) {
-            _mergeFolderResults(folderName, list);
-          }
-        } catch (_) {}
-      })).then((_) {
+      final remainingFolders = [
+        'Sent',
+        'Draft',
+        'Starred',
+        'Archive',
+        'Spam',
+        'Trash',
+        'Snoozed',
+        'Scheduled',
+      ];
+
+      Future.wait(
+        remainingFolders.map((folderName) async {
+          try {
+            final list = await MailRepository.fetchFolder(
+              folderName,
+              limit: 30,
+            );
+            if (list.isNotEmpty) {
+              _mergeFolderResults(folderName, list);
+            }
+          } catch (_) {}
+        }),
+      ).then((_) {
         print('[FAST LOAD] All secondary folders hydrated successfully.');
       });
 
@@ -155,7 +179,8 @@ class EmailNotifier extends StateNotifier<EmailState> {
       final key = e.canonicalKey;
       if (merged.containsKey(key)) {
         final existing = merged[key]!;
-        final bool isArchivedInState = existing.isArchive || existing.memberOfFolders.contains('Archive');
+        final bool isArchivedInState =
+            existing.isArchive || existing.memberOfFolders.contains('Archive');
         final updatedFolders = existing.memberOfFolders.union(
           e.memberOfFolders.isEmpty ? {folderName} : e.memberOfFolders,
         );
@@ -164,20 +189,28 @@ class EmailNotifier extends StateNotifier<EmailState> {
         }
 
         merged[key] = existing.copyWith(
-          isStarred: existing.isStarred || e.isStarred || folderName == 'Starred',
-          isSnoozed: existing.isSnoozed || e.isSnoozed || folderName == 'Snoozed',
-          isScheduled: existing.isScheduled || e.isScheduled || folderName == 'Scheduled',
+          isStarred:
+              existing.isStarred || e.isStarred || folderName == 'Starred',
+          isSnoozed:
+              existing.isSnoozed || e.isSnoozed || folderName == 'Snoozed',
+          isScheduled:
+              existing.isScheduled ||
+              e.isScheduled ||
+              folderName == 'Scheduled',
           labels: (existing.labels.toSet()..addAll(e.labels)).toList(),
           isSent: existing.isSent || (folderName == 'Sent' || e.isSent),
           isDraft: existing.isDraft || (folderName == 'Draft' || e.isDraft),
           isTrash: existing.isTrash || (folderName == 'Trash' || e.isTrash),
-          isArchive: isArchivedInState || (folderName == 'Archive' || e.isArchive),
+          isArchive:
+              isArchivedInState || (folderName == 'Archive' || e.isArchive),
           isSpam: existing.isSpam || (folderName == 'Spam' || e.isSpam),
           memberOfFolders: updatedFolders,
         );
       } else {
         merged[key] = e.copyWith(
-          memberOfFolders: e.memberOfFolders.isEmpty ? {folderName} : e.memberOfFolders,
+          memberOfFolders: e.memberOfFolders.isEmpty
+              ? {folderName}
+              : e.memberOfFolders,
         );
       }
     }
@@ -185,7 +218,8 @@ class EmailNotifier extends StateNotifier<EmailState> {
     _deduplicateDrafts(merged);
     _deduplicateSent(merged);
 
-    final updatedLoaded = Set<String>.from(state.loadedFolders)..add(folderName);
+    final updatedLoaded = Set<String>.from(state.loadedFolders)
+      ..add(folderName);
     state = state.copyWith(
       emails: merged.values.toList()..sort((a, b) => b.date.compareTo(a.date)),
       loadedFolders: updatedLoaded,
@@ -209,7 +243,9 @@ class EmailNotifier extends StateNotifier<EmailState> {
   /// Runs without modifying UI loading state or interrupting user interaction.
   Future<void> syncInbox() async {
     if (_isSyncing) {
-      print('[AUTO-SYNC] Previous sync cycle still running. Skipping to prevent race conditions.');
+      print(
+        '[AUTO-SYNC] Previous sync cycle still running. Skipping to prevent race conditions.',
+      );
       return;
     }
 
@@ -238,11 +274,14 @@ class EmailNotifier extends StateNotifier<EmailState> {
         if (merged.containsKey(key)) {
           final existing = merged[key]!;
           final DateTime effectiveDate =
-              (e.isDateFallback && !existing.isDateFallback) ? existing.date : e.date;
+              (e.isDateFallback && !existing.isDateFallback)
+              ? existing.date
+              : e.date;
 
           final bool dateChanged = effectiveDate != existing.date;
           final bool readChanged = e.isRead != existing.isRead;
-          final bool starredChanged = (existing.isStarred || e.isStarred) != existing.isStarred;
+          final bool starredChanged =
+              (existing.isStarred || e.isStarred) != existing.isStarred;
 
           if (dateChanged || readChanged || starredChanged) {
             hasChanges = true;
@@ -277,10 +316,14 @@ class EmailNotifier extends StateNotifier<EmailState> {
               NotificationEvent(
                 type: 'new_email',
                 emailId: e.id,
-                senderName: e.senderName.isNotEmpty ? e.senderName : e.senderEmail,
+                senderName: e.senderName.isNotEmpty
+                    ? e.senderName
+                    : e.senderEmail,
                 senderEmail: e.senderEmail,
                 subject: e.subject.isNotEmpty ? e.subject : 'New Email',
-                preview: e.body.isNotEmpty ? e.body : 'You have received a new email.',
+                preview: e.body.isNotEmpty
+                    ? e.body
+                    : 'You have received a new email.',
                 timestamp: e.date,
               ),
             );
@@ -292,9 +335,13 @@ class EmailNotifier extends StateNotifier<EmailState> {
         final sortedList = merged.values.toList()
           ..sort((a, b) => b.date.compareTo(a.date));
         state = state.copyWith(emails: sortedList);
-        print('[AUTO-SYNC] State updated smoothly with new/updated emails. Total count: ${sortedList.length}');
+        print(
+          '[AUTO-SYNC] State updated smoothly with new/updated emails. Total count: ${sortedList.length}',
+        );
       } else {
-        print('[AUTO-SYNC] No new emails or field changes detected. Skipping state rebuild.');
+        print(
+          '[AUTO-SYNC] No new emails or field changes detected. Skipping state rebuild.',
+        );
       }
     } catch (e) {
       print('[AUTO-SYNC ERROR] Silent background sync failure: $e');
@@ -322,7 +369,9 @@ class EmailNotifier extends StateNotifier<EmailState> {
         if (merged.containsKey(key)) {
           final existing = merged[key]!;
           final DateTime effectiveDate =
-              (e.isDateFallback && !existing.isDateFallback) ? existing.date : e.date;
+              (e.isDateFallback && !existing.isDateFallback)
+              ? existing.date
+              : e.date;
           merged[key] = existing.copyWith(
             isStarred: existing.isStarred || e.isStarred,
             isSnoozed: existing.isSnoozed || e.isSnoozed,
@@ -336,11 +385,15 @@ class EmailNotifier extends StateNotifier<EmailState> {
             date: effectiveDate,
             isDateFallback: e.isDateFallback && existing.isDateFallback,
             isRead: e.isRead,
-            memberOfFolders: existing.memberOfFolders.union(e.memberOfFolders.isEmpty ? {folder} : e.memberOfFolders),
+            memberOfFolders: existing.memberOfFolders.union(
+              e.memberOfFolders.isEmpty ? {folder} : e.memberOfFolders,
+            ),
           );
         } else {
           merged[key] = e.copyWith(
-            memberOfFolders: e.memberOfFolders.isEmpty ? {folder} : e.memberOfFolders,
+            memberOfFolders: e.memberOfFolders.isEmpty
+                ? {folder}
+                : e.memberOfFolders,
           );
         }
       }
@@ -365,7 +418,9 @@ class EmailNotifier extends StateNotifier<EmailState> {
 
       // Keep all existing emails in state to preserve multi-folder tags
       for (final e in state.emails) {
-        if (folder == 'Draft' && e.id.startsWith('local_') && (e.isDraft || e.memberOfFolders.contains('Draft'))) {
+        if (folder == 'Draft' &&
+            e.id.startsWith('local_') &&
+            (e.isDraft || e.memberOfFolders.contains('Draft'))) {
           continue;
         }
         merged[e.canonicalKey] = e;
@@ -377,7 +432,9 @@ class EmailNotifier extends StateNotifier<EmailState> {
         if (merged.containsKey(key)) {
           final existing = merged[key]!;
           final DateTime effectiveDate =
-              (e.isDateFallback && !existing.isDateFallback) ? existing.date : e.date;
+              (e.isDateFallback && !existing.isDateFallback)
+              ? existing.date
+              : e.date;
 
           merged[key] = existing.copyWith(
             isStarred: existing.isStarred || e.isStarred,
@@ -392,11 +449,15 @@ class EmailNotifier extends StateNotifier<EmailState> {
             date: effectiveDate,
             isDateFallback: e.isDateFallback && existing.isDateFallback,
             isRead: e.isRead,
-            memberOfFolders: existing.memberOfFolders.union(e.memberOfFolders.isEmpty ? {folder} : e.memberOfFolders),
+            memberOfFolders: existing.memberOfFolders.union(
+              e.memberOfFolders.isEmpty ? {folder} : e.memberOfFolders,
+            ),
           );
         } else {
           merged[key] = e.copyWith(
-            memberOfFolders: e.memberOfFolders.isEmpty ? {folder} : e.memberOfFolders,
+            memberOfFolders: e.memberOfFolders.isEmpty
+                ? {folder}
+                : e.memberOfFolders,
           );
         }
       }
@@ -414,43 +475,14 @@ class EmailNotifier extends StateNotifier<EmailState> {
     }
   }
 
-  bool _emailBelongsToFolder(EmailModel e, String folder) {
-    switch (folder) {
-      case 'Sent':
-        return e.isSent && !e.isDraft && !e.isTrash;
-      case 'Draft':
-        return (e.isDraft || e.memberOfFolders.contains('Draft')) &&
-            !e.isScheduled &&
-            !e.memberOfFolders.contains('Scheduled') &&
-            !e.isTrash;
-      case 'Trash':
-        return e.isTrash;
-      case 'Archive':
-        return (e.isArchive || e.memberOfFolders.contains('Archive')) && !e.isTrash;
-      case 'Scheduled':
-        return (e.isScheduled || e.memberOfFolders.contains('Scheduled')) && !e.isTrash;
-      case 'Spam':
-        return e.isSpam && !e.isTrash;
-      case 'Starred':
-        return e.isStarred && !e.isTrash;
-      case 'Inbox':
-        return !e.isSent &&
-            !e.isDraft &&
-            !e.isTrash &&
-            !e.isArchive &&
-            !e.isScheduled &&
-            !e.isSpam;
-      default:
-        return false;
-    }
-  }
 
   void _deduplicateDrafts(Map<String, EmailModel> merged) {
     final Set<String> idsToRemove = {};
     final Map<String, EmailModel> seenFingerprints = {};
 
     for (final email in merged.values) {
-      final isDraftCandidate = email.isDraft || email.memberOfFolders.contains('Draft');
+      final isDraftCandidate =
+          email.isDraft || email.memberOfFolders.contains('Draft');
       if (!isDraftCandidate) continue;
 
       if (email.isScheduled || email.memberOfFolders.contains('Scheduled')) {
@@ -468,9 +500,11 @@ class EmailNotifier extends StateNotifier<EmailState> {
 
       if (seenFingerprints.containsKey(fingerprint)) {
         final existing = seenFingerprints[fingerprint]!;
-        if (email.id.startsWith('local_') && !existing.id.startsWith('local_')) {
+        if (email.id.startsWith('local_') &&
+            !existing.id.startsWith('local_')) {
           idsToRemove.add(email.id);
-        } else if (!email.id.startsWith('local_') && existing.id.startsWith('local_')) {
+        } else if (!email.id.startsWith('local_') &&
+            existing.id.startsWith('local_')) {
           idsToRemove.add(existing.id);
           seenFingerprints[fingerprint] = email;
         } else {
@@ -522,12 +556,17 @@ class EmailNotifier extends StateNotifier<EmailState> {
           if (merged.containsKey(key)) {
             final existing = merged[key]!;
             final DateTime effectiveDate =
-                (e.isDateFallback && !existing.isDateFallback) ? existing.date : e.date;
+                (e.isDateFallback && !existing.isDateFallback)
+                ? existing.date
+                : e.date;
 
             final bool effectiveIsTrash = existing.isTrash || e.isTrash;
-            final bool effectiveIsDraft = !effectiveIsTrash && (existing.isDraft || e.isDraft);
+            final bool effectiveIsDraft =
+                !effectiveIsTrash && (existing.isDraft || e.isDraft);
 
-            final updatedFolders = (existing.memberOfFolders.union(e.memberOfFolders.isEmpty ? {folderName} : e.memberOfFolders));
+            final updatedFolders = (existing.memberOfFolders.union(
+              e.memberOfFolders.isEmpty ? {folderName} : e.memberOfFolders,
+            ));
             if (effectiveIsTrash) {
               updatedFolders.remove('Draft');
               updatedFolders.remove('Inbox');
@@ -550,7 +589,9 @@ class EmailNotifier extends StateNotifier<EmailState> {
             );
           } else {
             merged[key] = e.copyWith(
-              memberOfFolders: e.memberOfFolders.isEmpty ? {folderName} : e.memberOfFolders,
+              memberOfFolders: e.memberOfFolders.isEmpty
+                  ? {folderName}
+                  : e.memberOfFolders,
             );
           }
         }
@@ -593,8 +634,12 @@ class EmailNotifier extends StateNotifier<EmailState> {
       emails: state.emails.map((e) {
         if (e.id == emailId) {
           final labels = List<String>.from(e.labels);
-          if (labels.any((l) => l.trim().toLowerCase() == labelName.trim().toLowerCase())) {
-            labels.removeWhere((l) => l.trim().toLowerCase() == labelName.trim().toLowerCase());
+          if (labels.any(
+            (l) => l.trim().toLowerCase() == labelName.trim().toLowerCase(),
+          )) {
+            labels.removeWhere(
+              (l) => l.trim().toLowerCase() == labelName.trim().toLowerCase(),
+            );
             isApplying = false;
           } else {
             labels.add(labelName);
@@ -612,8 +657,14 @@ class EmailNotifier extends StateNotifier<EmailState> {
       availableLabels = await LabelRepository.fetchLabels();
     }
     final foundLabel = availableLabels.firstWhere(
-      (l) => l.name.trim().toLowerCase() == labelName.trim().toLowerCase() || l.id == labelName,
-      orElse: () => LabelModel(id: labelName, name: labelName, color: const Color(0xFF2563EB)),
+      (l) =>
+          l.name.trim().toLowerCase() == labelName.trim().toLowerCase() ||
+          l.id == labelName,
+      orElse: () => LabelModel(
+        id: labelName,
+        name: labelName,
+        color: const Color(0xFF2563EB),
+      ),
     );
     labelId = foundLabel.id;
 
@@ -633,7 +684,12 @@ class EmailNotifier extends StateNotifier<EmailState> {
     String folder = 'Inbox',
   }) async {
     for (final id in emailIds) {
-      await toggleEmailLabel(id, labelName, allLabels: allLabels, folder: folder);
+      await toggleEmailLabel(
+        id,
+        labelName,
+        allLabels: allLabels,
+        folder: folder,
+      );
     }
   }
 
@@ -643,9 +699,17 @@ class EmailNotifier extends StateNotifier<EmailState> {
 
     state = state.copyWith(
       emails: state.emails.map((e) {
-        if (e.labels.any((l) => l.trim().toLowerCase() == targetName || l.trim().toLowerCase() == targetId)) {
+        if (e.labels.any(
+          (l) =>
+              l.trim().toLowerCase() == targetName ||
+              l.trim().toLowerCase() == targetId,
+        )) {
           final updatedLabels = e.labels
-              .where((l) => l.trim().toLowerCase() != targetName && l.trim().toLowerCase() != targetId)
+              .where(
+                (l) =>
+                    l.trim().toLowerCase() != targetName &&
+                    l.trim().toLowerCase() != targetId,
+              )
               .toList();
           return e.copyWith(labels: updatedLabels);
         }
@@ -660,7 +724,9 @@ class EmailNotifier extends StateNotifier<EmailState> {
   }
 
   Future<void> fetchCategory(String category) async {
-    final categoryEmails = await LabelRepository.fetchCategory(category.toLowerCase());
+    final categoryEmails = await LabelRepository.fetchCategory(
+      category.toLowerCase(),
+    );
     if (categoryEmails.isNotEmpty) {
       final mergedMap = <String, EmailModel>{};
       for (final e in state.emails) {
@@ -684,7 +750,12 @@ class EmailNotifier extends StateNotifier<EmailState> {
     });
   }
 
-  void toggleRead(String emailId, String folder, {bool? forceValue, String? tempToken}) {
+  void toggleRead(
+    String emailId,
+    String folder, {
+    bool? forceValue,
+    String? tempToken,
+  }) {
     EmailModel? target;
     try {
       target = state.emails.firstWhere((e) => e.id == emailId);
@@ -692,7 +763,9 @@ class EmailNotifier extends StateNotifier<EmailState> {
 
     final bool newVal = forceValue ?? !(target?.isRead ?? false);
 
-    final targetFingerprint = (target != null && (target.isDraft || target.memberOfFolders.contains('Draft')))
+    final targetFingerprint =
+        (target != null &&
+            (target.isDraft || target.memberOfFolders.contains('Draft')))
         ? '${target.recipient.trim().toLowerCase()}_${target.subject.trim().toLowerCase()}'
         : null;
 
@@ -703,8 +776,10 @@ class EmailNotifier extends StateNotifier<EmailState> {
           original = e;
           return e.copyWith(isRead: newVal);
         }
-        if (targetFingerprint != null && (e.isDraft || e.memberOfFolders.contains('Draft'))) {
-          final fp = '${e.recipient.trim().toLowerCase()}_${e.subject.trim().toLowerCase()}';
+        if (targetFingerprint != null &&
+            (e.isDraft || e.memberOfFolders.contains('Draft'))) {
+          final fp =
+              '${e.recipient.trim().toLowerCase()}_${e.subject.trim().toLowerCase()}';
           if (fp == targetFingerprint) {
             return e.copyWith(isRead: newVal);
           }
@@ -722,13 +797,12 @@ class EmailNotifier extends StateNotifier<EmailState> {
         });
   }
 
-
-
   void _deduplicateSent(Map<String, EmailModel> merged) {
     final Set<String> idsToRemove = {};
 
     for (final email in merged.values) {
-      if ((email.isSent || email.memberOfFolders.contains('Sent')) && email.id.startsWith('local_')) {
+      if ((email.isSent || email.memberOfFolders.contains('Sent')) &&
+          email.id.startsWith('local_')) {
         final recipientKey = email.recipient.trim().toLowerCase();
         final subjectKey = email.subject.trim().toLowerCase();
         final bodySnippet = email.body.trim().length > 30
@@ -762,32 +836,6 @@ class EmailNotifier extends StateNotifier<EmailState> {
     }
   }
 
-  void _deduplicateStarred(Map<String, EmailModel> merged) {
-    final Set<String> idsToRemove = {};
-    final Map<String, EmailModel> seenStarred = {};
-
-    for (final email in merged.values) {
-      final isStarred = email.isStarred || email.memberOfFolders.contains('Starred');
-      if (!isStarred || email.isTrash) continue;
-
-      final key = email.canonicalKey;
-      if (seenStarred.containsKey(key)) {
-        final existing = seenStarred[key]!;
-        if (email.memberOfFolders.length >= existing.memberOfFolders.length) {
-          idsToRemove.add(existing.id);
-          seenStarred[key] = email;
-        } else {
-          idsToRemove.add(email.id);
-        }
-      } else {
-        seenStarred[key] = email;
-      }
-    }
-
-    for (final id in idsToRemove) {
-      merged.remove(id);
-    }
-  }
 
   void deleteEmail(String emailId, String folder) {
     EmailModel? target;
@@ -795,7 +843,10 @@ class EmailNotifier extends StateNotifier<EmailState> {
       target = state.emails.firstWhere((e) => e.id == emailId);
     } catch (_) {}
 
-    final bool isAlreadyTrash = (folder == 'Trash') || (target != null && (target.isTrash || target.memberOfFolders.contains('Trash')));
+    final bool isAlreadyTrash =
+        (folder == 'Trash') ||
+        (target != null &&
+            (target.isTrash || target.memberOfFolders.contains('Trash')));
 
     if (isAlreadyTrash) {
       permanentlyDeleteEmail(emailId);
@@ -803,7 +854,8 @@ class EmailNotifier extends StateNotifier<EmailState> {
     }
 
     String effectiveFolder = folder;
-    if (target != null && (target.isDraft || target.memberOfFolders.contains('Draft'))) {
+    if (target != null &&
+        (target.isDraft || target.memberOfFolders.contains('Draft'))) {
       effectiveFolder = 'Draft';
     }
 
@@ -822,7 +874,9 @@ class EmailNotifier extends StateNotifier<EmailState> {
 
     final cleanId = MailRepository.cleanUid(emailId);
     MailRepository.trashEmail(cleanId, effectiveFolder).catchError((err) {
-      print('[DELETE EMAIL ERROR] trashEmail failed for $cleanId ($effectiveFolder): $err');
+      print(
+        '[DELETE EMAIL ERROR] trashEmail failed for $cleanId ($effectiveFolder): $err',
+      );
     });
   }
 
@@ -831,15 +885,22 @@ class EmailNotifier extends StateNotifier<EmailState> {
       emails: state.emails.where((e) => e.id != emailId).toList(),
     );
     final cleanId = MailRepository.cleanUid(emailId);
-    MailRepository.permanentlyDeleteEmail(cleanId, folder: folder).catchError((err) {
-      print('[PERMANENT DELETE ERROR] permanentlyDeleteEmail failed for $cleanId ($folder): $err');
+    MailRepository.permanentlyDeleteEmail(cleanId, folder: folder).catchError((
+      err,
+    ) {
+      print(
+        '[PERMANENT DELETE ERROR] permanentlyDeleteEmail failed for $cleanId ($folder): $err',
+      );
     });
   }
 
   Future<void> fetchFullEmailDetails(String emailId, String folder) async {
     final cleanId = MailRepository.cleanUid(emailId);
     try {
-      final fullEmail = await MailRepository.fetchEmail(cleanId, folder: folder);
+      final fullEmail = await MailRepository.fetchEmail(
+        cleanId,
+        folder: folder,
+      );
       if (fullEmail != null) {
         _updateLocal(emailId, (existing) {
           final mergedAttachments = (existing.attachments.isNotEmpty)
@@ -848,12 +909,17 @@ class EmailNotifier extends StateNotifier<EmailState> {
           return existing.copyWith(
             attachments: mergedAttachments,
             body: fullEmail.body.isNotEmpty ? fullEmail.body : existing.body,
-            hasAttachment: existing.hasAttachment || fullEmail.hasAttachment || mergedAttachments.isNotEmpty,
+            hasAttachment:
+                existing.hasAttachment ||
+                fullEmail.hasAttachment ||
+                mergedAttachments.isNotEmpty,
           );
         });
       }
     } catch (e) {
-      print('[FETCH EMAIL DETAILS WARNING] fetchFullEmailDetails failed for $cleanId: $e');
+      print(
+        '[FETCH EMAIL DETAILS WARNING] fetchFullEmailDetails failed for $cleanId: $e',
+      );
     }
   }
 
@@ -862,10 +928,7 @@ class EmailNotifier extends StateNotifier<EmailState> {
       final updatedFolders = Set<String>.from(e.memberOfFolders)
         ..remove('Trash')
         ..add('Inbox');
-      return e.copyWith(
-        isTrash: false,
-        memberOfFolders: updatedFolders,
-      );
+      return e.copyWith(isTrash: false, memberOfFolders: updatedFolders);
     });
     final cleanId = MailRepository.cleanUid(emailId);
     MailRepository.restoreFromTrash(cleanId).catchError((err) {
@@ -900,7 +963,9 @@ class EmailNotifier extends StateNotifier<EmailState> {
 
   void markSpam(String emailId, String folder) {
     _updateLocal(emailId, (e) {
-      final updatedFolders = Set<String>.from(e.memberOfFolders)..add('Spam')..remove('Inbox');
+      final updatedFolders = Set<String>.from(e.memberOfFolders)
+        ..add('Spam')
+        ..remove('Inbox');
       return e.copyWith(isSpam: true, memberOfFolders: updatedFolders);
     });
     MailRepository.markSpam(emailId, folder).catchError((_) {
@@ -1042,7 +1107,10 @@ class EmailNotifier extends StateNotifier<EmailState> {
   // ── Scheduled Email Actions ───────────────────────────────────────────────
 
   /// Reschedules an existing scheduled email to a new date & time.
-  Future<void> rescheduleScheduledEmail(String emailId, DateTime newScheduledAt) async {
+  Future<void> rescheduleScheduledEmail(
+    String emailId,
+    DateTime newScheduledAt,
+  ) async {
     final existing = state.emails.firstWhere(
       (e) => e.id == emailId,
       orElse: () => EmailModel(
@@ -1156,7 +1224,8 @@ class EmailNotifier extends StateNotifier<EmailState> {
       // 1. Gather all scheduled emails from local Riverpod state
       final dueMails = <EmailModel>[];
       for (final e in state.emails) {
-        final isSched = e.isScheduled || e.memberOfFolders.contains('Scheduled');
+        final isSched =
+            e.isScheduled || e.memberOfFolders.contains('Scheduled');
         if (isSched && !_dispatchingIds.contains(e.id)) {
           if (e.date.isBefore(now) || e.date.isAtSameMomentAs(now)) {
             dueMails.add(e);
@@ -1166,7 +1235,10 @@ class EmailNotifier extends StateNotifier<EmailState> {
 
       // 2. Fetch latest server Scheduled folder items to catch items created in background
       try {
-        final serverScheduled = await MailRepository.fetchFolder('Scheduled', limit: 50);
+        final serverScheduled = await MailRepository.fetchFolder(
+          'Scheduled',
+          limit: 50,
+        );
         for (final e in serverScheduled) {
           if (!_dispatchingIds.contains(e.id)) {
             if (e.date.isBefore(now) || e.date.isAtSameMomentAs(now)) {
@@ -1180,23 +1252,33 @@ class EmailNotifier extends StateNotifier<EmailState> {
 
       // 3. Dispatch each due email automatically
       if (dueMails.isNotEmpty) {
-        print('[SCHEDULED DISPATCH] Found ${dueMails.length} due scheduled email(s) for delivery.');
+        print(
+          '[SCHEDULED DISPATCH] Found ${dueMails.length} due scheduled email(s) for delivery.',
+        );
 
         for (final mail in dueMails) {
           _dispatchingIds.add(mail.id);
           try {
-            print('[SCHEDULED DISPATCH] Dispatching mail "${mail.subject}" to ${mail.recipient}...');
+            print(
+              '[SCHEDULED DISPATCH] Dispatching mail "${mail.subject}" to ${mail.recipient}...',
+            );
             await sendScheduledEmailNow(mail);
-            print('[SCHEDULED DISPATCH SUCCESS] Mail "${mail.subject}" sent to ${mail.recipient} successfully.');
+            print(
+              '[SCHEDULED DISPATCH SUCCESS] Mail "${mail.subject}" sent to ${mail.recipient} successfully.',
+            );
           } catch (err) {
-            print('[SCHEDULED DISPATCH ERROR] Failed to send scheduled mail ${mail.id}: $err');
+            print(
+              '[SCHEDULED DISPATCH ERROR] Failed to send scheduled mail ${mail.id}: $err',
+            );
           } finally {
             _dispatchingIds.remove(mail.id);
           }
         }
       }
     } catch (e) {
-      print('[SCHEDULED DISPATCH ERROR] Error in checkAndDispatchScheduledMails: $e');
+      print(
+        '[SCHEDULED DISPATCH ERROR] Error in checkAndDispatchScheduledMails: $e',
+      );
     } finally {
       _isDispatchingScheduled = false;
     }
@@ -1220,7 +1302,9 @@ final emailProvider = StateNotifierProvider<EmailNotifier, EmailState>((ref) {
 /// Flat list of all loaded emails — drop-in replacement for the old `List<EmailModel>` provider.
 final emailListProvider = Provider<List<EmailModel>>((ref) {
   final emails = ref.watch(emailProvider).emails;
-  print('[DIAGNOSTIC] emailListProvider exposing ${emails.length} emails to the UI.');
+  print(
+    '[DIAGNOSTIC] emailListProvider exposing ${emails.length} emails to the UI.',
+  );
   return emails;
 });
 

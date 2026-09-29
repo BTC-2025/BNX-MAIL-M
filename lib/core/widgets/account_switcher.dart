@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../data/account_provider.dart';
 import '../../models/account_model.dart';
-import '../../data/email_provider.dart';
 import '../theme/colors.dart';
 
 class AccountSwitcherSheet extends ConsumerWidget {

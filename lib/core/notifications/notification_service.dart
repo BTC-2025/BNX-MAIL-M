@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -13,7 +12,9 @@ import 'notification_router.dart';
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   try {
     await Firebase.initializeApp();
-    print('[NOTIFICATION] FCM Background message received: ${message.messageId}');
+    print(
+      '[NOTIFICATION] FCM Background message received: ${message.messageId}',
+    );
   } catch (e) {
     print('[NOTIFICATION] FCM Background handler error: $e');
   }
@@ -25,8 +26,9 @@ class NotificationService {
   static final NotificationService instance = NotificationService._internal();
   NotificationService._internal();
 
-  static const MethodChannel _platformChannel =
-      MethodChannel('com.bnxmail.app/notifications');
+  static const MethodChannel _platformChannel = MethodChannel(
+    'com.bnxmail.app/notifications',
+  );
 
   bool _isInitialized = false;
   String? _fcmToken;
@@ -56,17 +58,25 @@ class NotificationService {
           sound: true,
           provisional: false,
         );
-        print('[NOTIFICATION] FCM Permission status: ${settings.authorizationStatus}');
+        print(
+          '[NOTIFICATION] FCM Permission status: ${settings.authorizationStatus}',
+        );
 
         // Register background handler
-        FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+        FirebaseMessaging.onBackgroundMessage(
+          firebaseMessagingBackgroundHandler,
+        );
 
         // Fetch & Log Device FCM Token for Backend Targeting
         _fcmToken = await messaging.getToken();
-        print('================================================================');
+        print(
+          '================================================================',
+        );
         print('[FCM TOKEN] YOUR DEVICE FCM TOKEN:');
         print('$_fcmToken');
-        print('================================================================');
+        print(
+          '================================================================',
+        );
 
         if (_fcmToken != null && _fcmToken!.isNotEmpty) {
           final hasToken = await TokenService.hasToken();
@@ -87,7 +97,9 @@ class NotificationService {
 
         // 1. Foreground Message Listener
         FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-          print('[NOTIFICATION] FCM Foreground message received: ${message.messageId}');
+          print(
+            '[NOTIFICATION] FCM Foreground message received: ${message.messageId}',
+          );
           final event = _parseRemoteMessage(message);
           showNotification(event);
         });
@@ -110,7 +122,6 @@ class NotificationService {
             handleNotificationTap(event, ref);
           }
         }
-
       } catch (fcmError) {
         print('[NOTIFICATION] Firebase FCM setup notice: $fcmError');
       }
@@ -140,7 +151,10 @@ class NotificationService {
       senderName: data['senderName'] ?? notification?.title,
       senderEmail: data['senderEmail'] ?? data['from'],
       subject: data['subject'] ?? notification?.title ?? 'New email',
-      preview: data['preview'] ?? notification?.body ?? 'You have received a new email.',
+      preview:
+          data['preview'] ??
+          notification?.body ??
+          'You have received a new email.',
       timestamp: message.sentTime ?? DateTime.now(),
     );
   }
@@ -154,7 +168,9 @@ class NotificationService {
 
       print('[NOTIFICATION] Incoming event received');
       print('[NOTIFICATION] Event type: ${event.type ?? "new_email"}');
-      print('[NOTIFICATION] Account: ${event.effectiveAccountIdentifier ?? "active"}');
+      print(
+        '[NOTIFICATION] Account: ${event.effectiveAccountIdentifier ?? "active"}',
+      );
       print('[NOTIFICATION] Email ID: ${event.effectiveEmailId ?? "N/A"}');
 
       final title = event.formattedSender;
@@ -182,13 +198,19 @@ class NotificationService {
   }
 
   /// Handles notification tap and forwards the event to the notification router.
-  Future<void> handleNotificationTap(NotificationEvent event, WidgetRef ref) async {
+  Future<void> handleNotificationTap(
+    NotificationEvent event,
+    WidgetRef ref,
+  ) async {
     print('[NOTIFICATION] Notification tapped');
     await NotificationRouter.routeNotification(event, ref);
   }
 
   /// Receives an incoming notification event (from future API or test trigger) and processes it.
-  Future<void> handleIncomingEvent(NotificationEvent event, WidgetRef ref) async {
+  Future<void> handleIncomingEvent(
+    NotificationEvent event,
+    WidgetRef ref,
+  ) async {
     await showNotification(event);
   }
 }

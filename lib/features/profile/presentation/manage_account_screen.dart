@@ -8,7 +8,6 @@ import '../../../core/theme/colors.dart';
 import '../../../core/widgets/avatar_widget.dart';
 import '../../../data/account_provider.dart';
 import '../../../data/app_state_provider.dart';
-import '../../../data/colab_provider.dart';
 import '../../../models/account_model.dart';
 
 class ManageAccountScreen extends ConsumerStatefulWidget {
@@ -16,7 +15,8 @@ class ManageAccountScreen extends ConsumerStatefulWidget {
   const ManageAccountScreen({super.key, this.initialTab = 0});
 
   @override
-  ConsumerState<ManageAccountScreen> createState() => _ManageAccountScreenState();
+  ConsumerState<ManageAccountScreen> createState() =>
+      _ManageAccountScreenState();
 }
 
 class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
@@ -25,22 +25,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
   late AnimationController _animController;
   late Animation<double> _fadeAnim;
 
-  // Active Workspace State
-  String _selectedWorkspace = 'BNX Tech Enterprise';
-  String _userRole = 'Senior Product Lead';
-  final List<String> _workspaces = [
-    'BNX Tech Enterprise',
-    'Cliks Corporate Suite',
-    'Bit Tool Developer Lab',
-  ];
 
-  // Shared Mailboxes State
-  final List<Map<String, String>> _sharedMailboxes = [
-    {
-      'email': 'tech-leads@bnxmail.com',
-      'subtitle': 'Primary Shared Mailbox • Delegate Access Granted',
-    },
-  ];
 
   // Subscription State
   String _subPlanName = 'Cliks Business';
@@ -49,23 +34,37 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
   String _subPaymentMethod = '•••• 4242 (Visa)';
   int _subTeamSeats = 25;
 
-  // Advanced Privacy Toggles
-  bool _zeroKnowledgeEncryption = true;
-  bool _biometricLock = false;
-  bool _webAppActivity = true;
-  bool _locationScrubbing = true;
-  bool _autoPurgeSearch = true;
 
   static const _brandBlue = Color(0xFF195BAC);
   static const _brandBlueLight = Color(0xFF3B82F6);
   static const _accentGreen = Color(0xFF16A34A);
 
   final List<_TabItem> _tabs = const [
-    _TabItem(title: 'Home', icon: Icons.grid_view_rounded, selectedIcon: Icons.grid_view_rounded),
-    _TabItem(title: 'Personal information', icon: Icons.person_outline_rounded, selectedIcon: Icons.person_rounded),
-    _TabItem(title: 'Payment and subscription', icon: Icons.card_membership_rounded, selectedIcon: Icons.card_membership_rounded),
-    _TabItem(title: 'Account storage', icon: Icons.cloud_outlined, selectedIcon: Icons.cloud_rounded),
-    _TabItem(title: 'B2 auth', icon: Icons.security_outlined, selectedIcon: Icons.security_rounded),
+    _TabItem(
+      title: 'Home',
+      icon: Icons.grid_view_rounded,
+      selectedIcon: Icons.grid_view_rounded,
+    ),
+    _TabItem(
+      title: 'Personal information',
+      icon: Icons.person_outline_rounded,
+      selectedIcon: Icons.person_rounded,
+    ),
+    _TabItem(
+      title: 'Payment and subscription',
+      icon: Icons.card_membership_rounded,
+      selectedIcon: Icons.card_membership_rounded,
+    ),
+    _TabItem(
+      title: 'Account storage',
+      icon: Icons.cloud_outlined,
+      selectedIcon: Icons.cloud_rounded,
+    ),
+    _TabItem(
+      title: 'B2 auth',
+      icon: Icons.security_outlined,
+      selectedIcon: Icons.security_rounded,
+    ),
   ];
 
   @override
@@ -76,7 +75,10 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
-    _fadeAnim = CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic);
+    _fadeAnim = CurvedAnimation(
+      parent: _animController,
+      curve: Curves.easeOutCubic,
+    );
     _animController.forward();
   }
 
@@ -102,7 +104,9 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
           final base64String = 'data:$mime;base64,${base64Encode(bytes)}';
 
           final activeAccount = ref.read(activeAccountProvider);
-          await ref.read(accountsProvider.notifier).updateAvatar(activeAccount.id, base64String);
+          await ref
+              .read(accountsProvider.notifier)
+              .updateAvatar(activeAccount.id, base64String);
 
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -110,7 +114,9 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                 content: const Text('Profile photo updated!'),
                 backgroundColor: _brandBlue,
                 behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             );
           }
@@ -135,25 +141,38 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Sign Out'),
-        content: const Text('Are you sure you want to sign out of your account?'),
+        content: const Text(
+          'Are you sure you want to sign out of your account?',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Sign Out', style: TextStyle(color: Colors.redAccent)),
+            child: const Text(
+              'Sign Out',
+              style: TextStyle(color: Colors.redAccent),
+            ),
           ),
         ],
       ),
     );
     if (confirmed != true) return;
+    if (!mounted) return;
 
     final activeAccount = ref.read(activeAccountProvider);
-    final activeEmail = activeAccount.email.isNotEmpty ? activeAccount.email : activeAccount.id;
-    await ref.read(accountsProvider.notifier).signOutSingleAccount(
-      targetEmail: activeEmail,
-      ref: ref,
-      context: context,
-    );
+    final activeEmail = activeAccount.email.isNotEmpty
+        ? activeAccount.email
+        : activeAccount.id;
+    await ref
+        .read(accountsProvider.notifier)
+        .signOutSingleAccount(
+          targetEmail: activeEmail,
+          ref: ref,
+          context: context,
+        );
   }
 
   void _switchTab(int index) {
@@ -241,14 +260,21 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                 'assets/beta_logo.jpg',
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) => Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: _brandBlue,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Text(
                     'Beta',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
                   ),
                 ),
               ),
@@ -285,7 +311,11 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
   // ═══════════════════════════════════════════════════════════════════════════
   // CREATIVE MOBILE LAYOUT WITH GLASS TAB DOCK
   // ═══════════════════════════════════════════════════════════════════════════
-  Widget _buildMobileLayout(AccountModel account, bool isDark, Color surfaceColor) {
+  Widget _buildMobileLayout(
+    AccountModel account,
+    bool isDark,
+    Color surfaceColor,
+  ) {
     return Column(
       children: [
         // ── Modern Floating Segmented Tab Bar ──
@@ -315,7 +345,10 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 220),
                       curve: Curves.easeInOut,
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         gradient: isSelected
                             ? const LinearGradient(
@@ -325,8 +358,8 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                         color: isSelected
                             ? null
                             : (isDark
-                                ? Colors.white.withValues(alpha: 0.06)
-                                : const Color(0xFFF1F5F9)),
+                                  ? Colors.white.withValues(alpha: 0.06)
+                                  : const Color(0xFFF1F5F9)),
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: isSelected
                             ? [
@@ -346,17 +379,23 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                             size: 16,
                             color: isSelected
                                 ? Colors.white
-                                : (isDark ? Colors.white54 : const Color(0xFF64748B)),
+                                : (isDark
+                                      ? Colors.white54
+                                      : const Color(0xFF64748B)),
                           ),
                           const SizedBox(width: 6),
                           Text(
                             tab.title,
                             style: TextStyle(
                               fontSize: 12,
-                              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
                               color: isSelected
                                   ? Colors.white
-                                  : (isDark ? Colors.white70 : const Color(0xFF475569)),
+                                  : (isDark
+                                        ? Colors.white70
+                                        : const Color(0xFF475569)),
                             ),
                           ),
                         ],
@@ -387,7 +426,11 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
   // ═══════════════════════════════════════════════════════════════════════════
   // DESKTOP LAYOUT WITH SIDEBAR
   // ═══════════════════════════════════════════════════════════════════════════
-  Widget _buildDesktopLayout(AccountModel account, bool isDark, Color surfaceColor) {
+  Widget _buildDesktopLayout(
+    AccountModel account,
+    bool isDark,
+    Color surfaceColor,
+  ) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -403,26 +446,38 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                   final tab = _tabs[index];
                   final isSelected = _selectedTab == index;
                   return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 3,
+                    ),
                     child: InkWell(
                       onTap: () => _switchTab(index),
                       borderRadius: BorderRadius.circular(14),
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                         decoration: BoxDecoration(
                           gradient: isSelected
                               ? LinearGradient(
                                   colors: [
-                                    _brandBlue.withValues(alpha: isDark ? 0.25 : 0.1),
-                                    _brandBlueLight.withValues(alpha: isDark ? 0.15 : 0.05),
+                                    _brandBlue.withValues(
+                                      alpha: isDark ? 0.25 : 0.1,
+                                    ),
+                                    _brandBlueLight.withValues(
+                                      alpha: isDark ? 0.15 : 0.05,
+                                    ),
                                   ],
                                 )
                               : null,
                           borderRadius: BorderRadius.circular(14),
                           border: isSelected
                               ? Border.all(
-                                  color: _brandBlue.withValues(alpha: isDark ? 0.4 : 0.2),
+                                  color: _brandBlue.withValues(
+                                    alpha: isDark ? 0.4 : 0.2,
+                                  ),
                                   width: 1,
                                 )
                               : null,
@@ -434,7 +489,9 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                               size: 20,
                               color: isSelected
                                   ? (isDark ? _brandBlueLight : _brandBlue)
-                                  : (isDark ? Colors.white54 : const Color(0xFF64748B)),
+                                  : (isDark
+                                        ? Colors.white54
+                                        : const Color(0xFF64748B)),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
@@ -442,10 +499,14 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                                 tab.title,
                                 style: TextStyle(
                                   fontSize: 13,
-                                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                  fontWeight: isSelected
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
                                   color: isSelected
                                       ? (isDark ? _brandBlueLight : _brandBlue)
-                                      : (isDark ? Colors.white70 : const Color(0xFF334155)),
+                                      : (isDark
+                                            ? Colors.white70
+                                            : const Color(0xFF334155)),
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -464,14 +525,23 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                     onTap: _handleSignOut,
                     borderRadius: BorderRadius.circular(14),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                       decoration: BoxDecoration(
-                        color: Colors.red.withValues(alpha: isDark ? 0.12 : 0.06),
+                        color: Colors.red.withValues(
+                          alpha: isDark ? 0.12 : 0.06,
+                        ),
                         borderRadius: BorderRadius.circular(14),
                       ),
                       child: const Row(
                         children: [
-                          Icon(Icons.logout_rounded, size: 20, color: Colors.redAccent),
+                          Icon(
+                            Icons.logout_rounded,
+                            size: 20,
+                            color: Colors.redAccent,
+                          ),
                           SizedBox(width: 12),
                           Text(
                             'Sign Out',
@@ -501,7 +571,10 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                 constraints: const BoxConstraints(maxWidth: 820),
                 child: SingleChildScrollView(
                   physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 32,
+                    vertical: 24,
+                  ),
                   child: _buildActiveTabContent(account, isDark, false),
                 ),
               ),
@@ -515,7 +588,11 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
   // ═══════════════════════════════════════════════════════════════════════════
   // TAB ROUTER
   // ═══════════════════════════════════════════════════════════════════════════
-  Widget _buildActiveTabContent(AccountModel account, bool isDark, bool isMobile) {
+  Widget _buildActiveTabContent(
+    AccountModel account,
+    bool isDark,
+    bool isMobile,
+  ) {
     switch (_selectedTab) {
       case 0:
         return _buildHomeTab(account, isDark, isMobile);
@@ -535,7 +612,11 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
   // ═══════════════════════════════════════════════════════════════════════════
   // 3. ACCOUNT STORAGE TAB
   // ═══════════════════════════════════════════════════════════════════════════
-  Widget _buildAccountStorageTab(AccountModel account, bool isDark, bool isMobile) {
+  Widget _buildAccountStorageTab(
+    AccountModel account,
+    bool isDark,
+    bool isMobile,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -544,15 +625,23 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildSectionHeader('Storage Overview', Icons.cloud_outlined, isDark),
+              _buildSectionHeader(
+                'Storage Overview',
+                Icons.cloud_outlined,
+                isDark,
+              ),
               const SizedBox(height: 16),
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
                 child: LinearProgressIndicator(
                   value: 0.05,
                   minHeight: 12,
-                  backgroundColor: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
-                  valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF195BAC)),
+                  backgroundColor: isDark
+                      ? Colors.white12
+                      : const Color(0xFFE2E8F0),
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    Color(0xFF195BAC),
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
@@ -661,10 +750,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                         SizedBox(height: 4),
                         Text(
                           'Unified Identity & Security Management',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.white70,
-                          ),
+                          style: TextStyle(fontSize: 13, color: Colors.white70),
                         ),
                       ],
                     ),
@@ -682,12 +768,20 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                   );
                 },
                 icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                label: const Text('Open B2 Auth App', style: TextStyle(fontWeight: FontWeight.bold)),
+                label: const Text(
+                  'Open B2 Auth App',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white,
                   foregroundColor: const Color(0xFF1E40AF),
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   minimumSize: const Size(double.infinity, 48),
                 ),
               ),
@@ -731,7 +825,10 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
             padding: const EdgeInsets.all(2),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(color: Colors.white.withValues(alpha: 0.5), width: 2),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.5),
+                width: 2,
+              ),
             ),
             child: AvatarWidget(
               name: account.name,
@@ -770,7 +867,10 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                 ),
                 const SizedBox(height: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.18),
                     borderRadius: BorderRadius.circular(20),
@@ -815,23 +915,37 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
         title: const Text('Edit Full Name'),
         content: TextField(
           controller: ctrl,
-          decoration: const InputDecoration(labelText: 'Full Name', hintText: 'Enter full name'),
+          decoration: const InputDecoration(
+            labelText: 'Full Name',
+            hintText: 'Enter full name',
+          ),
           autofocus: true,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () {
               final newName = ctrl.text.trim();
               if (newName.isNotEmpty) {
-                ref.read(accountsProvider.notifier).updateAccountFields(account.id, name: newName);
+                ref
+                    .read(accountsProvider.notifier)
+                    .updateAccountFields(account.id, name: newName);
                 Navigator.pop(ctx);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Name updated!'), behavior: SnackBarBehavior.floating),
+                  const SnackBar(
+                    content: Text('Name updated!'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
                 );
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: _brandBlue, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _brandBlue,
+              foregroundColor: Colors.white,
+            ),
             child: const Text('Save'),
           ),
         ],
@@ -840,7 +954,9 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
   }
 
   void _editUsername(AccountModel account) {
-    final currentUsername = account.email.contains('@') ? account.email.split('@').first : account.email;
+    final currentUsername = account.email.contains('@')
+        ? account.email.split('@').first
+        : account.email;
     final ctrl = TextEditingController(text: currentUsername);
     showDialog(
       context: context,
@@ -848,22 +964,34 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
         title: const Text('Edit Username'),
         content: TextField(
           controller: ctrl,
-          decoration: const InputDecoration(labelText: 'Username', hintText: 'Enter username'),
+          decoration: const InputDecoration(
+            labelText: 'Username',
+            hintText: 'Enter username',
+          ),
           autofocus: true,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () {
               final newUsername = ctrl.text.trim();
               if (newUsername.isNotEmpty) {
                 Navigator.pop(ctx);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Username set to "@$newUsername"!'), behavior: SnackBarBehavior.floating),
+                  SnackBar(
+                    content: Text('Username set to "@$newUsername"!'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
                 );
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: _brandBlue, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _brandBlue,
+              foregroundColor: Colors.white,
+            ),
             child: const Text('Save'),
           ),
         ],
@@ -880,21 +1008,35 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
         content: TextField(
           controller: ctrl,
           keyboardType: TextInputType.emailAddress,
-          decoration: const InputDecoration(labelText: 'Recovery Email', hintText: 'user@example.com'),
+          decoration: const InputDecoration(
+            labelText: 'Recovery Email',
+            hintText: 'user@example.com',
+          ),
           autofocus: true,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () {
               final newMail = ctrl.text.trim();
-              ref.read(accountsProvider.notifier).updateAccountFields(account.id, recoveryEmail: newMail);
+              ref
+                  .read(accountsProvider.notifier)
+                  .updateAccountFields(account.id, recoveryEmail: newMail);
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Recovery email updated!'), behavior: SnackBarBehavior.floating),
+                const SnackBar(
+                  content: Text('Recovery email updated!'),
+                  behavior: SnackBarBehavior.floating,
+                ),
               );
             },
-            style: ElevatedButton.styleFrom(backgroundColor: _brandBlue, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _brandBlue,
+              foregroundColor: Colors.white,
+            ),
             child: const Text('Save'),
           ),
         ],
@@ -911,21 +1053,35 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
         content: TextField(
           controller: ctrl,
           keyboardType: TextInputType.phone,
-          decoration: const InputDecoration(labelText: 'Phone Number', hintText: '+1 234 567 8900'),
+          decoration: const InputDecoration(
+            labelText: 'Phone Number',
+            hintText: '+1 234 567 8900',
+          ),
           autofocus: true,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () {
               final newPhone = ctrl.text.trim();
-              ref.read(accountsProvider.notifier).updateAccountFields(account.id, phone: newPhone);
+              ref
+                  .read(accountsProvider.notifier)
+                  .updateAccountFields(account.id, phone: newPhone);
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Phone number updated!'), behavior: SnackBarBehavior.floating),
+                const SnackBar(
+                  content: Text('Phone number updated!'),
+                  behavior: SnackBarBehavior.floating,
+                ),
               );
             },
-            style: ElevatedButton.styleFrom(backgroundColor: _brandBlue, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _brandBlue,
+              foregroundColor: Colors.white,
+            ),
             child: const Text('Save'),
           ),
         ],
@@ -942,10 +1098,15 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
       lastDate: now,
     );
     if (picked != null) {
-      ref.read(accountsProvider.notifier).updateAccountFields(account.id, dob: picked);
+      ref
+          .read(accountsProvider.notifier)
+          .updateAccountFields(account.id, dob: picked);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Birthday updated!'), behavior: SnackBarBehavior.floating),
+          const SnackBar(
+            content: Text('Birthday updated!'),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     }
@@ -960,17 +1121,30 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
           final isSelected = account.accountType.toUpperCase() == type;
           return SimpleDialogOption(
             onPressed: () {
-              ref.read(accountsProvider.notifier).updateAccountFields(account.id, accountType: type);
+              ref
+                  .read(accountsProvider.notifier)
+                  .updateAccountFields(account.id, accountType: type);
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Account type set to $type'), behavior: SnackBarBehavior.floating),
+                SnackBar(
+                  content: Text('Account type set to $type'),
+                  behavior: SnackBarBehavior.floating,
+                ),
               );
             },
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(type, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
-                if (isSelected) const Icon(Icons.check_rounded, color: _brandBlue, size: 18),
+                Text(
+                  type,
+                  style: TextStyle(
+                    fontWeight: isSelected
+                        ? FontWeight.bold
+                        : FontWeight.normal,
+                  ),
+                ),
+                if (isSelected)
+                  const Icon(Icons.check_rounded, color: _brandBlue, size: 18),
               ],
             ),
           );
@@ -980,7 +1154,16 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
   }
 
   void _selectLanguage(AccountModel account) {
-    final langs = ['English (US)', 'English (UK)', 'Spanish', 'French', 'German', 'Hindi', 'Japanese', 'Chinese'];
+    final langs = [
+      'English (US)',
+      'English (UK)',
+      'Spanish',
+      'French',
+      'German',
+      'Hindi',
+      'Japanese',
+      'Chinese',
+    ];
     showDialog(
       context: context,
       builder: (ctx) => SimpleDialog(
@@ -989,17 +1172,30 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
           final isSelected = account.language == lang;
           return SimpleDialogOption(
             onPressed: () {
-              ref.read(accountsProvider.notifier).updateAccountFields(account.id, language: lang);
+              ref
+                  .read(accountsProvider.notifier)
+                  .updateAccountFields(account.id, language: lang);
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Language set to $lang'), behavior: SnackBarBehavior.floating),
+                SnackBar(
+                  content: Text('Language set to $lang'),
+                  behavior: SnackBarBehavior.floating,
+                ),
               );
             },
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(lang, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
-                if (isSelected) const Icon(Icons.check_rounded, color: _brandBlue, size: 18),
+                Text(
+                  lang,
+                  style: TextStyle(
+                    fontWeight: isSelected
+                        ? FontWeight.bold
+                        : FontWeight.normal,
+                  ),
+                ),
+                if (isSelected)
+                  const Icon(Icons.check_rounded, color: _brandBlue, size: 18),
               ],
             ),
           );
@@ -1009,7 +1205,12 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
   }
 
   void _selectAccessibility(AccountModel account) {
-    final options = ['Default', 'High Contrast', 'Large Text', 'Screen Reader Optimized'];
+    final options = [
+      'Default',
+      'High Contrast',
+      'Large Text',
+      'Screen Reader Optimized',
+    ];
     showDialog(
       context: context,
       builder: (ctx) => SimpleDialog(
@@ -1018,135 +1219,34 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
           final isSelected = account.accessibility == opt;
           return SimpleDialogOption(
             onPressed: () {
-              ref.read(accountsProvider.notifier).updateAccountFields(account.id, accessibility: opt);
+              ref
+                  .read(accountsProvider.notifier)
+                  .updateAccountFields(account.id, accessibility: opt);
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Accessibility set to $opt'), behavior: SnackBarBehavior.floating),
+                SnackBar(
+                  content: Text('Accessibility set to $opt'),
+                  behavior: SnackBarBehavior.floating,
+                ),
               );
             },
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(opt, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
-                if (isSelected) const Icon(Icons.check_rounded, color: _brandBlue, size: 18),
+                Text(
+                  opt,
+                  style: TextStyle(
+                    fontWeight: isSelected
+                        ? FontWeight.bold
+                        : FontWeight.normal,
+                  ),
+                ),
+                if (isSelected)
+                  const Icon(Icons.check_rounded, color: _brandBlue, size: 18),
               ],
             ),
           );
         }).toList(),
-      ),
-    );
-  }
-
-  void _editUserRole() {
-    final ctrl = TextEditingController(text: _userRole);
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Edit Role / Designation'),
-        content: TextField(
-          controller: ctrl,
-          decoration: const InputDecoration(labelText: 'Role', hintText: 'e.g. Senior Product Lead'),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () {
-              final newRole = ctrl.text.trim();
-              if (newRole.isNotEmpty) {
-                setState(() => _userRole = newRole);
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Role updated!'), behavior: SnackBarBehavior.floating),
-                );
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: _brandBlue, foregroundColor: Colors.white),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showAddWorkspaceModal() {
-    final ctrl = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Create New Workspace'),
-        content: TextField(
-          controller: ctrl,
-          decoration: const InputDecoration(labelText: 'Workspace Name', hintText: 'e.g. Acme Corp Labs'),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () {
-              final name = ctrl.text.trim();
-              if (name.isNotEmpty) {
-                setState(() {
-                  _workspaces.add(name);
-                  _selectedWorkspace = name;
-                });
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Created & switched to "$name"!'), behavior: SnackBarBehavior.floating),
-                );
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: _brandBlue, foregroundColor: Colors.white),
-            child: const Text('Create'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showAddSharedMailboxModal() {
-    final mailCtrl = TextEditingController();
-    final titleCtrl = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Add Shared Mailbox'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: mailCtrl,
-              decoration: const InputDecoration(labelText: 'Mailbox Email', hintText: 'team@bnxmail.com'),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: titleCtrl,
-              decoration: const InputDecoration(labelText: 'Description / Role', hintText: 'Support Shared Mailbox'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () {
-              final email = mailCtrl.text.trim();
-              if (email.isNotEmpty) {
-                setState(() {
-                  _sharedMailboxes.add({
-                    'email': email,
-                    'subtitle': titleCtrl.text.trim().isNotEmpty ? titleCtrl.text.trim() : 'Shared Mailbox Access',
-                  });
-                });
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Shared Mailbox "$email" added!'), behavior: SnackBarBehavior.floating),
-                );
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: _brandBlue, foregroundColor: Colors.white),
-            child: const Text('Add Mailbox'),
-          ),
-        ],
       ),
     );
   }
@@ -1160,7 +1260,10 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Current Plan: $_subPlanName ($_subPrice)', style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text(
+              'Current Plan: $_subPlanName ($_subPrice)',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 8),
             Text('Next Renewal: $_subRenewalDate'),
             Text('Payment Method: $_subPaymentMethod'),
@@ -1184,7 +1287,10 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx),
-            style: ElevatedButton.styleFrom(backgroundColor: _brandBlue, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _brandBlue,
+              foregroundColor: Colors.white,
+            ),
             child: const Text('Done'),
           ),
         ],
@@ -1200,10 +1306,16 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
         title: const Text('Update Payment Method'),
         content: TextField(
           controller: ctrl,
-          decoration: const InputDecoration(labelText: 'Payment Method', hintText: '•••• 4242 (Visa)'),
+          decoration: const InputDecoration(
+            labelText: 'Payment Method',
+            hintText: '•••• 4242 (Visa)',
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () {
               final val = ctrl.text.trim();
@@ -1211,11 +1323,17 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                 setState(() => _subPaymentMethod = val);
                 Navigator.pop(ctx);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Payment method updated!'), behavior: SnackBarBehavior.floating),
+                  const SnackBar(
+                    content: Text('Payment method updated!'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
                 );
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: _brandBlue, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _brandBlue,
+              foregroundColor: Colors.white,
+            ),
             child: const Text('Save'),
           ),
         ],
@@ -1232,10 +1350,16 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
         content: TextField(
           controller: ctrl,
           keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: 'Number of Seats', hintText: '25'),
+          decoration: const InputDecoration(
+            labelText: 'Number of Seats',
+            hintText: '25',
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () {
               final val = int.tryParse(ctrl.text.trim());
@@ -1243,11 +1367,17 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                 setState(() => _subTeamSeats = val);
                 Navigator.pop(ctx);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Team seats updated to $val!'), behavior: SnackBarBehavior.floating),
+                  SnackBar(
+                    content: Text('Team seats updated to $val!'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
                 );
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: _brandBlue, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _brandBlue,
+              foregroundColor: Colors.white,
+            ),
             child: const Text('Save'),
           ),
         ],
@@ -1298,7 +1428,9 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                 child: LinearProgressIndicator(
                   value: 0.05,
                   minHeight: 8,
-                  backgroundColor: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                  backgroundColor: isDark
+                      ? Colors.white12
+                      : const Color(0xFFE2E8F0),
                   valueColor: const AlwaysStoppedAnimation<Color>(_brandBlue),
                 ),
               ),
@@ -1339,7 +1471,11 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
   }
 
   // Quick Action Grid Layout with Auto-height (No Fixed Grid Aspect Ratio = Zero Overflow)
-  Widget _buildQuickActionGrid(AccountModel account, bool isDark, bool isMobile) {
+  Widget _buildQuickActionGrid(
+    AccountModel account,
+    bool isDark,
+    bool isMobile,
+  ) {
     final items = [
       _QuickAction(
         icon: Icons.person_outline_rounded,
@@ -1383,7 +1519,10 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
               child: SizedBox(
                 width: cardWidth,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 14,
+                  ),
                   decoration: BoxDecoration(
                     color: isDark ? BNXColors.darkSurface : Colors.white,
                     borderRadius: BorderRadius.circular(16),
@@ -1392,7 +1531,9 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.04),
+                        color: Colors.black.withValues(
+                          alpha: isDark ? 0.15 : 0.04,
+                        ),
                         blurRadius: 10,
                         offset: const Offset(0, 3),
                       ),
@@ -1406,7 +1547,9 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                         width: 34,
                         height: 34,
                         decoration: BoxDecoration(
-                          color: item.color.withValues(alpha: isDark ? 0.2 : 0.1),
+                          color: item.color.withValues(
+                            alpha: isDark ? 0.2 : 0.1,
+                          ),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Icon(item.icon, size: 18, color: item.color),
@@ -1417,7 +1560,9 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
-                          color: isDark ? Colors.white : const Color(0xFF1E293B),
+                          color: isDark
+                              ? Colors.white
+                              : const Color(0xFF1E293B),
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -1446,7 +1591,11 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
   // ═══════════════════════════════════════════════════════════════════════════
   // 2. PERSONAL INFO TAB
   // ═══════════════════════════════════════════════════════════════════════════
-  Widget _buildPersonalInfoTab(AccountModel account, bool isDark, bool isMobile) {
+  Widget _buildPersonalInfoTab(
+    AccountModel account,
+    bool isDark,
+    bool isMobile,
+  ) {
     final username = account.email.split('@').first;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1461,7 +1610,10 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
               const SizedBox(height: 4),
               Text(
                 'Visible to other BNX users',
-                style: TextStyle(fontSize: 11, color: isDark ? Colors.white38 : Colors.grey.shade500),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: isDark ? Colors.white38 : Colors.grey.shade500,
+                ),
               ),
               const SizedBox(height: 16),
               _buildInfoTile(
@@ -1479,7 +1631,11 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                     ),
                     const SizedBox(width: 8),
                     Flexible(
-                      child: _buildSmallButton('Change', onTap: _pickAndUploadPhoto, isDark: isDark),
+                      child: _buildSmallButton(
+                        'Change',
+                        onTap: _pickAndUploadPhoto,
+                        isDark: isDark,
+                      ),
                     ),
                   ],
                 ),
@@ -1505,7 +1661,9 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                 icon: Icons.tag_rounded,
                 label: 'Account ID',
                 value: (account.id.isNotEmpty && account.id != 'loading')
-                    ? (account.id.startsWith('#') ? account.id : '#${account.id.length > 8 ? account.id.substring(0, 8) : account.id}')
+                    ? (account.id.startsWith('#')
+                          ? account.id
+                          : '#${account.id.length > 8 ? account.id.substring(0, 8) : account.id}')
                     : '#BNX-${(account.email.hashCode.abs() % 9000) + 1000}',
               ),
               _buildInfoTile(
@@ -1525,10 +1683,16 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                 isClickable: true,
                 onTap: () => _editAccountType(account),
                 trailing: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [_brandBlue.withValues(alpha: 0.15), _brandBlueLight.withValues(alpha: 0.1)],
+                      colors: [
+                        _brandBlue.withValues(alpha: 0.15),
+                        _brandBlueLight.withValues(alpha: 0.1),
+                      ],
                     ),
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -1555,7 +1719,11 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildSectionHeader('Contact Info', Icons.contact_mail_outlined, isDark),
+              _buildSectionHeader(
+                'Contact Info',
+                Icons.contact_mail_outlined,
+                isDark,
+              ),
               const SizedBox(height: 16),
               _buildInfoTile(
                 isDark: isDark,
@@ -1567,21 +1735,31 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                     Flexible(
                       child: Text(
                         account.email,
-                        style: TextStyle(fontSize: 12, color: isDark ? Colors.white : Colors.black87),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     const SizedBox(width: 6),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: _accentGreen.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: const Text(
                         '✓',
-                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: _accentGreen),
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: _accentGreen,
+                        ),
                       ),
                     ),
                   ],
@@ -1591,7 +1769,9 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                 isDark: isDark,
                 icon: Icons.mail_outline_rounded,
                 label: 'Recovery',
-                value: (account.recoveryEmail != null && account.recoveryEmail!.isNotEmpty)
+                value:
+                    (account.recoveryEmail != null &&
+                        account.recoveryEmail!.isNotEmpty)
                     ? account.recoveryEmail
                     : 'Not set',
                 isClickable: true,
@@ -1647,904 +1827,6 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // 3. EMAILS & IDENTITIES TAB
-  // ═══════════════════════════════════════════════════════════════════════════
-  Widget _buildEmailsTab(AccountModel account, bool isDark, bool isMobile) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildGlassCard(
-          isDark: isDark,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildSectionHeader('Email Identities', Icons.alternate_email_rounded, isDark),
-              const SizedBox(height: 16),
-
-              // Primary email card
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: isDark
-                        ? [const Color(0xFF1E3A5F), const Color(0xFF1E293B)]
-                        : [const Color(0xFFEFF6FF), const Color(0xFFF0F9FF)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: isDark ? _brandBlueLight.withValues(alpha: 0.3) : const Color(0xFFBFDBFE),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(colors: [_brandBlue, _brandBlueLight]),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(Icons.email_rounded, color: Colors.white, size: 18),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            account.email,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: isDark ? Colors.white : const Color(0xFF1E293B),
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Primary email address',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: isDark ? Colors.white54 : Colors.grey.shade600,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: _accentGreen,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.check_circle_rounded, size: 12, color: Colors.white),
-                          SizedBox(width: 4),
-                          Text(
-                            'Active',
-                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.info_outline_rounded,
-                      size: 16,
-                      color: isDark ? Colors.white38 : Colors.grey.shade500,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'New email addresses can be registered through the BNX Mail application.',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: isDark ? Colors.white54 : Colors.grey.shade600,
-                          height: 1.4,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // 4. WORKSPACES & TEAMS (ORGANIZATION HUB)
-  // ═══════════════════════════════════════════════════════════════════════════
-  Widget _buildWorkspacesTab(AccountModel account, bool isDark, bool isMobile) {
-    final colabGroups = ref.watch(colabListProvider);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // ── 1. Hero Organization Header Banner & Workspace Switcher ──
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: isDark
-                  ? [const Color(0xFF311B92), const Color(0xFF0F172A)]
-                  : [const Color(0xFF6366F1), const Color(0xFF4F46E5)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF6366F1).withValues(alpha: 0.25),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.18),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: const Icon(
-                      Icons.corporate_fare_rounded,
-                      color: Colors.white,
-                      size: 26,
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _selectedWorkspace,
-                          style: const TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 2),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                '$_userRole • ${account.email}',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.white70,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            InkWell(
-                              onTap: _editUserRole,
-                              child: const Icon(Icons.edit_outlined, size: 14, color: Colors.white70),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  PopupMenuButton<String>(
-                    onSelected: (val) {
-                      if (val == '__add__') {
-                        _showAddWorkspaceModal();
-                      } else {
-                        setState(() => _selectedWorkspace = val);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Switched workspace to "$val"'),
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
-                      }
-                    },
-                    icon: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text('Switch', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-                          SizedBox(width: 4),
-                          Icon(Icons.arrow_drop_down_rounded, color: Colors.white, size: 16),
-                        ],
-                      ),
-                    ),
-                    itemBuilder: (context) => [
-                      ..._workspaces.map((w) => PopupMenuItem(
-                            value: w,
-                            child: Text('$w${w == _selectedWorkspace ? ' (Active)' : ''}'),
-                          )),
-                      const PopupMenuDivider(),
-                      const PopupMenuItem(
-                        value: '__add__',
-                        child: Row(
-                          children: [
-                            Icon(Icons.add_rounded, size: 16, color: _brandBlue),
-                            SizedBox(width: 8),
-                            Text('+ Add New Workspace', style: TextStyle(color: _brandBlue, fontWeight: FontWeight.bold)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 16),
-
-        // ── 2. Team & Casbox Group Memberships Card (Connected to Riverpod) ──
-        _buildGlassCard(
-          isDark: isDark,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: _buildSectionHeader('Casbox & Team Groups', Icons.groups_rounded, isDark),
-                  ),
-                  TextButton.icon(
-                    onPressed: () => _showCreateGroupModal(context, isDark),
-                    icon: const Icon(Icons.add_rounded, size: 16),
-                    label: const Text('New Group', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                    style: TextButton.styleFrom(
-                      foregroundColor: _brandBlue,
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Live collaborative channels linked to your account',
-                style: TextStyle(fontSize: 11, color: isDark ? Colors.white38 : Colors.grey.shade500),
-              ),
-              const SizedBox(height: 14),
-
-              if (colabGroups.isEmpty) ...[
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  child: Center(
-                    child: Column(
-                      children: [
-                        Icon(Icons.forum_outlined, size: 36, color: isDark ? Colors.white38 : Colors.grey.shade400),
-                        const SizedBox(height: 8),
-                        Text(
-                          'No Casbox groups found',
-                          style: TextStyle(fontSize: 13, color: isDark ? Colors.white70 : Colors.grey.shade700),
-                        ),
-                        const SizedBox(height: 8),
-                        ElevatedButton.icon(
-                          onPressed: () => _showCreateGroupModal(context, isDark),
-                          icon: const Icon(Icons.add_rounded, size: 16),
-                          label: const Text('Create First Team Group'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: _brandBlue,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ] else ...[
-                ...colabGroups.map((group) {
-                  final isLast = group == colabGroups.last;
-                  final memberCount = group.members.length;
-                  return _buildActionTile(
-                    isDark: isDark,
-                    icon: Icons.forum_rounded,
-                    iconColor: const Color(0xFF2563EB),
-                    title: group.name,
-                    subtitle: group.desc.isNotEmpty
-                        ? '${group.desc} • $memberCount members'
-                        : '$memberCount members • Casbox Channel',
-                    trailingWidget: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: _brandBlue.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        memberCount > 1 ? 'Team' : 'Personal',
-                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _brandBlue),
-                      ),
-                    ),
-                    onTap: () {
-                      context.push('/colab');
-                    },
-                    showDivider: !isLast,
-                  );
-                }),
-              ],
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 12),
-
-        // ── 3. Shared Mailboxes & Email Delegation Card ──
-        _buildGlassCard(
-          isDark: isDark,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: _buildSectionHeader('Shared Mailboxes & Delegates', Icons.mark_email_read_rounded, isDark),
-                  ),
-                  TextButton.icon(
-                    onPressed: _showAddSharedMailboxModal,
-                    icon: const Icon(Icons.add_rounded, size: 16),
-                    label: const Text('Add Mailbox', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                    style: TextButton.styleFrom(
-                      foregroundColor: _brandBlue,
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Manage team email aliases and executive delegation rights',
-                style: TextStyle(fontSize: 11, color: isDark ? Colors.white38 : Colors.grey.shade500),
-              ),
-              const SizedBox(height: 14),
-
-              ..._sharedMailboxes.map((box) {
-                final isLast = box == _sharedMailboxes.last;
-                return _buildActionTile(
-                  isDark: isDark,
-                  icon: Icons.mark_email_unread_rounded,
-                  iconColor: const Color(0xFF8B5CF6),
-                  title: box['email'] ?? '',
-                  subtitle: box['subtitle'] ?? 'Shared Mailbox',
-                  trailingWidget: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF8B5CF6).withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Text(
-                      'Delegate',
-                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF8B5CF6)),
-                    ),
-                  ),
-                  onTap: () {},
-                  showDivider: !isLast,
-                );
-              }),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 12),
-
-        // ── 4. Ecosystem Workspace Seats Card ──
-        _buildGlassCard(
-          isDark: isDark,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildSectionHeader('Company Seat Allocations', Icons.badge_rounded, isDark),
-              const SizedBox(height: 4),
-              Text(
-                'Product tier seats provisioned by your corporate admin',
-                style: TextStyle(fontSize: 11, color: isDark ? Colors.white38 : Colors.grey.shade500),
-              ),
-              const SizedBox(height: 14),
-
-              _buildActionTile(
-                isDark: isDark,
-                icon: Icons.business_center_rounded,
-                iconColor: const Color(0xFF2563EB),
-                title: 'Cliks Business (Billing App)',
-                subtitle: 'Enterprise Seat • Full Admin Rights',
-                onTap: () {},
-              ),
-              _buildActionTile(
-                isDark: isDark,
-                icon: Icons.build_circle_rounded,
-                iconColor: const Color(0xFFF59E0B),
-                title: 'Bit Tool (API Suite)',
-                subtitle: 'Developer Tier Workspace • 50,000 API req/mo',
-                onTap: () {},
-                showDivider: false,
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 40),
-      ],
-    );
-  }
-
-  void _showCreateGroupModal(BuildContext context, bool isDark) {
-    final nameCtrl = TextEditingController();
-    final descCtrl = TextEditingController();
-    final memberCtrl = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (dialogCtx) => AlertDialog(
-        backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Create Team Group', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Group Name',
-                hintText: 'e.g. Mobile Engineering',
-              ),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: descCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Description',
-                hintText: 'Group purpose & goals',
-              ),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: memberCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Member Emails (comma separated)',
-                hintText: 'alex@bnxmail.com, sara@bnxmail.com',
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final name = nameCtrl.text.trim();
-              if (name.isEmpty) return;
-
-              final members = memberCtrl.text
-                  .split(',')
-                  .map((e) => e.trim())
-                  .where((e) => e.isNotEmpty)
-                  .toList();
-
-              Navigator.pop(dialogCtx);
-
-              await ref.read(colabListProvider.notifier).addGroup(
-                    name: name,
-                    members: members,
-                    desc: descCtrl.text.trim().isNotEmpty ? descCtrl.text.trim() : 'Team workspace group',
-                  );
-
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Team Group "$name" created successfully!'),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _brandBlue,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            child: const Text('Create Group'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // 5. DATA & PRIVACY TAB (ADVANCED SECURITY & PRIVACY CONTROLS)
-  // ═══════════════════════════════════════════════════════════════════════════
-  Widget _buildDataPrivacyTab(AccountModel account, bool isDark, bool isMobile) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // ── 1. Hero Privacy Shield Status Card ──
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: isDark
-                  ? [const Color(0xFF0F172A), const Color(0xFF1E3A5F)]
-                  : [const Color(0xFF0284C7), const Color(0xFF1E40AF)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF0284C7).withValues(alpha: 0.25),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: const Icon(
-                  Icons.verified_user_rounded,
-                  color: Colors.white,
-                  size: 26,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    Text(
-                      'Privacy Guard Active',
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    SizedBox(height: 2),
-                    Text(
-                      'Zero-knowledge encryption & B2 Auth security',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.white70,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 16),
-
-        // ── 2. Security & Encryption Controls Card ──
-        _buildGlassCard(
-          isDark: isDark,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildSectionHeader('Security & Encryption', Icons.lock_outline_rounded, isDark),
-              const SizedBox(height: 4),
-              Text(
-                'Protect your messages and identity across BNX apps',
-                style: TextStyle(fontSize: 11, color: isDark ? Colors.white38 : Colors.grey.shade500),
-              ),
-              const SizedBox(height: 12),
-
-              _buildPrivacySwitchTile(
-                isDark: isDark,
-                icon: Icons.enhanced_encryption_rounded,
-                iconColor: const Color(0xFF2563EB),
-                title: 'Zero-Knowledge Encryption',
-                subtitle: 'Hardware PGP encryption for emails & attachments',
-                value: _zeroKnowledgeEncryption,
-                onChanged: (v) => setState(() => _zeroKnowledgeEncryption = v),
-              ),
-              _buildPrivacySwitchTile(
-                isDark: isDark,
-                icon: Icons.fingerprint_rounded,
-                iconColor: const Color(0xFF10B981),
-                title: 'Biometric App Lock',
-                subtitle: 'Require Face ID or Fingerprint for Casbox & Mail',
-                value: _biometricLock,
-                onChanged: (v) => setState(() => _biometricLock = v),
-              ),
-              _buildPrivacySwitchTile(
-                isDark: isDark,
-                icon: Icons.wrong_location_rounded,
-                iconColor: const Color(0xFF8B5CF6),
-                title: 'Location Metadata Scrubbing',
-                subtitle: 'Automatically strip GPS and IP data from files',
-                value: _locationScrubbing,
-                onChanged: (v) => setState(() => _locationScrubbing = v),
-                showDivider: false,
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 12),
-
-        // ── 3. Activity & Data Privacy Vault Card ──
-        _buildGlassCard(
-          isDark: isDark,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildSectionHeader('Activity & Data Controls', Icons.data_usage_rounded, isDark),
-              const SizedBox(height: 4),
-              Text(
-                'Manage activity logs and history retention',
-                style: TextStyle(fontSize: 11, color: isDark ? Colors.white38 : Colors.grey.shade500),
-              ),
-              const SizedBox(height: 12),
-
-              _buildPrivacySwitchTile(
-                isDark: isDark,
-                icon: Icons.history_toggle_off_rounded,
-                iconColor: const Color(0xFF0EA5E9),
-                title: 'Web & App Activity Vault',
-                subtitle: 'Encrypt activity logs across BNX services',
-                value: _webAppActivity,
-                onChanged: (v) => setState(() => _webAppActivity = v),
-              ),
-              _buildPrivacySwitchTile(
-                isDark: isDark,
-                icon: Icons.auto_delete_rounded,
-                iconColor: const Color(0xFFF59E0B),
-                title: 'Auto-Purge Search Logs',
-                subtitle: 'Automatically erase search history after 30 days',
-                value: _autoPurgeSearch,
-                onChanged: (v) => setState(() => _autoPurgeSearch = v),
-                showDivider: false,
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 12),
-
-        // ── 4. Data Export & Takeout Archive Card ──
-        _buildGlassCard(
-          isDark: isDark,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildSectionHeader('Data Export & Storage', Icons.cloud_download_outlined, isDark),
-              const SizedBox(height: 4),
-              Text(
-                'Download or manage your BNX account data',
-                style: TextStyle(fontSize: 11, color: isDark ? Colors.white38 : Colors.grey.shade500),
-              ),
-              const SizedBox(height: 16),
-
-              _buildActionTile(
-                isDark: isDark,
-                icon: Icons.download_for_offline_rounded,
-                iconColor: const Color(0xFF2563EB),
-                title: 'Download Account Archive',
-                subtitle: 'Export emails, contacts, and settings (JSON/MBOX)',
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Preparing your BNX data archive download...'),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                },
-              ),
-              _buildActionTile(
-                isDark: isDark,
-                icon: Icons.cleaning_services_rounded,
-                iconColor: const Color(0xFF64748B),
-                title: 'Clear Offline Storage Cache',
-                subtitle: 'Frees up local device storage without deleting cloud emails',
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Offline storage cache cleared successfully.'),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                },
-                showDivider: false,
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 12),
-
-        // ── 5. Account Removal Card ──
-        _buildGlassCard(
-          isDark: isDark,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildSectionHeader('Account Retention', Icons.warning_amber_rounded, isDark),
-              const SizedBox(height: 16),
-
-              _buildActionTile(
-                isDark: isDark,
-                icon: Icons.delete_forever_rounded,
-                iconColor: Colors.redAccent,
-                title: 'Delete B2 Auth Account',
-                subtitle: 'Permanently remove your account and all associated data',
-                onTap: () {
-                  _showDeleteAccountConfirmationDialog(context, isDark);
-                },
-                showDivider: false,
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 40),
-      ],
-    );
-  }
-
-  Widget _buildPrivacySwitchTile({
-    required bool isDark,
-    required IconData icon,
-    required Color iconColor,
-    required String title,
-    required String subtitle,
-    required bool value,
-    required ValueChanged<bool> onChanged,
-    bool showDivider = true,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      decoration: showDivider
-          ? BoxDecoration(
-              border: Border(
-                bottom: BorderSide(
-                  color: isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFF1F5F9),
-                ),
-              ),
-            )
-          : null,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, size: 18, color: iconColor),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: isDark ? Colors.white54 : const Color(0xFF64748B),
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Switch.adaptive(
-            value: value,
-            activeColor: _brandBlue,
-            onChanged: onChanged,
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showDeleteAccountConfirmationDialog(BuildContext context, bool isDark) {
-    showDialog(
-      context: context,
-      builder: (dialogCtx) => AlertDialog(
-        backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 24),
-            SizedBox(width: 10),
-            Text('Delete Account?', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: const Text(
-          'This action is irreversible. All emails, Casbox messages, and profile configurations will be permanently deleted from B2 Auth.',
-          style: TextStyle(fontSize: 13),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(dialogCtx);
-              _handleSignOut();
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.redAccent,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            child: const Text('Delete Account'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
   // SHARED UTILITY COMPONENTS
   // ═══════════════════════════════════════════════════════════════════════════
 
@@ -2557,7 +1839,9 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
         color: isDark ? BNXColors.darkSurface : Colors.white,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0),
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : const Color(0xFFE2E8F0),
         ),
         boxShadow: [
           BoxShadow(
@@ -2606,11 +1890,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
         ),
         borderRadius: BorderRadius.circular(10),
       ),
-      child: Icon(
-        icon,
-        size: 18,
-        color: isDark ? _brandBlueLight : _brandBlue,
-      ),
+      child: Icon(icon, size: 18, color: isDark ? _brandBlueLight : _brandBlue),
     );
   }
 
@@ -2630,7 +1910,9 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
           ? BoxDecoration(
               border: Border(
                 bottom: BorderSide(
-                  color: isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFF1F5F9),
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.06)
+                      : const Color(0xFFF1F5F9),
                 ),
               ),
             )
@@ -2659,13 +1941,16 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: trailing ??
+            child:
+                trailing ??
                 Text(
                   value ?? '',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
-                    color: isDark ? Colors.white.withValues(alpha: 0.87) : const Color(0xFF334155),
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.87)
+                        : const Color(0xFF334155),
                   ),
                   textAlign: TextAlign.right,
                   maxLines: 1,
@@ -2710,7 +1995,9 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
           ? BoxDecoration(
               border: Border(
                 bottom: BorderSide(
-                  color: isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFF1F5F9),
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.06)
+                      : const Color(0xFFF1F5F9),
                 ),
               ),
             )
@@ -2778,7 +2065,11 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
     return tile;
   }
 
-  Widget _buildSmallButton(String text, {required VoidCallback onTap, required bool isDark}) {
+  Widget _buildSmallButton(
+    String text, {
+    required VoidCallback onTap,
+    required bool isDark,
+  }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -2804,7 +2095,11 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
   // ═══════════════════════════════════════════════════════════════════════════
   // PAYMENTS & SUBSCRIPTIONS TAB (CLIKS BUSINESS & COMPANY APPS)
   // ═══════════════════════════════════════════════════════════════════════════
-  Widget _buildPaymentAndSubscriptionTab(AccountModel account, bool isDark, bool isMobile) {
+  Widget _buildPaymentAndSubscriptionTab(
+    AccountModel account,
+    bool isDark,
+    bool isMobile,
+  ) {
     final surfaceColor = isDark ? const Color(0xFF1E293B) : Colors.white;
     final borderColor = isDark ? Colors.white10 : const Color(0xFFE2E8F0);
 
@@ -2865,10 +2160,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                         SizedBox(height: 2),
                         Text(
                           'Manage product licenses & company environment apps',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.white70,
-                          ),
+                          style: TextStyle(fontSize: 12, color: Colors.white70),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -2886,10 +2178,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
         // ── 2. FEATURED PRODUCT SUBSCRIPTION: CLIKS BUSINESS ──
         const Text(
           'Active Product Subscription',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 10),
 
@@ -2899,7 +2188,10 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
           decoration: BoxDecoration(
             color: surfaceColor,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: _brandBlue.withValues(alpha: 0.4), width: 1.5),
+            border: Border.all(
+              color: _brandBlue.withValues(alpha: 0.4),
+              width: 1.5,
+            ),
             boxShadow: [
               BoxShadow(
                 color: _brandBlue.withValues(alpha: isDark ? 0.2 : 0.08),
@@ -2947,16 +2239,26 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                             ),
                             const SizedBox(width: 8),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
                               decoration: BoxDecoration(
                                 color: _accentGreen.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: _accentGreen, width: 1),
+                                border: Border.all(
+                                  color: _accentGreen,
+                                  width: 1,
+                                ),
                               ),
                               child: const Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.check_circle_rounded, color: _accentGreen, size: 12),
+                                  Icon(
+                                    Icons.check_circle_rounded,
+                                    color: _accentGreen,
+                                    size: 12,
+                                  ),
                                   SizedBox(width: 4),
                                   Text(
                                     'SUBSCRIBED',
@@ -2976,7 +2278,9 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                           'Billing App • $_subPrice',
                           style: TextStyle(
                             fontSize: 13,
-                            color: isDark ? Colors.white70 : const Color(0xFF64748B),
+                            color: isDark
+                                ? Colors.white70
+                                : const Color(0xFF64748B),
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -3031,7 +2335,10 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                       backgroundColor: _brandBlue,
                       foregroundColor: Colors.white,
                       elevation: 0,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),
@@ -3052,10 +2359,17 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                                 });
                                 Navigator.pop(ctx);
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Upgraded to Cliks Enterprise!'), behavior: SnackBarBehavior.floating),
+                                  const SnackBar(
+                                    content: Text(
+                                      'Upgraded to Cliks Enterprise!',
+                                    ),
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
                                 );
                               },
-                              child: const Text('Cliks Enterprise (\$79/mo) • Unlimited seats & priority support'),
+                              child: const Text(
+                                'Cliks Enterprise (\$79/mo) • Unlimited seats & priority support',
+                              ),
                             ),
                             SimpleDialogOption(
                               onPressed: () {
@@ -3065,7 +2379,9 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                                 });
                                 Navigator.pop(ctx);
                               },
-                              child: const Text('Cliks Business (\$29/mo) • Standard business tier'),
+                              child: const Text(
+                                'Cliks Business (\$29/mo) • Standard business tier',
+                              ),
                             ),
                           ],
                         ),
@@ -3075,8 +2391,13 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                     label: const Text('Upgrade Plan'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: _brandBlue,
-                      side: BorderSide(color: _brandBlue.withValues(alpha: 0.5)),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      side: BorderSide(
+                        color: _brandBlue.withValues(alpha: 0.5),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),
@@ -3093,21 +2414,34 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                               mainAxisSize: MainAxisSize.min,
                               children: const [
                                 ListTile(
-                                  leading: Icon(Icons.receipt_long_rounded, color: _brandBlue),
+                                  leading: Icon(
+                                    Icons.receipt_long_rounded,
+                                    color: _brandBlue,
+                                  ),
                                   title: Text('Invoice #BNX-9942'),
-                                  subtitle: Text('Jul 15, 2026 • \$29.00 (Paid)'),
+                                  subtitle: Text(
+                                    'Jul 15, 2026 • \$29.00 (Paid)',
+                                  ),
                                 ),
                                 Divider(),
                                 ListTile(
-                                  leading: Icon(Icons.receipt_long_rounded, color: _brandBlue),
+                                  leading: Icon(
+                                    Icons.receipt_long_rounded,
+                                    color: _brandBlue,
+                                  ),
                                   title: Text('Invoice #BNX-8821'),
-                                  subtitle: Text('Jun 15, 2026 • \$29.00 (Paid)'),
+                                  subtitle: Text(
+                                    'Jun 15, 2026 • \$29.00 (Paid)',
+                                  ),
                                 ),
                               ],
                             ),
                           ),
                           actions: [
-                            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              child: const Text('Close'),
+                            ),
                           ],
                         ),
                       );
@@ -3115,7 +2449,9 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                     icon: const Icon(Icons.history_rounded, size: 16),
                     label: const Text('Billing History'),
                     style: TextButton.styleFrom(
-                      foregroundColor: isDark ? Colors.white70 : const Color(0xFF64748B),
+                      foregroundColor: isDark
+                          ? Colors.white70
+                          : const Color(0xFF64748B),
                     ),
                   ),
                 ],
@@ -3129,10 +2465,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
         // ── 3. COMPANY ENVIRONMENT APPS ──
         const Text(
           'Company Apps & Products',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 4),
         Text(
@@ -3217,7 +2550,11 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 16, color: isDark ? Colors.white54 : const Color(0xFF64748B)),
+          Icon(
+            icon,
+            size: 16,
+            color: isDark ? Colors.white54 : const Color(0xFF64748B),
+          ),
           const SizedBox(width: 8),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -3305,7 +2642,10 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                 if (isSubscribedProduct) ...[
                   const SizedBox(height: 4),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: _brandBlue.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(8),
@@ -3329,7 +2669,9 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
               decoration: BoxDecoration(
-                color: isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFF1F5F9),
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.06)
+                    : const Color(0xFFF1F5F9),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
@@ -3337,7 +2679,9 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
                 style: TextStyle(
                   fontSize: 10.5,
                   fontWeight: FontWeight.w600,
-                  color: isSubscribedProduct ? _brandBlue : (isDark ? Colors.white70 : const Color(0xFF475569)),
+                  color: isSubscribedProduct
+                      ? _brandBlue
+                      : (isDark ? Colors.white70 : const Color(0xFF475569)),
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,

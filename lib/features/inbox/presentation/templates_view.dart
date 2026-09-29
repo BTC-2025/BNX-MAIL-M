@@ -103,14 +103,16 @@ class _TemplatesViewState extends ConsumerState<TemplatesView> {
         setState(() {
           _customTemplates.clear();
           for (final t in fetched) {
-            _customTemplates.add(BNXTemplate(
-              id: t.id,
-              title: t.title,
-              category: t.category,
-              type: 'CUSTOM',
-              subject: t.subject,
-              body: t.body,
-            ));
+            _customTemplates.add(
+              BNXTemplate(
+                id: t.id,
+                title: t.title,
+                category: t.category,
+                type: 'CUSTOM',
+                subject: t.subject,
+                body: t.body,
+              ),
+            );
           }
         });
       }
@@ -168,9 +170,7 @@ class _TemplatesViewState extends ConsumerState<TemplatesView> {
                       const SizedBox(height: 12),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          _buildAddTemplateButton(context, isDark),
-                        ],
+                        children: [_buildAddTemplateButton(context, isDark)],
                       ),
                     ],
                   )
@@ -222,21 +222,23 @@ class _TemplatesViewState extends ConsumerState<TemplatesView> {
                     ),
                   )
                 : filtered.isEmpty
-                    ? _buildEmptyState(isDark)
-                    : GridView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: isMobile ? 1 : (screenWidth < 1100 ? 2 : 3),
-                          crossAxisSpacing: 16,
-                          mainAxisSpacing: 16,
-                          childAspectRatio: isMobile ? 1.4 : 1.35,
-                        ),
-                        itemCount: filtered.length,
-                        itemBuilder: (context, index) {
-                          return _buildTemplateCard(filtered[index], isDark);
-                        },
-                      ),
+                ? _buildEmptyState(isDark)
+                : GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: isMobile
+                          ? 1
+                          : (screenWidth < 1100 ? 2 : 3),
+                      crossAxisSpacing: 16,
+                      mainAxisSpacing: 16,
+                      childAspectRatio: isMobile ? 1.4 : 1.35,
+                    ),
+                    itemCount: filtered.length,
+                    itemBuilder: (context, index) {
+                      return _buildTemplateCard(filtered[index], isDark);
+                    },
+                  ),
           ],
         ),
       ),
@@ -260,7 +262,9 @@ class _TemplatesViewState extends ConsumerState<TemplatesView> {
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
-                color: isDark ? BNXColors.darkTextPrimary : BNXColors.lightTextPrimary,
+                color: isDark
+                    ? BNXColors.darkTextPrimary
+                    : BNXColors.lightTextPrimary,
               ),
             ),
           ],
@@ -382,11 +386,11 @@ class _TemplatesViewState extends ConsumerState<TemplatesView> {
                 decoration: BoxDecoration(
                   color: isDefault
                       ? (isDark
-                          ? Colors.blue.withValues(alpha: 0.15)
-                          : Colors.blue.shade50)
+                            ? Colors.blue.withValues(alpha: 0.15)
+                            : Colors.blue.shade50)
                       : (isDark
-                          ? Colors.purple.withValues(alpha: 0.15)
-                          : Colors.purple.shade50),
+                            ? Colors.purple.withValues(alpha: 0.15)
+                            : Colors.purple.shade50),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
@@ -403,7 +407,10 @@ class _TemplatesViewState extends ConsumerState<TemplatesView> {
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
                       borderRadius: BorderRadius.circular(4),
@@ -422,16 +429,25 @@ class _TemplatesViewState extends ConsumerState<TemplatesView> {
                       onTap: () async {
                         final activeAccount = ref.read(activeAccountProvider);
                         setState(() {
-                          _customTemplates.removeWhere((t) => t.id == template.id);
+                          _customTemplates.removeWhere(
+                            (t) => t.id == template.id,
+                          );
                         });
-                        await TemplateRepository.deleteTemplate(template.id, activeAccount.email);
-                        if (context.mounted) {
+                        await TemplateRepository.deleteTemplate(
+                          template.id,
+                          activeAccount.email,
+                        );
+                        if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('Template deleted.')),
                           );
                         }
                       },
-                      child: const Icon(Icons.delete_outline_rounded, size: 16, color: Colors.red),
+                      child: const Icon(
+                        Icons.delete_outline_rounded,
+                        size: 16,
+                        color: Colors.red,
+                      ),
                     ),
                   ],
                 ],
@@ -478,7 +494,9 @@ class _TemplatesViewState extends ConsumerState<TemplatesView> {
           NeumorphicButton(
             onPressed: () {
               ref.read(appUiProvider.notifier).clearComposeDraft();
-              ref.read(appUiProvider.notifier).updateComposeDraft(
+              ref
+                  .read(appUiProvider.notifier)
+                  .updateComposeDraft(
                     subject: template.subject,
                     body: template.body,
                   );
@@ -572,10 +590,15 @@ class _TemplatesViewState extends ConsumerState<TemplatesView> {
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) {
           return Dialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
             backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
             elevation: 12,
-            insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 24,
+            ),
             child: Container(
               constraints: const BoxConstraints(maxWidth: 500),
               padding: const EdgeInsets.all(20),
@@ -591,7 +614,9 @@ class _TemplatesViewState extends ConsumerState<TemplatesView> {
                         Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF195BAC).withValues(alpha: 0.1),
+                            color: const Color(
+                              0xFF195BAC,
+                            ).withValues(alpha: 0.1),
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(
@@ -610,14 +635,18 @@ class _TemplatesViewState extends ConsumerState<TemplatesView> {
                                 style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,
-                                  color: isDark ? Colors.white : const Color(0xFF1E293B),
+                                  color: isDark
+                                      ? Colors.white
+                                      : const Color(0xFF1E293B),
                                 ),
                               ),
                               Text(
                                 'Save reusable templates for quick email responses',
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: isDark ? Colors.white60 : Colors.grey.shade600,
+                                  color: isDark
+                                      ? Colors.white60
+                                      : Colors.grey.shade600,
                                 ),
                               ),
                             ],
@@ -627,7 +656,9 @@ class _TemplatesViewState extends ConsumerState<TemplatesView> {
                           onPressed: () => Navigator.pop(ctx),
                           icon: Icon(
                             Icons.close_rounded,
-                            color: isDark ? Colors.white54 : Colors.grey.shade500,
+                            color: isDark
+                                ? Colors.white54
+                                : Colors.grey.shade500,
                           ),
                         ),
                       ],
@@ -661,20 +692,40 @@ class _TemplatesViewState extends ConsumerState<TemplatesView> {
                                 }
                                 return null;
                               },
-                              style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontSize: 13),
+                              style: TextStyle(
+                                color: isDark ? Colors.white : Colors.black87,
+                                fontSize: 13,
+                              ),
                               decoration: InputDecoration(
                                 hintText: 'e.g. Weekly Status Report',
-                                hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.grey.shade400, fontSize: 13),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                hintStyle: TextStyle(
+                                  color: isDark
+                                      ? Colors.white38
+                                      : Colors.grey.shade400,
+                                  fontSize: 13,
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 12,
+                                ),
                                 filled: true,
-                                fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                                fillColor: isDark
+                                    ? const Color(0xFF0F172A)
+                                    : const Color(0xFFF8FAFC),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(color: isDark ? Colors.white12 : Colors.grey.shade300),
+                                  borderSide: BorderSide(
+                                    color: isDark
+                                        ? Colors.white12
+                                        : Colors.grey.shade300,
+                                  ),
                                 ),
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
-                                  borderSide: const BorderSide(color: Color(0xFF195BAC), width: 1.5),
+                                  borderSide: const BorderSide(
+                                    color: Color(0xFF195BAC),
+                                    width: 1.5,
+                                  ),
                                 ),
                               ),
                             ),
@@ -692,19 +743,36 @@ class _TemplatesViewState extends ConsumerState<TemplatesView> {
                             const SizedBox(height: 6),
                             DropdownButtonFormField<String>(
                               initialValue: selectedCategory,
-                              dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-                              style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontSize: 13),
+                              dropdownColor: isDark
+                                  ? const Color(0xFF1E293B)
+                                  : Colors.white,
+                              style: TextStyle(
+                                color: isDark ? Colors.white : Colors.black87,
+                                fontSize: 13,
+                              ),
                               decoration: InputDecoration(
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 12,
+                                ),
                                 filled: true,
-                                fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                                fillColor: isDark
+                                    ? const Color(0xFF0F172A)
+                                    : const Color(0xFFF8FAFC),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(color: isDark ? Colors.white12 : Colors.grey.shade300),
+                                  borderSide: BorderSide(
+                                    color: isDark
+                                        ? Colors.white12
+                                        : Colors.grey.shade300,
+                                  ),
                                 ),
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
-                                  borderSide: const BorderSide(color: Color(0xFF195BAC), width: 1.5),
+                                  borderSide: const BorderSide(
+                                    color: Color(0xFF195BAC),
+                                    width: 1.5,
+                                  ),
                                 ),
                               ),
                               items: categories.map((cat) {
@@ -739,20 +807,40 @@ class _TemplatesViewState extends ConsumerState<TemplatesView> {
                                 }
                                 return null;
                               },
-                              style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontSize: 13),
+                              style: TextStyle(
+                                color: isDark ? Colors.white : Colors.black87,
+                                fontSize: 13,
+                              ),
                               decoration: InputDecoration(
                                 hintText: 'e.g. Weekly Progress Update: [Date]',
-                                hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.grey.shade400, fontSize: 13),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                hintStyle: TextStyle(
+                                  color: isDark
+                                      ? Colors.white38
+                                      : Colors.grey.shade400,
+                                  fontSize: 13,
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 12,
+                                ),
                                 filled: true,
-                                fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                                fillColor: isDark
+                                    ? const Color(0xFF0F172A)
+                                    : const Color(0xFFF8FAFC),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(color: isDark ? Colors.white12 : Colors.grey.shade300),
+                                  borderSide: BorderSide(
+                                    color: isDark
+                                        ? Colors.white12
+                                        : Colors.grey.shade300,
+                                  ),
                                 ),
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
-                                  borderSide: const BorderSide(color: Color(0xFF195BAC), width: 1.5),
+                                  borderSide: const BorderSide(
+                                    color: Color(0xFF195BAC),
+                                    width: 1.5,
+                                  ),
                                 ),
                               ),
                             ),
@@ -777,20 +865,38 @@ class _TemplatesViewState extends ConsumerState<TemplatesView> {
                                 }
                                 return null;
                               },
-                              style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontSize: 13),
+                              style: TextStyle(
+                                color: isDark ? Colors.white : Colors.black87,
+                                fontSize: 13,
+                              ),
                               decoration: InputDecoration(
-                                hintText: 'Hi [Name],\n\nHere is the update for this week...',
-                                hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.grey.shade400, fontSize: 13),
+                                hintText:
+                                    'Hi [Name],\n\nHere is the update for this week...',
+                                hintStyle: TextStyle(
+                                  color: isDark
+                                      ? Colors.white38
+                                      : Colors.grey.shade400,
+                                  fontSize: 13,
+                                ),
                                 contentPadding: const EdgeInsets.all(14),
                                 filled: true,
-                                fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                                fillColor: isDark
+                                    ? const Color(0xFF0F172A)
+                                    : const Color(0xFFF8FAFC),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(color: isDark ? Colors.white12 : Colors.grey.shade300),
+                                  borderSide: BorderSide(
+                                    color: isDark
+                                        ? Colors.white12
+                                        : Colors.grey.shade300,
+                                  ),
                                 ),
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
-                                  borderSide: const BorderSide(color: Color(0xFF195BAC), width: 1.5),
+                                  borderSide: const BorderSide(
+                                    color: Color(0xFF195BAC),
+                                    width: 1.5,
+                                  ),
                                 ),
                                 alignLabelWithHint: true,
                               ),
@@ -812,14 +918,21 @@ class _TemplatesViewState extends ConsumerState<TemplatesView> {
                         runSpacing: 8,
                         children: [
                           TextButton(
-                            onPressed: isSaving ? null : () => Navigator.pop(ctx),
+                            onPressed: isSaving
+                                ? null
+                                : () => Navigator.pop(ctx),
                             style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
                             ),
                             child: Text(
                               'Cancel',
                               style: TextStyle(
-                                color: isDark ? Colors.white60 : Colors.grey.shade700,
+                                color: isDark
+                                    ? Colors.white60
+                                    : Colors.grey.shade700,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -828,28 +941,36 @@ class _TemplatesViewState extends ConsumerState<TemplatesView> {
                             onPressed: isSaving
                                 ? null
                                 : () async {
-                                    if (formKey.currentState?.validate() ?? false) {
+                                    if (formKey.currentState?.validate() ??
+                                        false) {
                                       setModalState(() => isSaving = true);
                                       final title = titleController.text.trim();
                                       final category = selectedCategory;
-                                      final subject = subjectController.text.trim();
+                                      final subject = subjectController.text
+                                          .trim();
                                       final body = bodyController.text.trim();
 
-                                      final activeAccount = ref.read(activeAccountProvider);
-                                      final created = await TemplateRepository.createTemplate(
-                                        activeAccount.email,
-                                        name: title,
-                                        subject: subject,
-                                        content: body,
-                                        category: category,
+                                      final activeAccount = ref.read(
+                                        activeAccountProvider,
                                       );
+                                      final created =
+                                          await TemplateRepository.createTemplate(
+                                            activeAccount.email,
+                                            name: title,
+                                            subject: subject,
+                                            content: body,
+                                            category: category,
+                                          );
 
                                       if (mounted) {
                                         setState(() {
                                           _customTemplates.add(
                                             BNXTemplate(
-                                              id: created?.id ??
-                                                  DateTime.now().millisecondsSinceEpoch.toString(),
+                                              id:
+                                                  created?.id ??
+                                                  DateTime.now()
+                                                      .millisecondsSinceEpoch
+                                                      .toString(),
                                               title: title,
                                               category: category,
                                               type: 'CUSTOM',
@@ -861,9 +982,13 @@ class _TemplatesViewState extends ConsumerState<TemplatesView> {
                                       }
                                       if (ctx.mounted) {
                                         Navigator.pop(ctx);
-                                        ScaffoldMessenger.of(context).showSnackBar(
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
                                           const SnackBar(
-                                            content: Text('Custom template saved successfully ✓'),
+                                            content: Text(
+                                              'Custom template saved successfully ✓',
+                                            ),
                                             backgroundColor: Color(0xFF2E7D32),
                                             behavior: SnackBarBehavior.floating,
                                           ),
@@ -874,7 +999,10 @@ class _TemplatesViewState extends ConsumerState<TemplatesView> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF195BAC),
                               foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 18,
+                                vertical: 12,
+                              ),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),

@@ -9,20 +9,20 @@ import '../theme/colors.dart';
 import 'package:file_picker/file_picker.dart';
 
 /// Stores one formatting range (e.g. characters 5-12 are bold).
-class _FmtRange {
+class FmtRange {
   int start;
   int end;
   final String type; // 'bold' | 'italic' | 'underline' | 'strike'
-  _FmtRange(this.start, this.end, this.type);
+  FmtRange(this.start, this.end, this.type);
 }
 
 /// A TextEditingController that keeps text CLEAN (no tags) and stores
-/// formatting as separate [_FmtRange]s.  [buildTextSpan] renders the
+/// formatting as separate [FmtRange]s.  [buildTextSpan] renders the
 /// styled segments; the underlying [text] never contains `**` etc.
 class RichTextEditingController extends TextEditingController {
   RichTextEditingController({super.text});
 
-  final List<_FmtRange> formats = [];
+  final List<FmtRange> formats = [];
 
   // ── intercept text mutations to adjust range offsets ──────────
   @override
@@ -39,7 +39,9 @@ class RichTextEditingController extends TextEditingController {
     // common prefix
     int p = 0;
     final mn = oldT.length < newT.length ? oldT.length : newT.length;
-    while (p < mn && oldT[p] == newT[p]) p++;
+    while (p < mn && oldT[p] == newT[p]) {
+      p++;
+    }
     // common suffix
     int s = 0;
     while (s < mn - p &&
@@ -79,13 +81,13 @@ class RichTextEditingController extends TextEditingController {
 
   // ── public API for adding / removing / querying formats ──────
   void addFormat(int start, int end, String type) {
-    formats.add(_FmtRange(start, end, type));
+    formats.add(FmtRange(start, end, type));
     notifyListeners();
   }
 
   void removeFormat(int start, int end, String type) {
-    final toRemove = <_FmtRange>[];
-    final toAdd = <_FmtRange>[];
+    final toRemove = <FmtRange>[];
+    final toAdd = <FmtRange>[];
     for (final f in formats) {
       if (f.type != type) continue;
       if (f.end <= start || f.start >= end) continue; // no overlap
@@ -93,8 +95,8 @@ class RichTextEditingController extends TextEditingController {
         toRemove.add(f);
       } else if (f.start < start && f.end > end) {
         toRemove.add(f);
-        toAdd.add(_FmtRange(f.start, start, type));
-        toAdd.add(_FmtRange(end, f.end, type));
+        toAdd.add(FmtRange(f.start, start, type));
+        toAdd.add(FmtRange(end, f.end, type));
       } else if (f.start < start) {
         f.end = start;
       } else {
@@ -148,19 +150,23 @@ class RichTextEditingController extends TextEditingController {
       for (final f in formats) {
         if (f.start <= segS && f.end >= segE) {
           switch (f.type) {
-            case 'bold':      b = true;
-            case 'italic':    it = true;
-            case 'underline': u = true;
-            case 'strike':    st = true;
+            case 'bold':
+              b = true;
+            case 'italic':
+              it = true;
+            case 'underline':
+              u = true;
+            case 'strike':
+              st = true;
           }
         }
       }
 
       TextStyle seg = base;
-      if (b)  seg = seg.copyWith(fontWeight: FontWeight.bold);
+      if (b) seg = seg.copyWith(fontWeight: FontWeight.bold);
       if (it) seg = seg.copyWith(fontStyle: FontStyle.italic);
       final decs = <TextDecoration>[];
-      if (u)  decs.add(TextDecoration.underline);
+      if (u) decs.add(TextDecoration.underline);
       if (st) decs.add(TextDecoration.lineThrough);
       if (decs.isNotEmpty) {
         seg = seg.copyWith(decoration: TextDecoration.combine(decs));
@@ -173,14 +179,14 @@ class RichTextEditingController extends TextEditingController {
 
   // ── convert text + format ranges to HTML for sending ──────
   String toHtml() {
-    String _esc(String s) => s
+    String esc(String s) => s
         .replaceAll('&', '&amp;')
         .replaceAll('<', '&lt;')
         .replaceAll('>', '&gt;')
         .replaceAll('\n', '<br>');
 
     if (text.isEmpty) return '';
-    if (formats.isEmpty) return '<p>${_esc(text)}</p>';
+    if (formats.isEmpty) return '<p>${esc(text)}</p>';
 
     final bSet = <int>{0, text.length};
     for (final f in formats) {
@@ -199,18 +205,22 @@ class RichTextEditingController extends TextEditingController {
       for (final f in formats) {
         if (f.start <= segS && f.end >= segE) {
           switch (f.type) {
-            case 'bold':      b = true;
-            case 'italic':    it = true;
-            case 'underline': u = true;
-            case 'strike':    st = true;
+            case 'bold':
+              b = true;
+            case 'italic':
+              it = true;
+            case 'underline':
+              u = true;
+            case 'strike':
+              st = true;
           }
         }
       }
 
-      String seg = _esc(text.substring(segS, segE));
-      if (b)  seg = '<b>$seg</b>';
+      String seg = esc(text.substring(segS, segE));
+      if (b) seg = '<b>$seg</b>';
       if (it) seg = '<i>$seg</i>';
-      if (u)  seg = '<u>$seg</u>';
+      if (u) seg = '<u>$seg</u>';
       if (st) seg = '<s>$seg</s>';
       buf.write(seg);
     }
@@ -369,14 +379,18 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
     // Complete send in background asynchronously
     try {
       if (isCasboxTab) {
-        await ref.read(casboxMessagesProvider.notifier).addMessage(
+        await ref
+            .read(casboxMessagesProvider.notifier)
+            .addMessage(
               to: toText,
               subject: subText,
               body: body,
               attachments: attachmentsToSend,
             );
       } else {
-        await ref.read(emailProvider.notifier).composeEmail(
+        await ref
+            .read(emailProvider.notifier)
+            .composeEmail(
               to: toText,
               subject: subText,
               body: body,
@@ -480,9 +494,13 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
     // Side margins so the card floats and is differentiated from the background
     final double sideMargin = (isMobile && !isComposeRoute) ? 10.0 : 0.0;
 
+    // On desktop (macOS/Windows/Linux) clamp the card width so it never
+    // exceeds the visible area (right padding is 72 px; add 4 px buffer).
+    final double desktopMaxW = sw - 76.0;
+    final double desktopCardW = desktopMaxW < 520.0 ? desktopMaxW : 520.0;
     final double cardW = (status == ComposeStatus.maximized || isComposeRoute)
         ? sw
-        : (isMobile ? sw - sideMargin * 2 : 520.0);
+        : (isMobile ? sw - sideMargin * 2 : desktopCardW);
     // Compact floating card on mobile (~50% height), full only when maximised
     final double cardH = (status == ComposeStatus.maximized || isComposeRoute)
         ? sh
@@ -552,8 +570,8 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       child: Row(
         children: [
-          _tabPill('Email', 0, isDark),
-          _tabPill('Casbox', 1, isDark),
+          Flexible(fit: FlexFit.loose, child: _tabPill('Email', 0, isDark)),
+          Flexible(fit: FlexFit.loose, child: _tabPill('Casbox', 1, isDark)),
           const Spacer(),
           if (!isComposeRoute)
             _winBtn(Icons.remove_rounded, 'Minimize', isDark, () {
@@ -572,7 +590,9 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
                     .composeEmail(
                       to: _toCtrl.text,
                       subject: _subCtrl.text,
-                      body: _bodyCtrl.formats.isNotEmpty ? _bodyCtrl.toHtml() : _bodyCtrl.text,
+                      body: _bodyCtrl.formats.isNotEmpty
+                          ? _bodyCtrl.toHtml()
+                          : _bodyCtrl.text,
                       isHtml: _bodyCtrl.formats.isNotEmpty,
                       isDraft: true,
                       attachments: List.from(_emailFiles),
@@ -1025,7 +1045,8 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
               Icons.format_clear_rounded,
               false,
               () {
-                (_activeBodyCtrl as RichTextEditingController).clearAllFormats();
+                (_activeBodyCtrl as RichTextEditingController)
+                    .clearAllFormats();
                 setState(() => _fmt.style = 'Normal');
               },
               'Clear',
@@ -1265,7 +1286,9 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
                       .composeEmail(
                         to: _toCtrl.text,
                         subject: _subCtrl.text,
-                        body: _bodyCtrl.formats.isNotEmpty ? _bodyCtrl.toHtml() : _bodyCtrl.text,
+                        body: _bodyCtrl.formats.isNotEmpty
+                            ? _bodyCtrl.toHtml()
+                            : _bodyCtrl.text,
                         isHtml: _bodyCtrl.formats.isNotEmpty,
                         isDraft: true,
                         attachments: List.from(_emailFiles),
@@ -1342,10 +1365,11 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
                 attachments: attachmentsToSend,
               )
               .then((_) {
-            _snack('Casbox message sent ✓');
-          }).catchError((e) {
-            _snack('Error sending Casbox message: $e');
-          });
+                _snack('Casbox message sent ✓');
+              })
+              .catchError((e) {
+                _snack('Error sending Casbox message: $e');
+              });
         },
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
@@ -1584,10 +1608,14 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
             return;
           }
           try {
-            await ref.read(emailProvider.notifier).composeEmail(
+            await ref
+                .read(emailProvider.notifier)
+                .composeEmail(
                   to: _toCtrl.text.trim(),
                   subject: _subCtrl.text,
-                  body: _bodyCtrl.formats.isNotEmpty ? _bodyCtrl.toHtml() : _bodyCtrl.text,
+                  body: _bodyCtrl.formats.isNotEmpty
+                      ? _bodyCtrl.toHtml()
+                      : _bodyCtrl.text,
                   isHtml: _bodyCtrl.formats.isNotEmpty,
                   cc: _ccCtrl.text.isNotEmpty ? _ccCtrl.text : null,
                   bcc: _bccCtrl.text.isNotEmpty ? _bccCtrl.text : null,
@@ -1685,27 +1713,35 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
     final text = ctrl.text;
     final selection = ctrl.selection;
 
-    int start = selection.isValid && selection.start >= 0 ? selection.start : text.length;
-    int end = selection.isValid && selection.end >= 0 ? selection.end : text.length;
+    int start = selection.isValid && selection.start >= 0
+        ? selection.start
+        : text.length;
+    int end = selection.isValid && selection.end >= 0
+        ? selection.end
+        : text.length;
 
     // Find line boundaries
     int lineStart = start;
-    while (lineStart > 0 && text[lineStart - 1] != '\n') lineStart--;
-    
+    while (lineStart > 0 && text[lineStart - 1] != '\n') {
+      lineStart--;
+    }
+
     int lineEnd = end;
-    while (lineEnd < text.length && text[lineEnd] != '\n') lineEnd++;
+    while (lineEnd < text.length && text[lineEnd] != '\n') {
+      lineEnd++;
+    }
 
     final selectedLinesText = text.substring(lineStart, lineEnd);
     final lines = selectedLinesText.split('\n');
-    
+
     final newLines = <String>[];
     for (int i = 0; i < lines.length; i++) {
       newLines.add(modifier(i, lines[i]));
     }
-    
+
     final replaced = newLines.join('\n');
     final newText = text.replaceRange(lineStart, lineEnd, replaced);
-    
+
     ctrl.value = ctrl.value.copyWith(
       text: newText,
       selection: TextSelection(
@@ -1724,7 +1760,9 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
       final newText = text.replaceRange(sel.start, sel.end, '“$selectedText”');
       ctrl.value = ctrl.value.copyWith(
         text: newText,
-        selection: TextSelection.collapsed(offset: sel.start + 1 + selectedText.length + 1),
+        selection: TextSelection.collapsed(
+          offset: sel.start + 1 + selectedText.length + 1,
+        ),
       );
     } else {
       _modifyLines((i, line) => '> $line');
@@ -1896,7 +1934,13 @@ class _ScheduleSendDialogState extends State<_ScheduleSendDialog> {
                 timeText: 'Thu, 6:00 PM',
                 onTap: () {
                   final now = DateTime.now();
-                  final scheduled = DateTime(now.year, now.month, now.day, 18, 0);
+                  final scheduled = DateTime(
+                    now.year,
+                    now.month,
+                    now.day,
+                    18,
+                    0,
+                  );
                   widget.onScheduled(scheduled, 'Later today (6:00 PM)');
                   Navigator.pop(context);
                 },
@@ -1908,7 +1952,13 @@ class _ScheduleSendDialogState extends State<_ScheduleSendDialog> {
                 timeText: 'Fri, 8:00 AM',
                 onTap: () {
                   final tomorrow = DateTime.now().add(const Duration(days: 1));
-                  final scheduled = DateTime(tomorrow.year, tomorrow.month, tomorrow.day, 8, 0);
+                  final scheduled = DateTime(
+                    tomorrow.year,
+                    tomorrow.month,
+                    tomorrow.day,
+                    8,
+                    0,
+                  );
                   widget.onScheduled(scheduled, 'Tomorrow morning (8:00 AM)');
                   Navigator.pop(context);
                 },
@@ -1923,7 +1973,13 @@ class _ScheduleSendDialogState extends State<_ScheduleSendDialog> {
                   int daysUntilMonday = (DateTime.monday - now.weekday + 7) % 7;
                   if (daysUntilMonday == 0) daysUntilMonday = 7;
                   final nextMon = now.add(Duration(days: daysUntilMonday));
-                  final scheduled = DateTime(nextMon.year, nextMon.month, nextMon.day, 8, 0);
+                  final scheduled = DateTime(
+                    nextMon.year,
+                    nextMon.month,
+                    nextMon.day,
+                    8,
+                    0,
+                  );
                   widget.onScheduled(scheduled, 'Monday morning (8:00 AM)');
                   Navigator.pop(context);
                 },
@@ -1958,7 +2014,9 @@ class _ScheduleSendDialogState extends State<_ScheduleSendDialog> {
               const SizedBox(height: 10),
               Container(
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                  color: isDark
+                      ? const Color(0xFF0F172A)
+                      : const Color(0xFFF8FAFC),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: isDark ? Colors.white24 : Colors.grey.shade300,
@@ -2014,7 +2072,9 @@ class _ScheduleSendDialogState extends State<_ScheduleSendDialog> {
                       if (dt == null) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('Invalid format. Use DD-MM-YYYY HH:mm'),
+                            content: Text(
+                              'Invalid format. Use DD-MM-YYYY HH:mm',
+                            ),
                           ),
                         );
                         return;
@@ -2022,7 +2082,9 @@ class _ScheduleSendDialogState extends State<_ScheduleSendDialog> {
                       if (dt.isBefore(DateTime.now())) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('Scheduled date & time must be in the future.'),
+                            content: Text(
+                              'Scheduled date & time must be in the future.',
+                            ),
                           ),
                         );
                         return;

@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -152,6 +154,10 @@ class _SidebarState extends ConsumerState<Sidebar> {
         .length;
 
     final bool isMobile = MediaQuery.of(context).size.width < 600;
+    // On desktop, the sidebar can be auto-collapsed to 80 px. In that state the
+    // full pill tile (icon + spacer + text = 94 px) overflows. We track this so
+    // that _buildPillTile can render a compact icon-only variant instead.
+    final bool isCollapsed = !isMobile && uiState.isSidebarCollapsed;
 
     final labelsVis = uiState.sidebarLabelVisibility;
 
@@ -162,7 +168,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
           title: 'All Inboxes',
           isSelected: uiState.activeFolder == 'All Inboxes',
           badgeText: allInboxesCount > 0 ? '$allInboxesCount' : null,
-          onTap: () => navigateToFolder('All Inboxes', '/'),
+          collapsed: isCollapsed, onTap: () => navigateToFolder('All Inboxes', '/'),
         ),
       if (labelsVis['Inbox'] ?? true)
         _buildPillTile(
@@ -170,32 +176,32 @@ class _SidebarState extends ConsumerState<Sidebar> {
           title: 'Primary',
           isSelected: uiState.activeFolder == 'Inbox',
           badgeText: primaryCount > 0 ? '$primaryCount' : null,
-          onTap: () => navigateToFolder('Inbox', '/'),
+          collapsed: isCollapsed, onTap: () => navigateToFolder('Inbox', '/'),
         ),
       _buildPillTile(
         icon: Icons.local_offer_outlined,
         title: 'Promotions',
         isSelected: uiState.activeFolder == 'Promotions',
-        onTap: () => navigateToFolder('Promotions', '/'),
+        collapsed: isCollapsed, onTap: () => navigateToFolder('Promotions', '/'),
       ),
       _buildPillTile(
         icon: Icons.people_outline_rounded,
         title: 'Social',
         isSelected: uiState.activeFolder == 'Social',
-        onTap: () => navigateToFolder('Social', '/'),
+        collapsed: isCollapsed, onTap: () => navigateToFolder('Social', '/'),
       ),
       _buildPillTile(
         icon: Icons.info_outline_rounded,
         title: 'Updates',
         isSelected: uiState.activeFolder == 'Updates',
-        onTap: () => navigateToFolder('Updates', '/'),
+        collapsed: isCollapsed, onTap: () => navigateToFolder('Updates', '/'),
       ),
       _buildPillTile(
         icon: Icons.work_outline_rounded,
         title: 'Job Mails',
         isSelected: uiState.activeFolder == 'Job Mails',
         badgeText: jobMailsCount > 0 ? '$jobMailsCount' : null,
-        onTap: () => navigateToFolder('Job Mails', '/'),
+        collapsed: isCollapsed, onTap: () => navigateToFolder('Job Mails', '/'),
       ),
       if (labelsVis['Starred'] ?? true)
         _buildPillTile(
@@ -203,7 +209,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
           title: 'Starred',
           isSelected: uiState.activeFolder == 'Starred',
           badgeText: starredCount > 0 ? '$starredCount' : null,
-          onTap: () => navigateToFolder('Starred', '/'),
+          collapsed: isCollapsed, onTap: () => navigateToFolder('Starred', '/'),
         ),
       if (labelsVis['Sent'] ?? true)
         _buildPillTile(
@@ -211,7 +217,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
           title: 'Sent',
           isSelected: uiState.activeFolder == 'Sent',
           badgeText: sentCount > 0 ? '$sentCount' : null,
-          onTap: () => navigateToFolder('Sent', '/'),
+          collapsed: isCollapsed, onTap: () => navigateToFolder('Sent', '/'),
         ),
       if (labelsVis['Draft'] ?? true)
         _buildPillTile(
@@ -219,7 +225,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
           title: 'Drafts',
           isSelected: uiState.activeFolder == 'Draft',
           badgeText: draftCount > 0 ? '$draftCount' : null,
-          onTap: () => navigateToFolder('Draft', '/'),
+          collapsed: isCollapsed, onTap: () => navigateToFolder('Draft', '/'),
         ),
     ];
 
@@ -240,53 +246,53 @@ class _SidebarState extends ConsumerState<Sidebar> {
           icon: Icons.access_time_rounded,
           title: 'Snoozed',
           isSelected: uiState.activeFolder == 'Snoozed',
-          onTap: () => navigateToFolder('Snoozed', '/'),
+          collapsed: isCollapsed, onTap: () => navigateToFolder('Snoozed', '/'),
         ),
       _buildPillTile(
         icon: Icons.label_important_outline_rounded,
         title: 'Important',
         isSelected: uiState.activeFolder == 'Important',
         badgeText: importantCount > 0 ? '$importantCount' : null,
-        onTap: () => navigateToFolder('Important', '/'),
+        collapsed: isCollapsed, onTap: () => navigateToFolder('Important', '/'),
       ),
       _buildPillTile(
         icon: Icons.shopping_bag_outlined,
         title: 'Purchases',
         isSelected: uiState.activeFolder == 'Purchases',
         badgeText: purchasesCount > 0 ? '$purchasesCount' : null,
-        onTap: () => navigateToFolder('Purchases', '/'),
+        collapsed: isCollapsed, onTap: () => navigateToFolder('Purchases', '/'),
       ),
       _buildPillTile(
         icon: Icons.schedule_send_outlined,
         title: 'Scheduled',
         isSelected: uiState.activeFolder == 'Scheduled',
-        onTap: () => navigateToFolder('Scheduled', '/'),
+        collapsed: isCollapsed, onTap: () => navigateToFolder('Scheduled', '/'),
       ),
       _buildPillTile(
         icon: Icons.outbox_outlined,
         title: 'Outbox',
         isSelected: uiState.activeFolder == 'Outbox',
-        onTap: () => navigateToFolder('Outbox', '/'),
+        collapsed: isCollapsed, onTap: () => navigateToFolder('Outbox', '/'),
       ),
       _buildPillTile(
         icon: Icons.archive_outlined,
         title: 'Archive',
         isSelected: uiState.activeFolder == 'Archive',
         badgeText: archiveCount > 0 ? '$archiveCount' : null,
-        onTap: () => navigateToFolder('Archive', '/'),
+        collapsed: isCollapsed, onTap: () => navigateToFolder('Archive', '/'),
       ),
       _buildPillTile(
         icon: Icons.mail_outline_rounded,
         title: 'All Mail',
         isSelected: uiState.activeFolder == 'All Mail',
-        onTap: () => navigateToFolder('All Mail', '/'),
+        collapsed: isCollapsed, onTap: () => navigateToFolder('All Mail', '/'),
       ),
       _buildPillTile(
         icon: Icons.report_gmailerrorred_outlined,
         title: 'Spam',
         isSelected: uiState.activeFolder == 'Spam',
         badgeText: spamCount > 0 ? '$spamCount' : null,
-        onTap: () => navigateToFolder('Spam', '/'),
+        collapsed: isCollapsed, onTap: () => navigateToFolder('Spam', '/'),
       ),
       if (labelsVis['Trash'] ?? true)
         _buildPillTile(
@@ -294,19 +300,19 @@ class _SidebarState extends ConsumerState<Sidebar> {
           title: 'Trash',
           isSelected: uiState.activeFolder == 'Trash',
           badgeText: trashCount > 0 ? '$trashCount' : null,
-          onTap: () => navigateToFolder('Trash', '/'),
+          collapsed: isCollapsed, onTap: () => navigateToFolder('Trash', '/'),
         ),
       _buildPillTile(
         icon: Icons.bar_chart_outlined,
         title: 'Analytics',
         isSelected: uiState.activeFolder == 'Analytics',
-        onTap: () => navigateToFolder('Analytics', '/analytics'),
+        collapsed: isCollapsed, onTap: () => navigateToFolder('Analytics', '/analytics'),
       ),
       _buildPillTile(
         icon: Icons.assignment_outlined,
         title: 'Templates',
         isSelected: uiState.activeFolder == 'Templates',
-        onTap: () => navigateToFolder('Templates', '/'),
+        collapsed: isCollapsed, onTap: () => navigateToFolder('Templates', '/'),
       ),
     ];
 
@@ -399,14 +405,14 @@ class _SidebarState extends ConsumerState<Sidebar> {
                         icon: Icons.chat_bubble_outline_rounded,
                         title: 'Casbox',
                         isSelected: uiState.activeFolder == 'Casbox',
-                        onTap: () => navigateToFolder('Casbox', '/colab'),
+                        collapsed: isCollapsed, onTap: () => navigateToFolder('Casbox', '/colab'),
                       ),
                       // "Colab" section button
                       _buildPillTile(
                         icon: Icons.people_alt_outlined,
                         title: 'Colab',
                         isSelected: uiState.activeFolder == 'Chat',
-                        onTap: () => navigateToFolder('Chat', '/colab'),
+                        collapsed: isCollapsed, onTap: () => navigateToFolder('Chat', '/colab'),
                       ),
                       const SizedBox(height: 16),
                       // Bottom sections: Settings and Help & Support
@@ -414,13 +420,13 @@ class _SidebarState extends ConsumerState<Sidebar> {
                         icon: Icons.settings_outlined,
                         title: 'Settings',
                         isSelected: uiState.activeFolder == 'Settings',
-                        onTap: () => navigateToFolder('Settings', '/settings'),
+                        collapsed: isCollapsed, onTap: () => navigateToFolder('Settings', '/settings'),
                       ),
                       _buildPillTile(
                         icon: Icons.help_outline_rounded,
                         title: 'Help & Support',
                         isSelected: uiState.activeFolder == 'Help',
-                        onTap: () => navigateToFolder('Help', '/help'),
+                        collapsed: isCollapsed, onTap: () => navigateToFolder('Help', '/help'),
                       ),
                       const SizedBox(height: 16),
                     ],
@@ -471,46 +477,71 @@ class _SidebarState extends ConsumerState<Sidebar> {
                     bottomRight: Radius.circular(32),
                   ),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        ClipOval(
-                          child: Image.asset(
-                            'assets/logo.jpg',
-                            width: 38,
-                            height: 38,
-                            fit: BoxFit.cover,
-                            errorBuilder: (c, e, s) => const Icon(
-                              Icons.mail,
-                              color: Colors.white,
-                              size: 28,
+                // ── Collapsed header: logo only ──────────────────────────
+                // When the sidebar is 80px wide, the full Row (logo + text +
+                // tool rail) overflows. Show just the centred logo instead.
+                child: isCollapsed
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: ClipOval(
+                            child: Image.asset(
+                              'assets/logo.jpg',
+                              width: 36,
+                              height: 36,
+                              fit: BoxFit.cover,
+                              errorBuilder: (c, e, s) => const Icon(
+                                Icons.mail,
+                                color: Colors.white,
+                                size: 28,
+                              ),
                             ),
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        const Text(
-                          'BNXmail',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 23,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: -0.5,
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              ClipOval(
+                                child: Image.asset(
+                                  'assets/logo.jpg',
+                                  width: 38,
+                                  height: 38,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (c, e, s) => const Icon(
+                                    Icons.mail,
+                                    color: Colors.white,
+                                    size: 28,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              const Expanded(
+                                child: Text(
+                                  'BNXmail',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 23,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: -0.5,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                    _buildDynamicBitToolRail(isDark),
-                  ],
-                ),
+                          const SizedBox(height: 24),
+                          _buildDynamicBitToolRail(isDark),
+                        ],
+                      ),
               ),
 
               // --- MAIN LIST CONTENT ---
               const SizedBox(height: 8),
-              _buildSlidingTabPanel(isDark),
-              _buildPremiumComposeButton(isDark, uiState),
+              _buildSlidingTabPanel(isDark, isCollapsed: isCollapsed),
+              _buildPremiumComposeButton(isDark, uiState, isCollapsed: isCollapsed),
               const SizedBox(height: 8),
               ...importantFolderTiles,
               if (!_isMoreExpanded)
@@ -518,6 +549,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
                   icon: Icons.keyboard_arrow_down_rounded,
                   title: 'Show more',
                   isSelected: false,
+                  collapsed: isCollapsed,
                   onTap: () => setState(() => _isMoreExpanded = true),
                 )
               else ...[
@@ -526,6 +558,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
                   icon: Icons.keyboard_arrow_up_rounded,
                   title: 'Show less',
                   isSelected: false,
+                  collapsed: isCollapsed,
                   onTap: () => setState(() => _isMoreExpanded = false),
                 ),
               ],
@@ -533,7 +566,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
                 padding: EdgeInsets.symmetric(vertical: 8),
                 child: Divider(indent: 16, endIndent: 16, thickness: 0.8),
               ),
-              _buildLabelsHeader(isDark),
+              _buildLabelsHeader(isDark, isCollapsed: isCollapsed),
               ...customLabels.map(
                 (l) => _buildPillTile(
                   icon: uiState.activeLabel == l.name
@@ -542,56 +575,62 @@ class _SidebarState extends ConsumerState<Sidebar> {
                   iconColor: l.color,
                   title: l.name,
                   isSelected: uiState.activeLabel == l.name,
-                  trailing: PopupMenuButton<String>(
-                    icon: Icon(
-                      Icons.more_vert_rounded,
-                      size: 18,
-                      color: isDark ? Colors.white60 : Colors.black54,
-                    ),
-                    color: isDark ? const Color(0xFF1E293B) : Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    offset: const Offset(0, 36),
-                    onSelected: (val) {
-                      if (val == 'edit') {
-                        CreateLabelDialog.show(context, labelToEdit: l);
-                      } else if (val == 'delete') {
-                        ref
-                            .read(customLabelsProvider.notifier)
-                            .deleteLabel(l.id);
-                      }
-                    },
-                    itemBuilder: (ctx) => [
-                      const PopupMenuItem<String>(
-                        value: 'edit',
-                        child: Row(
-                          children: [
-                            Icon(Icons.edit_outlined, size: 18),
-                            SizedBox(width: 10),
-                            Text('Edit', style: TextStyle(fontSize: 14)),
+                  collapsed: isCollapsed,
+                  trailing: isCollapsed
+                      ? null
+                      : PopupMenuButton<String>(
+                          icon: Icon(
+                            Icons.more_vert_rounded,
+                            size: 18,
+                            color: isDark ? Colors.white60 : Colors.black54,
+                          ),
+                          color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          offset: const Offset(0, 36),
+                          onSelected: (val) {
+                            if (val == 'edit') {
+                              CreateLabelDialog.show(context, labelToEdit: l);
+                            } else if (val == 'delete') {
+                              ref
+                                  .read(customLabelsProvider.notifier)
+                                  .deleteLabel(l.id);
+                            }
+                          },
+                          itemBuilder: (ctx) => [
+                            const PopupMenuItem<String>(
+                              value: 'edit',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.edit_outlined, size: 18),
+                                  SizedBox(width: 10),
+                                  Text('Edit', style: TextStyle(fontSize: 14)),
+                                ],
+                              ),
+                            ),
+                            const PopupMenuItem<String>(
+                              value: 'delete',
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.delete_outline_rounded,
+                                    size: 18,
+                                    color: Colors.red,
+                                  ),
+                                  SizedBox(width: 10),
+                                  Text(
+                                    'Delete',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.red,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ],
                         ),
-                      ),
-                      const PopupMenuItem<String>(
-                        value: 'delete',
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.delete_outline_rounded,
-                              size: 18,
-                              color: Colors.red,
-                            ),
-                            SizedBox(width: 10),
-                            Text(
-                              'Delete',
-                              style: TextStyle(fontSize: 14, color: Colors.red),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
                   onTap: () {
                     ref.read(appUiProvider.notifier).selectLabel(l.name);
                     final scaffold = Scaffold.maybeOf(context);
@@ -610,22 +649,26 @@ class _SidebarState extends ConsumerState<Sidebar> {
                 icon: Icons.settings_outlined,
                 title: 'Settings',
                 isSelected: uiState.activeFolder == 'Settings',
+                collapsed: isCollapsed,
                 onTap: () => navigateToFolder('Settings', '/settings'),
               ),
               _buildPillTile(
                 icon: Icons.help_outline_rounded,
                 title: 'Help & Support',
                 isSelected: uiState.activeFolder == 'Help',
+                collapsed: isCollapsed,
                 onTap: () => navigateToFolder('Help', '/help'),
               ),
-              const SizedBox(height: 32),
-              const Center(
-                child: Text(
-                  'BNX Mail v1.1.0',
-                  style: TextStyle(color: Colors.grey, fontSize: 11),
+              if (!isCollapsed) ...[
+                const SizedBox(height: 32),
+                const Center(
+                  child: Text(
+                    'BNX Mail v1.1.0',
+                    style: TextStyle(color: Colors.grey, fontSize: 11),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 32),
+                const SizedBox(height: 32),
+              ],
             ],
           ),
         ),
@@ -846,9 +889,44 @@ class _SidebarState extends ConsumerState<Sidebar> {
     Color? iconColor,
     Widget? trailing,
     required VoidCallback onTap,
+    bool collapsed = false,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     const Color activeColor = Color(0xFF195BAC);
+
+    // ── Collapsed (icon-only) variant ───────────────────────────────────────
+    // Used when the desktop sidebar is in its 80px-wide collapsed state.
+    // The full pill layout (icon+spacer+text) is 94px and would overflow by 14.
+    if (collapsed) {
+      return Tooltip(
+        message: title,
+        preferBelow: false,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            height: 48,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? activeColor.withValues(alpha: 0.10)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(
+              icon,
+              size: 22,
+              color: iconColor ??
+                  (isSelected
+                      ? activeColor
+                      : (isDark ? Colors.white70 : Colors.black54)),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // ── Expanded variant (default) ───────────────────────────────────────────
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
       child: InkWell(
@@ -903,14 +981,72 @@ class _SidebarState extends ConsumerState<Sidebar> {
     );
   }
 
-  Widget _buildPremiumComposeButton(bool isDark, dynamic uiState) {
+  Widget _buildPremiumComposeButton(
+    bool isDark,
+    dynamic uiState, {
+    bool isCollapsed = false,
+  }) {
     if (uiState.activeFolder == 'Templates') return const SizedBox.shrink();
+
+    if (isCollapsed) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Tooltip(
+          message: 'Compose',
+          child: InkWell(
+            onTap: () {
+              if (!kIsWeb && Platform.isMacOS) {
+                ref
+                    .read(appUiProvider.notifier)
+                    .setComposeStatus(ComposeStatus.normal);
+              } else {
+                Navigator.pop(context);
+                context.push('/compose');
+              }
+            },
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+              height: 48,
+              width: 48,
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+                border: Border.all(
+                  color: isDark ? Colors.white10 : Colors.grey.shade200,
+                ),
+              ),
+              child: const Center(
+                child: Icon(
+                  Icons.edit_outlined,
+                  color: Color(0xFF195BAC),
+                  size: 22,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
       child: InkWell(
         onTap: () {
-          Navigator.pop(context);
-          context.push('/compose');
+          if (!kIsWeb && Platform.isMacOS) {
+            ref
+                .read(appUiProvider.notifier)
+                .setComposeStatus(ComposeStatus.normal);
+          } else {
+            Navigator.pop(context);
+            context.push('/compose');
+          }
         },
         borderRadius: BorderRadius.circular(28),
         child: Container(
@@ -949,34 +1085,52 @@ class _SidebarState extends ConsumerState<Sidebar> {
     );
   }
 
-  Widget _buildLabelsHeader(bool isDark) => Padding(
-    padding: const EdgeInsets.fromLTRB(28, 8, 16, 8),
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          'CUSTOM LABELS',
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-            color: isDark ? Colors.white38 : Colors.grey.shade500,
-            letterSpacing: 1.2,
-          ),
-        ),
-        GestureDetector(
-          onTap: () => _showCreateLabelDialog(context),
-          child: Icon(
+  Widget _buildLabelsHeader(bool isDark, {bool isCollapsed = false}) {
+    if (isCollapsed) {
+      return Center(
+        child: IconButton(
+          onPressed: () => _showCreateLabelDialog(context),
+          icon: Icon(
             Icons.add,
-            size: 16,
-            color: isDark ? Colors.white38 : Colors.grey.shade500,
+            size: 18,
+            color: isDark ? Colors.white70 : const Color(0xFF195BAC),
           ),
+          tooltip: 'Add Label',
         ),
-      ],
-    ),
-  );
+      );
+    }
 
-  Widget _buildSlidingTabPanel(bool isDark) {
-    if (_expandedUtilityTab == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(28, 8, 16, 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            'CUSTOM LABELS',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white38 : Colors.grey.shade500,
+              letterSpacing: 1.2,
+            ),
+          ),
+          GestureDetector(
+            onTap: () => _showCreateLabelDialog(context),
+            child: Icon(
+              Icons.add,
+              size: 16,
+              color: isDark ? Colors.white38 : Colors.grey.shade500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSlidingTabPanel(bool isDark, {bool isCollapsed = false}) {
+    if (isCollapsed || _expandedUtilityTab == null) {
+      return const SizedBox.shrink();
+    }
     Widget content;
     switch (_expandedUtilityTab) {
       case 'Calculator':
@@ -1345,8 +1499,14 @@ class _SidebarContactsWidgetState extends ConsumerState<SidebarContactsWidget> {
                     ref
                         .read(appUiProvider.notifier)
                         .updateComposeDraft(to: c['email']!);
-                    Navigator.pop(context);
-                    context.push('/compose');
+                    if (!kIsWeb && Platform.isMacOS) {
+                      ref
+                          .read(appUiProvider.notifier)
+                          .setComposeStatus(ComposeStatus.normal);
+                    } else {
+                      Navigator.pop(context);
+                      context.push('/compose');
+                    }
                   },
                 ),
               );

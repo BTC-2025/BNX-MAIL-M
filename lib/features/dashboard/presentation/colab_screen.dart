@@ -33,8 +33,12 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
       if (!mounted) return;
       final selectedGroupId = ref.read(selectedColabIdProvider);
       if (selectedGroupId != null && selectedGroupId.isNotEmpty) {
-        ref.read(colabListProvider.notifier).fetchMessagesForGroup(selectedGroupId);
-        ref.read(colabListProvider.notifier).fetchBroadcastsForGroup(selectedGroupId);
+        ref
+            .read(colabListProvider.notifier)
+            .fetchMessagesForGroup(selectedGroupId);
+        ref
+            .read(colabListProvider.notifier)
+            .fetchBroadcastsForGroup(selectedGroupId);
       }
     });
   }
@@ -87,290 +91,295 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
             parent: AlwaysScrollableScrollPhysics(),
           ),
           slivers: [
-          // 1. Header - clean consistent layout with expandable search
-          SliverToBoxAdapter(
-            child: Container(
-              color: isDark ? BNXColors.darkSurface : Colors.white,
-              padding: const EdgeInsets.fromLTRB(8, 16, 16, 16),
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 250),
-                child: _isSearching
-                    ? Row(
-                        key: const ValueKey('searching_mode'),
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.arrow_back_rounded),
-                            onPressed: () {
-                              setState(() {
-                                _isSearching = false;
-                                _searchController.clear();
-                              });
-                              ref
-                                  .read(appUiProvider.notifier)
-                                  .setSearchQuery('');
-                            },
-                          ),
-                          Expanded(
-                            child: Container(
-                              height: 40,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                              ),
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? BNXColors.darkBg
-                                    : const Color(0xFFE9F4FF),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: TextField(
-                                controller: _searchController,
-                                autofocus: true,
-                                decoration: const InputDecoration(
-                                  hintText: 'Search groups...',
-                                  border: InputBorder.none,
-                                  isDense: true,
-                                  contentPadding: EdgeInsets.symmetric(
-                                    vertical: 10,
-                                  ),
-                                ),
-                                style: TextStyle(
-                                  color: isDark
-                                      ? Colors.white
-                                      : BNXColors.lightTextPrimary,
-                                ),
-                                onChanged: (val) {
-                                  ref
-                                      .read(appUiProvider.notifier)
-                                      .setSearchQuery(val);
-                                },
-                              ),
+            // 1. Header - clean consistent layout with expandable search
+            SliverToBoxAdapter(
+              child: Container(
+                color: isDark ? BNXColors.darkSurface : Colors.white,
+                padding: const EdgeInsets.fromLTRB(8, 16, 16, 16),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 250),
+                  child: _isSearching
+                      ? Row(
+                          key: const ValueKey('searching_mode'),
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.arrow_back_rounded),
+                              onPressed: () {
+                                setState(() {
+                                  _isSearching = false;
+                                  _searchController.clear();
+                                });
+                                ref
+                                    .read(appUiProvider.notifier)
+                                    .setSearchQuery('');
+                              },
                             ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.close_rounded),
-                            onPressed: () {
-                              _searchController.clear();
-                              ref
-                                  .read(appUiProvider.notifier)
-                                  .setSearchQuery('');
-                            },
-                          ),
-                        ],
-                      )
-                    : Column(
-                        key: const ValueKey('normal_mode'),
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.menu_rounded),
-                                onPressed: () =>
-                                    Scaffold.of(context).openDrawer(),
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(),
-                              ),
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.all(10),
+                            Expanded(
+                              child: Container(
+                                height: 40,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
                                 decoration: BoxDecoration(
-                                  color: BNXColors.lightPrimary.withValues(
-                                    alpha: 0.1,
+                                  color: isDark
+                                      ? BNXColors.darkBg
+                                      : const Color(0xFFE9F4FF),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: TextField(
+                                  controller: _searchController,
+                                  autofocus: true,
+                                  decoration: const InputDecoration(
+                                    hintText: 'Search groups...',
+                                    border: InputBorder.none,
+                                    isDense: true,
+                                    contentPadding: EdgeInsets.symmetric(
+                                      vertical: 10,
+                                    ),
                                   ),
-                                  borderRadius: BorderRadius.circular(12),
+                                  style: TextStyle(
+                                    color: isDark
+                                        ? Colors.white
+                                        : BNXColors.lightTextPrimary,
+                                  ),
+                                  onChanged: (val) {
+                                    ref
+                                        .read(appUiProvider.notifier)
+                                        .setSearchQuery(val);
+                                  },
                                 ),
-                                child: const Icon(
-                                  Icons.people_alt_rounded,
-                                  color: BNXColors.lightPrimary,
-                                  size: 24,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Chat',
-                                      style: TextStyle(
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.bold,
-                                        color: isDark
-                                            ? Colors.white
-                                            : BNXColors.lightTextPrimary,
-                                      ),
-                                    ),
-                                    const Text(
-                                      'Collaborate with your teams',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.grey,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.search_rounded),
-                                onPressed: () {
-                                  setState(() {
-                                    _isSearching = true;
-                                  });
-                                },
-                              ),
-                              const SizedBox(width: 4),
-                              PrimaryButton(
-                                label: isMobile ? 'New' : 'New Colab',
-                                icon: Icons.group_add_rounded,
-                                onPressed: () => _showCreateColabDialog(
-                                  context,
-                                  ref,
-                                  isDark,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-                          Padding(
-                            padding: const EdgeInsets.only(left: 12.0),
-                            child: Text(
-                              'ACTIVE DISCUSSIONS',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: isDark
-                                    ? Colors.white30
-                                    : Colors.grey.shade700,
-                                letterSpacing: 1.0,
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-              ),
-            ),
-          ),
-
-          const SliverToBoxAdapter(child: Divider(height: 1, thickness: 1)),
-
-          // Invitation banner
-          SliverToBoxAdapter(
-            child: _buildInvitationBanner(context, ref, isDark),
-          ),
-
-          // 3. Center Section / Colab Content List
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: 6.0),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                const SizedBox(height: 2),
-
-                // Grouped chat groups in a single card-like container
-                Container(
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF1E293B) : Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: isDark
-                          ? Colors.white.withValues(alpha: 0.1)
-                          : Colors.grey.shade300,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(
-                          alpha: isDark ? 0.2 : 0.04,
-                        ),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: filteredGroups.isEmpty
-                      ? Center(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 32.0),
-                            child: Text(
-                              'No Colab groups found.',
-                              style: TextStyle(
-                                color: isDark ? Colors.white30 : Colors.grey,
-                              ),
+                            IconButton(
+                              icon: const Icon(Icons.close_rounded),
+                              onPressed: () {
+                                _searchController.clear();
+                                ref
+                                    .read(appUiProvider.notifier)
+                                    .setSearchQuery('');
+                              },
                             ),
-                          ),
+                          ],
                         )
                       : Column(
-                          children: filteredGroups.asMap().entries.map((entry) {
-                            final index = entry.key;
-                            final group = entry.value;
-                            final isLast = index == filteredGroups.length - 1;
-
-                            return Column(
-                              mainAxisSize: MainAxisSize.min,
+                          key: const ValueKey('normal_mode'),
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
                               children: [
-                                _buildGroupCard(context, ref, group, isDark),
-                                if (!isLast)
-                                  Divider(
-                                    height: 1,
-                                    thickness: 1.0,
-                                    color: isDark
-                                        ? Colors.white.withValues(alpha: 0.08)
-                                        : const Color(0xFFE9F4FF),
-                                    indent: 0,
-                                    endIndent: 0,
+                                IconButton(
+                                  icon: const Icon(Icons.menu_rounded),
+                                  onPressed: () =>
+                                      Scaffold.of(context).openDrawer(),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: BNXColors.lightPrimary.withValues(
+                                      alpha: 0.1,
+                                    ),
+                                    borderRadius: BorderRadius.circular(12),
                                   ),
+                                  child: const Icon(
+                                    Icons.people_alt_rounded,
+                                    color: BNXColors.lightPrimary,
+                                    size: 24,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Chat',
+                                        style: TextStyle(
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.bold,
+                                          color: isDark
+                                              ? Colors.white
+                                              : BNXColors.lightTextPrimary,
+                                        ),
+                                      ),
+                                      const Text(
+                                        'Collaborate with your teams',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.search_rounded),
+                                  onPressed: () {
+                                    setState(() {
+                                      _isSearching = true;
+                                    });
+                                  },
+                                ),
+                                const SizedBox(width: 4),
+                                PrimaryButton(
+                                  label: isMobile ? 'New' : 'New Colab',
+                                  icon: Icons.group_add_rounded,
+                                  onPressed: () => _showCreateColabDialog(
+                                    context,
+                                    ref,
+                                    isDark,
+                                  ),
+                                ),
                               ],
-                            );
-                          }).toList(),
+                            ),
+                            const SizedBox(height: 20),
+                            Padding(
+                              padding: const EdgeInsets.only(left: 12.0),
+                              child: Text(
+                                'ACTIVE DISCUSSIONS',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark
+                                      ? Colors.white30
+                                      : Colors.grey.shade700,
+                                  letterSpacing: 1.0,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                 ),
-
-                const SizedBox(height: 40),
-
-                // Bottom Graphic Mock
-                Center(
-                  child: Column(
-                    children: [
-                      NeumorphicContainer(
-                        width: 80,
-                        height: 80,
-                        boxShape: BoxShape.circle,
-                        shape: NeumorphicShape.pressed,
-                        color: isDark
-                            ? const Color(0xFF0F172A)
-                            : const Color(0xFFF4F7FB),
-                        child: const Icon(
-                          Icons.question_answer_outlined,
-                          size: 32,
-                          color: Colors.grey,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Need to set up a new workgroup?',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        'Create groups to collaborate in real-time, share files,\nand edit code assets concurrently.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 32),
-              ]),
+              ),
             ),
-          ),
-        ],
+
+            const SliverToBoxAdapter(child: Divider(height: 1, thickness: 1)),
+
+            // Invitation banner
+            SliverToBoxAdapter(
+              child: _buildInvitationBanner(context, ref, isDark),
+            ),
+
+            // 3. Center Section / Colab Content List
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 6.0),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate([
+                  const SizedBox(height: 2),
+
+                  // Grouped chat groups in a single card-like container
+                  Container(
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.1)
+                            : Colors.grey.shade300,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(
+                            alpha: isDark ? 0.2 : 0.04,
+                          ),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: filteredGroups.isEmpty
+                        ? Center(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 32.0,
+                              ),
+                              child: Text(
+                                'No Colab groups found.',
+                                style: TextStyle(
+                                  color: isDark ? Colors.white30 : Colors.grey,
+                                ),
+                              ),
+                            ),
+                          )
+                        : Column(
+                            children: filteredGroups.asMap().entries.map((
+                              entry,
+                            ) {
+                              final index = entry.key;
+                              final group = entry.value;
+                              final isLast = index == filteredGroups.length - 1;
+
+                              return Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _buildGroupCard(context, ref, group, isDark),
+                                  if (!isLast)
+                                    Divider(
+                                      height: 1,
+                                      thickness: 1.0,
+                                      color: isDark
+                                          ? Colors.white.withValues(alpha: 0.08)
+                                          : const Color(0xFFE9F4FF),
+                                      indent: 0,
+                                      endIndent: 0,
+                                    ),
+                                ],
+                              );
+                            }).toList(),
+                          ),
+                  ),
+
+                  const SizedBox(height: 40),
+
+                  // Bottom Graphic Mock
+                  Center(
+                    child: Column(
+                      children: [
+                        NeumorphicContainer(
+                          width: 80,
+                          height: 80,
+                          boxShape: BoxShape.circle,
+                          shape: NeumorphicShape.pressed,
+                          color: isDark
+                              ? const Color(0xFF0F172A)
+                              : const Color(0xFFF4F7FB),
+                          child: const Icon(
+                            Icons.question_answer_outlined,
+                            size: 32,
+                            color: Colors.grey,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Need to set up a new workgroup?',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'Create groups to collaborate in real-time, share files,\nand edit code assets concurrently.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                ]),
+              ),
+            ),
+          ],
+        ),
       ),
-    ),
     );
   }
 
@@ -381,8 +390,6 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
     bool isDark,
   ) {
     final bool hasUnread = group.unread;
-    final double screenWidth = MediaQuery.of(context).size.width;
-    final bool isMobile = screenWidth < 600;
 
     final avatar = Container(
       width: 48,
@@ -509,7 +516,11 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
     );
   }
 
-  Widget _buildInvitationBanner(BuildContext context, WidgetRef ref, bool isDark) {
+  Widget _buildInvitationBanner(
+    BuildContext context,
+    WidgetRef ref,
+    bool isDark,
+  ) {
     final invitations = ref.watch(colabInvitationsProvider);
     if (invitations.isEmpty) return const SizedBox.shrink();
 
@@ -586,7 +597,11 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
     );
   }
 
-  void _showInvitationsDialog(BuildContext context, WidgetRef ref, bool isDark) {
+  void _showInvitationsDialog(
+    BuildContext context,
+    WidgetRef ref,
+    bool isDark,
+  ) {
     showDialog(
       context: context,
       builder: (dialogCtx) {
@@ -595,7 +610,9 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
             final invitations = ref.watch(colabInvitationsProvider);
 
             return Dialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
               backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
               child: ConstrainedBox(
                 constraints: BoxConstraints(
@@ -622,7 +639,9 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                               style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
-                                color: isDark ? Colors.white : BNXColors.lightTextPrimary,
+                                color: isDark
+                                    ? Colors.white
+                                    : BNXColors.lightTextPrimary,
                               ),
                             ),
                           ),
@@ -660,7 +679,10 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                       Flexible(
                         child: ListView.separated(
                           shrinkWrap: true,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
                           itemCount: invitations.length,
                           separatorBuilder: (_, _) => const Divider(height: 16),
                           itemBuilder: (_, index) {
@@ -687,7 +709,9 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                                     style: TextStyle(
                                       fontWeight: FontWeight.w600,
                                       fontSize: 15,
-                                      color: isDark ? Colors.white : BNXColors.lightTextPrimary,
+                                      color: isDark
+                                          ? Colors.white
+                                          : BNXColors.lightTextPrimary,
                                     ),
                                   ),
                                   const SizedBox(height: 4),
@@ -697,7 +721,9 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                                         'Invited by: ',
                                         style: TextStyle(
                                           fontSize: 12,
-                                          color: isDark ? Colors.white54 : Colors.grey.shade600,
+                                          color: isDark
+                                              ? Colors.white54
+                                              : Colors.grey.shade600,
                                         ),
                                       ),
                                       Flexible(
@@ -721,32 +747,59 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                                           onPressed: () async {
                                             try {
                                               await ref
-                                                  .read(colabInvitationsProvider.notifier)
+                                                  .read(
+                                                    colabInvitationsProvider
+                                                        .notifier,
+                                                  )
                                                   .acceptInvitation(inv.id);
                                               // Refresh groups after accepting
-                                              await ref.read(colabListProvider.notifier).loadGroups();
+                                              await ref
+                                                  .read(
+                                                    colabListProvider.notifier,
+                                                  )
+                                                  .loadGroups();
                                             } catch (e) {
                                               if (dialogCtx.mounted) {
-                                                ScaffoldMessenger.of(dialogCtx).showSnackBar(
-                                                  SnackBar(content: Text('Failed to accept invitation: $e')),
+                                                ScaffoldMessenger.of(
+                                                  dialogCtx,
+                                                ).showSnackBar(
+                                                  SnackBar(
+                                                    content: Text(
+                                                      'Failed to accept invitation: $e',
+                                                    ),
+                                                  ),
                                                 );
                                               }
                                             }
                                             setDialogState(() {});
-                                            if (ref.read(colabInvitationsProvider).isEmpty && dialogCtx.mounted) {
+                                            if (ref
+                                                    .read(
+                                                      colabInvitationsProvider,
+                                                    )
+                                                    .isEmpty &&
+                                                dialogCtx.mounted) {
                                               Navigator.of(dialogCtx).pop();
                                             }
                                           },
                                           style: ElevatedButton.styleFrom(
-                                            backgroundColor: BNXColors.lightPrimary,
+                                            backgroundColor:
+                                                BNXColors.lightPrimary,
                                             foregroundColor: Colors.white,
                                             shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(8),
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
                                             ),
                                             elevation: 0,
-                                            padding: const EdgeInsets.symmetric(vertical: 10),
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 10,
+                                            ),
                                           ),
-                                          child: const Text('Accept', style: TextStyle(fontWeight: FontWeight.w600)),
+                                          child: const Text(
+                                            'Accept',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
                                         ),
                                       ),
                                       const SizedBox(width: 10),
@@ -755,31 +808,57 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                                           onPressed: () async {
                                             try {
                                               await ref
-                                                  .read(colabInvitationsProvider.notifier)
+                                                  .read(
+                                                    colabInvitationsProvider
+                                                        .notifier,
+                                                  )
                                                   .rejectInvitation(inv.id);
                                             } catch (e) {
                                               if (dialogCtx.mounted) {
-                                                ScaffoldMessenger.of(dialogCtx).showSnackBar(
-                                                  SnackBar(content: Text('Failed to reject invitation: $e')),
+                                                ScaffoldMessenger.of(
+                                                  dialogCtx,
+                                                ).showSnackBar(
+                                                  SnackBar(
+                                                    content: Text(
+                                                      'Failed to reject invitation: $e',
+                                                    ),
+                                                  ),
                                                 );
                                               }
                                             }
                                             setDialogState(() {});
-                                            if (ref.read(colabInvitationsProvider).isEmpty && dialogCtx.mounted) {
+                                            if (ref
+                                                    .read(
+                                                      colabInvitationsProvider,
+                                                    )
+                                                    .isEmpty &&
+                                                dialogCtx.mounted) {
                                               Navigator.of(dialogCtx).pop();
                                             }
                                           },
                                           style: OutlinedButton.styleFrom(
-                                            foregroundColor: isDark ? Colors.white70 : Colors.grey.shade700,
+                                            foregroundColor: isDark
+                                                ? Colors.white70
+                                                : Colors.grey.shade700,
                                             side: BorderSide(
-                                              color: isDark ? Colors.white24 : Colors.grey.shade300,
+                                              color: isDark
+                                                  ? Colors.white24
+                                                  : Colors.grey.shade300,
                                             ),
                                             shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(8),
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
                                             ),
-                                            padding: const EdgeInsets.symmetric(vertical: 10),
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 10,
+                                            ),
                                           ),
-                                          child: const Text('Reject', style: TextStyle(fontWeight: FontWeight.w600)),
+                                          child: const Text(
+                                            'Reject',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
                                         ),
                                       ),
                                     ],
@@ -800,7 +879,6 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
       },
     );
   }
-
 
   void _showCreateColabDialog(
     BuildContext context,
@@ -972,7 +1050,9 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                             } catch (e) {
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Failed to create group: $e')),
+                                  SnackBar(
+                                    content: Text('Failed to create group: $e'),
+                                  ),
                                 );
                               }
                             }
@@ -1152,20 +1232,35 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                   context: context,
                   builder: (ctx) => AlertDialog(
                     title: const Text('Leave Group'),
-                    content: Text('Are you sure you want to leave "${group.name}"?'),
+                    content: Text(
+                      'Are you sure you want to leave "${group.name}"?',
+                    ),
                     actions: [
-                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-                      TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Leave', style: TextStyle(color: Colors.orange))),
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: const Text(
+                          'Leave',
+                          style: TextStyle(color: Colors.orange),
+                        ),
+                      ),
                     ],
                   ),
                 );
                 if (confirm != true || !context.mounted) return;
                 try {
-                  await ref.read(colabListProvider.notifier).leaveGroup(group.id);
+                  await ref
+                      .read(colabListProvider.notifier)
+                      .leaveGroup(group.id);
                   ref.read(selectedColabIdProvider.notifier).state = null;
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('You left the group "${group.name}".')),
+                      SnackBar(
+                        content: Text('You left the group "${group.name}".'),
+                      ),
                     );
                   }
                 } catch (e) {
@@ -1180,20 +1275,37 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                   context: context,
                   builder: (ctx) => AlertDialog(
                     title: const Text('Delete Group'),
-                    content: Text('Are you sure you want to delete "${group.name}"? This cannot be undone.'),
+                    content: Text(
+                      'Are you sure you want to delete "${group.name}"? This cannot be undone.',
+                    ),
                     actions: [
-                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-                      TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete', style: TextStyle(color: Colors.redAccent))),
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: const Text(
+                          'Delete',
+                          style: TextStyle(color: Colors.redAccent),
+                        ),
+                      ),
                     ],
                   ),
                 );
                 if (confirm != true || !context.mounted) return;
                 try {
-                  await ref.read(colabListProvider.notifier).deleteGroup(group.id);
+                  await ref
+                      .read(colabListProvider.notifier)
+                      .deleteGroup(group.id);
                   ref.read(selectedColabIdProvider.notifier).state = null;
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Group "${group.name}" has been deleted.')),
+                      SnackBar(
+                        content: Text(
+                          'Group "${group.name}" has been deleted.',
+                        ),
+                      ),
                     );
                   }
                 } catch (e) {
@@ -1496,7 +1608,9 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
           ),
           const Divider(height: 1),
           Expanded(
-            child: !broadcastsLoadedIds.contains(group.id) && group.broadcasts.isEmpty
+            child:
+                !broadcastsLoadedIds.contains(group.id) &&
+                    group.broadcasts.isEmpty
                 ? Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -1900,14 +2014,18 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                         ),
                         onPressed: () async {
                           try {
-                            final result = await FilePicker.platform.pickFiles(allowMultiple: true);
+                            final result = await FilePicker.platform.pickFiles(
+                              allowMultiple: true,
+                            );
                             if (result != null && result.files.isNotEmpty) {
                               setState(() {
                                 for (final file in result.files) {
                                   attachedFiles.add(
                                     AttachmentModel(
                                       fileName: file.name,
-                                      fileType: file.extension?.toUpperCase() ?? 'FILE',
+                                      fileType:
+                                          file.extension?.toUpperCase() ??
+                                          'FILE',
                                       fileSize: file.size > 1024 * 1024
                                           ? '${(file.size / (1024 * 1024)).toStringAsFixed(1)} MB'
                                           : '${(file.size / 1024).toStringAsFixed(0)} KB',
@@ -1933,12 +2051,19 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                             final idx = entry.key;
                             final att = entry.value;
                             return Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
                               decoration: BoxDecoration(
-                                color: isDark ? Colors.white12 : Colors.grey[200],
+                                color: isDark
+                                    ? Colors.white12
+                                    : Colors.grey[200],
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
-                                  color: isDark ? Colors.white24 : Colors.grey[300]!,
+                                  color: isDark
+                                      ? Colors.white24
+                                      : Colors.grey[300]!,
                                 ),
                               ),
                               child: Row(
@@ -1958,7 +2083,9 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                                       style: TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.bold,
-                                        color: isDark ? Colors.white : Colors.black87,
+                                        color: isDark
+                                            ? Colors.white
+                                            : Colors.black87,
                                       ),
                                     ),
                                   ),
@@ -2008,7 +2135,9 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                                 return;
                               }
                               final active = ref.read(activeAccountProvider);
-                              final senderName = active.name.isNotEmpty ? active.name : active.email;
+                              final senderName = active.name.isNotEmpty
+                                  ? active.name
+                                  : active.email;
                               try {
                                 await ref
                                     .read(colabListProvider.notifier)
@@ -2019,11 +2148,17 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                                       body: bodyText,
                                       attachments: attachedFiles,
                                     );
-                                if (context.mounted) Navigator.of(context).pop();
+                                if (context.mounted) {
+                                  Navigator.of(context).pop();
+                                }
                               } catch (e) {
                                 if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('Failed to send broadcast: $e')),
+                                    SnackBar(
+                                      content: Text(
+                                        'Failed to send broadcast: $e',
+                                      ),
+                                    ),
                                   );
                                 }
                               }
@@ -2083,7 +2218,9 @@ class _CasboxInteractiveWidgetState
     _casboxPollingTimer = Timer.periodic(const Duration(seconds: 4), (_) async {
       if (!mounted) return;
       final mailboxEmails = ref.read(emailProvider).emails;
-      await ref.read(casboxMessagesProvider.notifier).fetchMessages(mailboxEmails);
+      await ref
+          .read(casboxMessagesProvider.notifier)
+          .fetchMessages(mailboxEmails);
     });
   }
 
@@ -2102,7 +2239,9 @@ class _CasboxInteractiveWidgetState
     }
 
     final mailboxEmails = ref.read(emailProvider).emails;
-    await ref.read(casboxMessagesProvider.notifier).fetchMessages(mailboxEmails);
+    await ref
+        .read(casboxMessagesProvider.notifier)
+        .fetchMessages(mailboxEmails);
     await Future.delayed(const Duration(milliseconds: 350));
     if (mounted) {
       setState(() => _isLoading = false);
@@ -2115,7 +2254,9 @@ class _CasboxInteractiveWidgetState
       _isLoading = true;
     });
     final mailboxEmails = ref.read(emailProvider).emails;
-    await ref.read(casboxMessagesProvider.notifier).fetchMessages(mailboxEmails);
+    await ref
+        .read(casboxMessagesProvider.notifier)
+        .fetchMessages(mailboxEmails);
     await Future.delayed(const Duration(milliseconds: 300));
     if (mounted) {
       setState(() {
@@ -2254,7 +2395,9 @@ class _CasboxInteractiveWidgetState
       if (currentUserEmail.isEmpty) return false;
       if (s == currentUserEmail) return true;
       final sHandle = s.contains('@') ? s.split('@').first : s;
-      final meHandle = currentUserEmail.contains('@') ? currentUserEmail.split('@').first : currentUserEmail;
+      final meHandle = currentUserEmail.contains('@')
+          ? currentUserEmail.split('@').first
+          : currentUserEmail;
       return sHandle.isNotEmpty && sHandle == meHandle;
     }
 
@@ -2264,9 +2407,17 @@ class _CasboxInteractiveWidgetState
     // fetchMessages() sets status to:
     //   ACCEPTED → old messages (before install) or locally accepted → Received
     //   PENDING  → new messages (after install) not yet accepted → Requests
-    final rawReceived = filteredUserMessages.where((m) => !isSentByMe(m) && m.status.toUpperCase() == 'ACCEPTED').toList();
-    final rawSent = filteredUserMessages.where((m) => isSentByMe(m)).toList();
-    final rawRequests = filteredUserMessages.where((m) => !isSentByMe(m) && (m.status.toUpperCase() == 'PENDING' || m.status.toUpperCase() == 'REQUEST')).toList();
+    final rawReceived = filteredUserMessages
+        .where((m) => !isSentByMe(m) && m.status.toUpperCase() == 'ACCEPTED')
+        .toList();
+    final rawRequests = filteredUserMessages
+        .where(
+          (m) =>
+              !isSentByMe(m) &&
+              (m.status.toUpperCase() == 'PENDING' ||
+                  m.status.toUpperCase() == 'REQUEST'),
+        )
+        .toList();
 
     final receivedCount = rawReceived.where((m) => !m.isRead).length;
     final sentCount = -1;
@@ -2280,7 +2431,9 @@ class _CasboxInteractiveWidgetState
         return isSentByMe(m);
       }
       if (_activeTab == 'Requests') {
-        return !isSentByMe(m) && (m.status.toUpperCase() == 'PENDING' || m.status.toUpperCase() == 'REQUEST');
+        return !isSentByMe(m) &&
+            (m.status.toUpperCase() == 'PENDING' ||
+                m.status.toUpperCase() == 'REQUEST');
       }
       return true;
     }).toList();
@@ -2407,13 +2560,18 @@ class _CasboxInteractiveWidgetState
                 GestureDetector(
                   onTap: () => context.push('/connect-settings'),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 7,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFF195BAC),
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF195BAC).withValues(alpha: 0.25),
+                          color: const Color(
+                            0xFF195BAC,
+                          ).withValues(alpha: 0.25),
                           blurRadius: 6,
                           offset: const Offset(0, 2),
                         ),
@@ -2447,7 +2605,9 @@ class _CasboxInteractiveWidgetState
             Container(
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
-                color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.transparent,
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.05)
+                    : Colors.transparent,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: SingleChildScrollView(
@@ -2481,7 +2641,11 @@ class _CasboxInteractiveWidgetState
                 child: headerWidget,
               ),
               Expanded(
-                child: _buildMessageListContent(isDark, isSelectionMode, messages),
+                child: _buildMessageListContent(
+                  isDark,
+                  isSelectionMode,
+                  messages,
+                ),
               ),
             ],
           ),
@@ -2516,9 +2680,7 @@ class _CasboxInteractiveWidgetState
               _activeTab == 'Requests'
                   ? 'No pending requests.'
                   : 'No Casbox secure messages.',
-              style: TextStyle(
-                color: isDark ? Colors.white30 : Colors.grey,
-              ),
+              style: TextStyle(color: isDark ? Colors.white30 : Colors.grey),
             ),
           ],
         ),
@@ -2534,7 +2696,9 @@ class _CasboxInteractiveWidgetState
       if (currentUserEmail.isEmpty) return false;
       if (s == currentUserEmail) return true;
       final sHandle = s.contains('@') ? s.split('@').first : s;
-      final meHandle = currentUserEmail.contains('@') ? currentUserEmail.split('@').first : currentUserEmail;
+      final meHandle = currentUserEmail.contains('@')
+          ? currentUserEmail.split('@').first
+          : currentUserEmail;
       return sHandle.isNotEmpty && sHandle == meHandle;
     }
 
@@ -2554,6 +2718,7 @@ class _CasboxInteractiveWidgetState
           if (email.contains('@')) return email.split('@').first;
           return email;
         }
+
         final displayTitle = sentByMe
             ? (msg.to.isNotEmpty ? extractUsername(msg.to) : 'Support')
             : (msg.sender.isNotEmpty ? extractUsername(msg.sender) : 'Support');
@@ -2566,9 +2731,7 @@ class _CasboxInteractiveWidgetState
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(
-                    alpha: isDark ? 0.2 : 0.05,
-                  ),
+                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -2637,9 +2800,7 @@ class _CasboxInteractiveWidgetState
                         size: 22,
                         color: msg.isStarred
                             ? Colors.amber
-                            : (isDark
-                                  ? Colors.white38
-                                  : Colors.grey.shade400),
+                            : (isDark ? Colors.white38 : Colors.grey.shade400),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -2682,7 +2843,8 @@ class _CasboxInteractiveWidgetState
                               color: isDark ? Colors.white70 : Colors.black87,
                             ),
                           ),
-                          if (!sentByMe && msg.status.toUpperCase() != 'ACCEPTED') ...[
+                          if (!sentByMe &&
+                              msg.status.toUpperCase() != 'ACCEPTED') ...[
                             const SizedBox(height: 10),
                             SingleChildScrollView(
                               scrollDirection: Axis.horizontal,
@@ -2691,40 +2853,84 @@ class _CasboxInteractiveWidgetState
                                 children: [
                                   OutlinedButton.icon(
                                     onPressed: () {
-                                      ref.read(casboxMessagesProvider.notifier).rejectRequest(msg.id);
-                                      ScaffoldMessenger.of(context).showSnackBar(
+                                      ref
+                                          .read(casboxMessagesProvider.notifier)
+                                          .rejectRequest(msg.id);
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
                                         const SnackBar(
                                           content: Text('Request rejected.'),
                                           duration: Duration(seconds: 1),
                                         ),
                                       );
                                     },
-                                    icon: const Icon(Icons.cancel_outlined, size: 14, color: Colors.red),
-                                    label: const Text('Reject', style: TextStyle(color: Colors.red, fontSize: 12)),
+                                    icon: const Icon(
+                                      Icons.cancel_outlined,
+                                      size: 14,
+                                      color: Colors.red,
+                                    ),
+                                    label: const Text(
+                                      'Reject',
+                                      style: TextStyle(
+                                        color: Colors.red,
+                                        fontSize: 12,
+                                      ),
+                                    ),
                                     style: OutlinedButton.styleFrom(
-                                      side: const BorderSide(color: Colors.red, width: 1),
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      side: const BorderSide(
+                                        color: Colors.red,
+                                        width: 1,
+                                      ),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 6,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
                                     ),
                                   ),
                                   const SizedBox(width: 8),
                                   ElevatedButton.icon(
                                     onPressed: () {
-                                      ref.read(casboxMessagesProvider.notifier).acceptRequest(msg.id);
-                                      ScaffoldMessenger.of(context).showSnackBar(
+                                      ref
+                                          .read(casboxMessagesProvider.notifier)
+                                          .acceptRequest(msg.id);
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
                                         const SnackBar(
-                                          content: Text('Request accepted! Moved to Received tab.'),
+                                          content: Text(
+                                            'Request accepted! Moved to Received tab.',
+                                          ),
                                           duration: Duration(seconds: 1),
                                         ),
                                       );
                                     },
-                                    icon: const Icon(Icons.check_circle_outline, size: 14, color: Colors.white),
-                                    label: const Text('Accept', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                                    icon: const Icon(
+                                      Icons.check_circle_outline,
+                                      size: 14,
+                                      color: Colors.white,
+                                    ),
+                                    label: const Text(
+                                      'Accept',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: const Color(0xFF195BAC),
                                       elevation: 0,
-                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 14,
+                                        vertical: 6,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -2748,7 +2954,10 @@ class _CasboxInteractiveWidgetState
 
   Widget _buildDeliveryTickWidget(CasboxMessage msg, bool isDark) {
     final status = msg.status.trim().toUpperCase();
-    if (msg.isRead || status == 'READ' || status == 'SEEN' || status == 'ACCEPTED') {
+    if (msg.isRead ||
+        status == 'READ' ||
+        status == 'SEEN' ||
+        status == 'ACCEPTED') {
       return const Icon(
         Icons.done_all_rounded,
         size: 16,
@@ -2779,527 +2988,9 @@ class _CasboxInteractiveWidgetState
     }
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => _CasboxDetailPage(
-          initialMsg: initialMsg,
-          isDark: isDark,
-        ),
+        builder: (context) =>
+            _CasboxDetailPage(initialMsg: initialMsg, isDark: isDark),
       ),
-    );
-  }
-
-  void _showComposeBroadcastDialog(
-    BuildContext context,
-    WidgetRef ref,
-    String groupId,
-    bool isDark,
-  ) {
-    final subjectController = TextEditingController();
-    final bodyController = TextEditingController();
-    List<AttachmentModel> attachedFiles = [];
-
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return Dialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20.0),
-              ),
-              backgroundColor: isDark ? BNXColors.darkSurface : Colors.white,
-              child: Container(
-                constraints: const BoxConstraints(maxWidth: 480),
-                padding: const EdgeInsets.all(24.0),
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Compose New Broadcast',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: isDark
-                              ? Colors.white
-                              : BNXColors.lightTextPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Subject',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: isDark
-                              ? BNXColors.darkTextSecondary
-                              : BNXColors.lightTextSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      TextField(
-                        controller: subjectController,
-                        decoration: InputDecoration(
-                          hintText: 'Enter subject...',
-                          hintStyle: const TextStyle(
-                            color: Colors.grey,
-                            fontSize: 13,
-                          ),
-                          contentPadding: const EdgeInsets.all(12),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: BorderSide(
-                              color: isDark
-                                  ? BNXColors.darkBorder
-                                  : BNXColors.lightBorder,
-                            ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: const BorderSide(
-                              color: BNXColors.lightPrimary,
-                              width: 2,
-                            ),
-                          ),
-                        ),
-                        style: TextStyle(
-                          color: isDark
-                              ? Colors.white
-                              : BNXColors.lightTextPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Broadcast Message',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: isDark
-                              ? BNXColors.darkTextSecondary
-                              : BNXColors.lightTextSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      TextField(
-                        controller: bodyController,
-                        maxLines: 4,
-                        decoration: InputDecoration(
-                          hintText:
-                              'Enter broadcast update for all group members...',
-                          hintStyle: const TextStyle(
-                            color: Colors.grey,
-                            fontSize: 13,
-                          ),
-                          contentPadding: const EdgeInsets.all(12),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: BorderSide(
-                              color: isDark
-                                  ? BNXColors.darkBorder
-                                  : BNXColors.lightBorder,
-                            ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: const BorderSide(
-                              color: BNXColors.lightPrimary,
-                              width: 2,
-                            ),
-                          ),
-                        ),
-                        style: TextStyle(
-                          color: isDark
-                              ? Colors.white
-                              : BNXColors.lightTextPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      if (attachedFiles.isNotEmpty) ...[
-                        Text(
-                          'Attachments (${attachedFiles.length})',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: isDark
-                                ? BNXColors.darkTextSecondary
-                                : BNXColors.lightTextSecondary,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: attachedFiles.map((file) {
-                            IconData iconData = Icons.insert_drive_file_rounded;
-                            Color iconColor = const Color(0xFF195BAC);
-                            if (file.fileType == 'pdf') {
-                              iconData = Icons.picture_as_pdf_rounded;
-                              iconColor = Colors.red;
-                            } else if (file.fileType == 'image') {
-                              iconData = Icons.image_rounded;
-                              iconColor = Colors.purple;
-                            } else if (file.fileType == 'code') {
-                              iconData = Icons.code_rounded;
-                              iconColor = Colors.green;
-                            }
-                            return Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? Colors.white.withValues(alpha: 0.08)
-                                    : Colors.grey[200],
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(iconData, size: 14, color: iconColor),
-                                  const SizedBox(width: 6),
-                                  ConstrainedBox(
-                                    constraints: const BoxConstraints(
-                                      maxWidth: 150,
-                                    ),
-                                    child: Text(
-                                      file.fileName,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: isDark
-                                            ? Colors.white
-                                            : BNXColors.lightTextPrimary,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                      maxLines: 1,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  GestureDetector(
-                                    onTap: () {
-                                      setState(() {
-                                        attachedFiles.remove(file);
-                                      });
-                                    },
-                                    child: Icon(
-                                      Icons.close_rounded,
-                                      size: 14,
-                                      color: isDark
-                                          ? Colors.white54
-                                          : Colors.black54,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                      Row(
-                        children: [
-                          TextButton.icon(
-                            onPressed: () {
-                              showModalBottomSheet(
-                                context: context,
-                                backgroundColor: isDark
-                                    ? BNXColors.darkSurface
-                                    : Colors.white,
-                                shape: const RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.vertical(
-                                    top: Radius.circular(20),
-                                  ),
-                                ),
-                                builder: (context) {
-                                  return SafeArea(
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(20.0),
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            'Attach File',
-                                            style: TextStyle(
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.bold,
-                                              color: isDark
-                                                  ? Colors.white
-                                                  : BNXColors.lightTextPrimary,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 16),
-                                          ListTile(
-                                            leading: const Icon(
-                                              Icons.upload_file_rounded,
-                                              color: Color(0xFF195BAC),
-                                            ),
-                                            title: const Text(
-                                              'Choose from device...',
-                                            ),
-                                            onTap: () async {
-                                              Navigator.pop(context);
-                                              try {
-                                                final result = await FilePicker
-                                                    .platform
-                                                    .pickFiles();
-                                                if (result != null &&
-                                                    result.files.isNotEmpty) {
-                                                  final file =
-                                                      result.files.first;
-                                                  setState(() {
-                                                    attachedFiles.add(
-                                                      AttachmentModel(
-                                                        fileName: file.name,
-                                                        fileType:
-                                                            file.extension ??
-                                                            'bin',
-                                                        fileSize:
-                                                            file.size >
-                                                                1024 * 1024
-                                                            ? '${(file.size / (1024 * 1024)).toStringAsFixed(1)} MB'
-                                                            : '${(file.size / 1024).toStringAsFixed(0)} KB',
-                                                      ),
-                                                    );
-                                                  });
-                                                }
-                                              } catch (e) {
-                                                if (context.mounted) {
-                                                  ScaffoldMessenger.of(
-                                                    context,
-                                                  ).showSnackBar(
-                                                    SnackBar(
-                                                      content: Text(
-                                                        'Failed to pick file: $e',
-                                                      ),
-                                                    ),
-                                                  );
-                                                }
-                                              }
-                                            },
-                                          ),
-                                          ListTile(
-                                            leading: const Icon(
-                                              Icons.picture_as_pdf_rounded,
-                                              color: Colors.red,
-                                            ),
-                                            title: const Text(
-                                              'PDF Document (e.g., BNXMail_Specs_Draft.pdf)',
-                                            ),
-                                            onTap: () {
-                                              Navigator.pop(context);
-                                              setState(() {
-                                                attachedFiles.add(
-                                                  const AttachmentModel(
-                                                    fileName:
-                                                        'BNXMail_Specs_Draft.pdf',
-                                                    fileType: 'pdf',
-                                                    fileSize: '1.2 MB',
-                                                  ),
-                                                );
-                                              });
-                                            },
-                                          ),
-                                          ListTile(
-                                            leading: const Icon(
-                                              Icons.image_rounded,
-                                              color: Colors.purple,
-                                            ),
-                                            title: const Text(
-                                              'Image Asset (e.g., App_Screenshot.png)',
-                                            ),
-                                            onTap: () {
-                                              Navigator.pop(context);
-                                              setState(() {
-                                                attachedFiles.add(
-                                                  const AttachmentModel(
-                                                    fileName:
-                                                        'App_Screenshot.png',
-                                                    fileType: 'image',
-                                                    fileSize: '850 KB',
-                                                  ),
-                                                );
-                                              });
-                                            },
-                                          ),
-                                          ListTile(
-                                            leading: const Icon(
-                                              Icons.code_rounded,
-                                              color: Colors.green,
-                                            ),
-                                            title: const Text(
-                                              'Source Code File (e.g., main.dart)',
-                                            ),
-                                            onTap: () {
-                                              Navigator.pop(context);
-                                              setState(() {
-                                                attachedFiles.add(
-                                                  const AttachmentModel(
-                                                    fileName: 'main.dart',
-                                                    fileType: 'code',
-                                                    fileSize: '12 KB',
-                                                  ),
-                                                );
-                                              });
-                                            },
-                                          ),
-                                          ListTile(
-                                            leading: const Icon(
-                                              Icons.add_circle_outline_rounded,
-                                              color: Color(0xFF195BAC),
-                                            ),
-                                            title: const Text(
-                                              'Custom Attachment...',
-                                            ),
-                                            onTap: () {
-                                              Navigator.pop(context);
-                                              final customController =
-                                                  TextEditingController();
-                                              showDialog(
-                                                context: context,
-                                                builder: (ctx) => AlertDialog(
-                                                  backgroundColor: isDark
-                                                      ? BNXColors.darkSurface
-                                                      : Colors.white,
-                                                  title: Text(
-                                                    'Custom File Name',
-                                                    style: TextStyle(
-                                                      color: isDark
-                                                          ? Colors.white
-                                                          : Colors.black,
-                                                    ),
-                                                  ),
-                                                  content: TextField(
-                                                    controller:
-                                                        customController,
-                                                    decoration:
-                                                        const InputDecoration(
-                                                          hintText:
-                                                              'Enter file name with extension...',
-                                                        ),
-                                                    style: TextStyle(
-                                                      color: isDark
-                                                          ? Colors.white
-                                                          : Colors.black,
-                                                    ),
-                                                  ),
-                                                  actions: [
-                                                    TextButton(
-                                                      onPressed: () =>
-                                                          Navigator.pop(ctx),
-                                                      child: const Text(
-                                                        'Cancel',
-                                                      ),
-                                                    ),
-                                                    TextButton(
-                                                      onPressed: () {
-                                                        final name =
-                                                            customController
-                                                                .text
-                                                                .trim();
-                                                        if (name.isNotEmpty) {
-                                                          setState(() {
-                                                            attachedFiles.add(
-                                                              AttachmentModel(
-                                                                fileName: name,
-                                                                fileType: name
-                                                                    .split('.')
-                                                                    .last
-                                                                    .toLowerCase(),
-                                                                fileSize:
-                                                                    '250 KB',
-                                                              ),
-                                                            );
-                                                          });
-                                                        }
-                                                        Navigator.pop(ctx);
-                                                      },
-                                                      child: const Text('Add'),
-                                                    ),
-                                                  ],
-                                                ),
-                                              );
-                                            },
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                },
-                              );
-                            },
-                            icon: const Icon(
-                              Icons.attach_file_rounded,
-                              size: 16,
-                            ),
-                            label: const Text('Attach File'),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          TextButton(
-                            onPressed: () => Navigator.of(context).pop(),
-                            child: const Text('Cancel'),
-                          ),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: BNXColors.lightPrimary,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            onPressed: () async {
-                              final subjectText = subjectController.text.trim();
-                              final bodyText = bodyController.text.trim();
-                              if (subjectText.isEmpty || bodyText.isEmpty) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Please fill all fields'),
-                                  ),
-                                );
-                                return;
-                              }
-
-                              final active = ref.read(activeAccountProvider);
-                              final senderName = active.name.isNotEmpty ? active.name : active.email;
-                              try {
-                                await ref
-                                    .read(colabListProvider.notifier)
-                                    .addBroadcast(
-                                      groupId,
-                                      sender: senderName,
-                                      subject: subjectText,
-                                      body: bodyText,
-                                      attachments: attachedFiles,
-                                    );
-                                if (context.mounted) Navigator.of(context).pop();
-                              } catch (e) {
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('Failed to send broadcast: $e')),
-                                  );
-                                }
-                              }
-                            },
-                            child: const Text(
-                              'Send Broadcast',
-                              style: TextStyle(color: Colors.white),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
-        );
-      },
     );
   }
 }
@@ -3462,7 +3153,9 @@ class _CommentsSectionState extends State<CommentsSection> {
 
           // Comments list
           Expanded(
-            child: !messagesLoadedIds.contains(widget.group.id) && widget.group.comments.isEmpty
+            child:
+                !messagesLoadedIds.contains(widget.group.id) &&
+                    widget.group.comments.isEmpty
                 ? Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -3547,7 +3240,10 @@ class _CommentsSectionState extends State<CommentsSection> {
                     itemBuilder: (context, index) {
                       final c = widget.group.comments[index];
                       final active = widget.ref.read(activeAccountProvider);
-                      final isMe = c.sender == 'Ravi' || c.sender == active.name || c.sender == active.email;
+                      final isMe =
+                          c.sender == 'Ravi' ||
+                          c.sender == active.name ||
+                          c.sender == active.email;
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12.0),
                         child: Row(
@@ -3618,191 +3314,212 @@ class _CommentsSectionState extends State<CommentsSection> {
                                     ),
                                     const SizedBox(height: 4),
                                     if (c.message.isNotEmpty)
-                                       Text(
-                                         c.message,
-                                         style: TextStyle(
-                                           fontSize: 13,
-                                           color: isMe
-                                               ? Colors.white
-                                               : (widget.isDark
-                                                     ? Colors.white
-                                                     : BNXColors.lightTextPrimary),
-                                         ),
-                                       ),
-                                     if (c.attachments.isNotEmpty) ...[
-                                       const SizedBox(height: 6),
-                                       Column(
-                                         crossAxisAlignment: isMe
-                                             ? CrossAxisAlignment.end
-                                             : CrossAxisAlignment.start,
-                                         children: c.attachments.map((att) {
-                                           return Container(
-                                             margin: const EdgeInsets.only(top: 4),
-                                             padding: const EdgeInsets.symmetric(
-                                               horizontal: 10,
-                                               vertical: 6,
-                                             ),
-                                             decoration: BoxDecoration(
-                                               color: isMe
-                                                   ? Colors.white.withValues(alpha: 0.2)
-                                                   : (widget.isDark
-                                                         ? Colors.white12
-                                                         : Colors.grey[300]),
-                                               borderRadius: BorderRadius.circular(8),
-                                             ),
-                                             child: Row(
-                                               mainAxisSize: MainAxisSize.min,
-                                               children: [
-                                                 Icon(
-                                                   Icons.insert_drive_file_rounded,
-                                                   size: 14,
-                                                   color: isMe
-                                                       ? Colors.white
-                                                       : const Color(0xFF195BAC),
-                                                 ),
-                                                 const SizedBox(width: 6),
-                                                 Flexible(
-                                                   child: Text(
-                                                     att.fileName,
-                                                     maxLines: 1,
-                                                     overflow: TextOverflow.ellipsis,
-                                                     style: TextStyle(
-                                                       fontSize: 12,
-                                                       fontWeight: FontWeight.w600,
-                                                       color: isMe
-                                                           ? Colors.white
-                                                           : (widget.isDark
-                                                                 ? Colors.white
-                                                                 : Colors.black87),
-                                                     ),
-                                                   ),
-                                                 ),
-                                                 if (att.fileSize.isNotEmpty) ...[
-                                                   const SizedBox(width: 4),
-                                                   Text(
-                                                     '(${att.fileSize})',
-                                                     style: TextStyle(
-                                                       fontSize: 10,
-                                                       color: isMe
-                                                           ? Colors.white70
-                                                           : (widget.isDark
-                                                                 ? Colors.white60
-                                                                 : Colors.black54),
-                                                     ),
-                                                   ),
-                                                 ],
-                                               ],
-                                             ),
-                                           );
-                                         }).toList(),
-                                       ),
-                                     ],
-                                   ],
-                                 ),
-                               ),
-                             ),
-                           ],
-                         ),
-                       );
-                     },
-                   ),
-           ),
-           const Divider(height: 1),
+                                      Text(
+                                        c.message,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: isMe
+                                              ? Colors.white
+                                              : (widget.isDark
+                                                    ? Colors.white
+                                                    : BNXColors
+                                                          .lightTextPrimary),
+                                        ),
+                                      ),
+                                    if (c.attachments.isNotEmpty) ...[
+                                      const SizedBox(height: 6),
+                                      Column(
+                                        crossAxisAlignment: isMe
+                                            ? CrossAxisAlignment.end
+                                            : CrossAxisAlignment.start,
+                                        children: c.attachments.map((att) {
+                                          return Container(
+                                            margin: const EdgeInsets.only(
+                                              top: 4,
+                                            ),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                              vertical: 6,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: isMe
+                                                  ? Colors.white.withValues(
+                                                      alpha: 0.2,
+                                                    )
+                                                  : (widget.isDark
+                                                        ? Colors.white12
+                                                        : Colors.grey[300]),
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  Icons
+                                                      .insert_drive_file_rounded,
+                                                  size: 14,
+                                                  color: isMe
+                                                      ? Colors.white
+                                                      : const Color(0xFF195BAC),
+                                                ),
+                                                const SizedBox(width: 6),
+                                                Flexible(
+                                                  child: Text(
+                                                    att.fileName,
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      color: isMe
+                                                          ? Colors.white
+                                                          : (widget.isDark
+                                                                ? Colors.white
+                                                                : Colors
+                                                                      .black87),
+                                                    ),
+                                                  ),
+                                                ),
+                                                if (att
+                                                    .fileSize
+                                                    .isNotEmpty) ...[
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    '(${att.fileSize})',
+                                                    style: TextStyle(
+                                                      fontSize: 10,
+                                                      color: isMe
+                                                          ? Colors.white70
+                                                          : (widget.isDark
+                                                                ? Colors.white60
+                                                                : Colors
+                                                                      .black54),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ],
+                                            ),
+                                          );
+                                        }).toList(),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          const Divider(height: 1),
 
-           // Pending attachments bar
-           if (_pendingAttachments.isNotEmpty)
-             Container(
-               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-               color: widget.isDark ? Colors.white10 : Colors.grey[100],
-               child: Wrap(
-                 spacing: 6,
-                 runSpacing: 6,
-                 children: _pendingAttachments.asMap().entries.map((entry) {
-                   final idx = entry.key;
-                   final att = entry.value;
-                   return Container(
-                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                     decoration: BoxDecoration(
-                       color: widget.isDark ? Colors.white12 : Colors.white,
-                       borderRadius: BorderRadius.circular(6),
-                       border: Border.all(
-                         color: widget.isDark ? Colors.white24 : Colors.grey[300]!,
-                       ),
-                     ),
-                     child: Row(
-                       mainAxisSize: MainAxisSize.min,
-                       children: [
-                         const Icon(
-                           Icons.insert_drive_file_rounded,
-                           size: 14,
-                           color: Color(0xFF195BAC),
-                         ),
-                         const SizedBox(width: 4),
-                         Flexible(
-                           child: Text(
-                             att.fileName,
-                             maxLines: 1,
-                             overflow: TextOverflow.ellipsis,
-                             style: const TextStyle(
-                               fontSize: 11,
-                               fontWeight: FontWeight.bold,
-                             ),
-                           ),
-                         ),
-                         const SizedBox(width: 4),
-                         GestureDetector(
-                           onTap: () {
-                             setState(() {
-                               _pendingAttachments.removeAt(idx);
-                             });
-                           },
-                           child: const Icon(
-                             Icons.close_rounded,
-                             size: 14,
-                             color: Colors.redAccent,
-                           ),
-                         ),
-                       ],
-                     ),
-                   );
-                 }).toList(),
-               ),
-             ),
+          // Pending attachments bar
+          if (_pendingAttachments.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              color: widget.isDark ? Colors.white10 : Colors.grey[100],
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: _pendingAttachments.asMap().entries.map((entry) {
+                  final idx = entry.key;
+                  final att = entry.value;
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: widget.isDark ? Colors.white12 : Colors.white,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: widget.isDark
+                            ? Colors.white24
+                            : Colors.grey[300]!,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.insert_drive_file_rounded,
+                          size: 14,
+                          color: Color(0xFF195BAC),
+                        ),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            att.fileName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _pendingAttachments.removeAt(idx);
+                            });
+                          },
+                          child: const Icon(
+                            Icons.close_rounded,
+                            size: 14,
+                            color: Colors.redAccent,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
 
-           // Input bar
-           Padding(
-             padding: const EdgeInsets.all(12.0),
-             child: Row(
-               children: [
-                 IconButton(
-                   icon: const Icon(
-                     Icons.attach_file_rounded,
-                     color: Color(0xFF195BAC),
-                   ),
-                   onPressed: () async {
-                     try {
-                       final result = await FilePicker.platform.pickFiles(allowMultiple: true);
-                       if (result != null && result.files.isNotEmpty) {
-                         setState(() {
-                           for (final file in result.files) {
-                             _pendingAttachments.add(
-                               AttachmentModel(
-                                 fileName: file.name,
-                                 fileType: file.extension?.toUpperCase() ?? 'FILE',
-                                 fileSize: file.size > 1024 * 1024
-                                     ? '${(file.size / (1024 * 1024)).toStringAsFixed(1)} MB'
-                                     : '${(file.size / 1024).toStringAsFixed(0)} KB',
-                                 filePath: file.path,
-                               ),
-                             );
-                           }
-                         });
-                       }
-                     } catch (e) {
-                       print('[FILE PICKER ERROR] $e');
-                     }
-                   },
-                 ),
+          // Input bar
+          Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(
+                    Icons.attach_file_rounded,
+                    color: Color(0xFF195BAC),
+                  ),
+                  onPressed: () async {
+                    try {
+                      final result = await FilePicker.platform.pickFiles(
+                        allowMultiple: true,
+                      );
+                      if (result != null && result.files.isNotEmpty) {
+                        setState(() {
+                          for (final file in result.files) {
+                            _pendingAttachments.add(
+                              AttachmentModel(
+                                fileName: file.name,
+                                fileType:
+                                    file.extension?.toUpperCase() ?? 'FILE',
+                                fileSize: file.size > 1024 * 1024
+                                    ? '${(file.size / (1024 * 1024)).toStringAsFixed(1)} MB'
+                                    : '${(file.size / 1024).toStringAsFixed(0)} KB',
+                                filePath: file.path,
+                              ),
+                            );
+                          }
+                        });
+                      }
+                    } catch (e) {
+                      print('[FILE PICKER ERROR] $e');
+                    }
+                  },
+                ),
                 Expanded(
                   child: TextField(
                     controller: _commentController,
@@ -3850,10 +3567,7 @@ class _CasboxDetailPage extends ConsumerStatefulWidget {
   final CasboxMessage initialMsg;
   final bool isDark;
 
-  const _CasboxDetailPage({
-    required this.initialMsg,
-    required this.isDark,
-  });
+  const _CasboxDetailPage({required this.initialMsg, required this.isDark});
 
   @override
   ConsumerState<_CasboxDetailPage> createState() => _CasboxDetailPageState();
@@ -3884,9 +3598,13 @@ class _CasboxDetailPageState extends ConsumerState<_CasboxDetailPage> {
     _threadPollingTimer = Timer.periodic(const Duration(seconds: 4), (_) async {
       if (!mounted) return;
       final initialMsg = widget.initialMsg;
-      final contactEmail = initialMsg.to.isNotEmpty ? initialMsg.to : initialMsg.sender;
+      final contactEmail = initialMsg.to.isNotEmpty
+          ? initialMsg.to
+          : initialMsg.sender;
       if (contactEmail.isNotEmpty) {
-        await ref.read(casboxMessagesProvider.notifier).fetchThreadMessages(contactEmail);
+        await ref
+            .read(casboxMessagesProvider.notifier)
+            .fetchThreadMessages(contactEmail);
       }
     });
   }
@@ -3901,7 +3619,20 @@ class _CasboxDetailPageState extends ConsumerState<_CasboxDetailPage> {
 
   String _formatCasboxDateTime(DateTime dt) {
     final local = dt.toLocal();
-    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     final monthStr = months[local.month - 1];
     final day = local.day;
     final year = local.year;
@@ -3913,7 +3644,10 @@ class _CasboxDetailPageState extends ConsumerState<_CasboxDetailPage> {
 
   Widget _buildDetailTickIcon(CasboxMessage msg, bool isDark) {
     final status = msg.status.trim().toUpperCase();
-    if (msg.isRead || status == 'READ' || status == 'SEEN' || status == 'ACCEPTED') {
+    if (msg.isRead ||
+        status == 'READ' ||
+        status == 'SEEN' ||
+        status == 'ACCEPTED') {
       return const Icon(
         Icons.done_all_rounded,
         size: 14,
@@ -3938,13 +3672,21 @@ class _CasboxDetailPageState extends ConsumerState<_CasboxDetailPage> {
   Widget build(BuildContext context) {
     final isDark = widget.isDark;
     final initialMsg = widget.initialMsg;
-    final contactEmail = initialMsg.to.isNotEmpty ? initialMsg.to : initialMsg.sender;
+    final contactEmail = initialMsg.to.isNotEmpty
+        ? initialMsg.to
+        : initialMsg.sender;
     final media = MediaQuery.of(context);
     final isMobile = media.size.width < 600;
 
-    final subjectText = initialMsg.subject.trim().isNotEmpty ? initialMsg.subject : 'new enter normal';
-    final senderEmail = initialMsg.sender.trim().isNotEmpty ? initialMsg.sender : 'ravinew2004@bnxmail.com';
-    final toEmail = initialMsg.to.trim().isNotEmpty ? initialMsg.to : 'ravikumar123@bnxmail.com';
+    final subjectText = initialMsg.subject.trim().isNotEmpty
+        ? initialMsg.subject
+        : 'new enter normal';
+    final senderEmail = initialMsg.sender.trim().isNotEmpty
+        ? initialMsg.sender
+        : 'ravinew2004@bnxmail.com';
+    final toEmail = initialMsg.to.trim().isNotEmpty
+        ? initialMsg.to
+        : 'ravikumar123@bnxmail.com';
 
     return Scaffold(
       backgroundColor: isDark ? BNXColors.darkBg : const Color(0xFFE9F4FF),
@@ -4004,25 +3746,38 @@ class _CasboxDetailPageState extends ConsumerState<_CasboxDetailPage> {
                       Expanded(
                         child: Consumer(
                           builder: (context, ref, child) {
-                            final displayList = [initialMsg, ..._sessionReplies];
+                            final displayList = [
+                              initialMsg,
+                              ..._sessionReplies,
+                            ];
 
                             return ListView.separated(
                               controller: _scrollController,
                               itemCount: displayList.length,
-                              separatorBuilder: (_, _) => const SizedBox(height: 24),
+                              separatorBuilder: (_, _) =>
+                                  const SizedBox(height: 24),
                               itemBuilder: (context, index) {
                                 final msg = displayList[index];
-                                final sEmail = msg.sender.trim().isNotEmpty ? msg.sender : senderEmail;
-                                final rEmail = msg.to.trim().isNotEmpty ? msg.to : toEmail;
-                                final char = sEmail.isNotEmpty ? sEmail[0].toUpperCase() : 'R';
-                                final formattedTime = _formatCasboxDateTime(msg.timestamp);
+                                final sEmail = msg.sender.trim().isNotEmpty
+                                    ? msg.sender
+                                    : senderEmail;
+                                final rEmail = msg.to.trim().isNotEmpty
+                                    ? msg.to
+                                    : toEmail;
+                                final char = sEmail.isNotEmpty
+                                    ? sEmail[0].toUpperCase()
+                                    : 'R';
+                                final formattedTime = _formatCasboxDateTime(
+                                  msg.timestamp,
+                                );
 
                                 return Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     // Sender Header Row
                                     Row(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Container(
                                           width: 40,
@@ -4044,7 +3799,8 @@ class _CasboxDetailPageState extends ConsumerState<_CasboxDetailPage> {
                                         const SizedBox(width: 12),
                                         Expanded(
                                           child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
                                               Row(
                                                 children: [
@@ -4053,10 +3809,16 @@ class _CasboxDetailPageState extends ConsumerState<_CasboxDetailPage> {
                                                       sEmail,
                                                       style: TextStyle(
                                                         fontSize: 14,
-                                                        fontWeight: FontWeight.bold,
-                                                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        color: isDark
+                                                            ? Colors.white
+                                                            : const Color(
+                                                                0xFF0F172A,
+                                                              ),
                                                       ),
-                                                      overflow: TextOverflow.ellipsis,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
                                                     ),
                                                   ),
                                                   const SizedBox(width: 8),
@@ -4064,11 +3826,18 @@ class _CasboxDetailPageState extends ConsumerState<_CasboxDetailPage> {
                                                     formattedTime,
                                                     style: TextStyle(
                                                       fontSize: 11,
-                                                      color: isDark ? Colors.white38 : Colors.grey.shade500,
+                                                      color: isDark
+                                                          ? Colors.white38
+                                                          : Colors
+                                                                .grey
+                                                                .shade500,
                                                     ),
                                                   ),
                                                   const SizedBox(width: 4),
-                                                  _buildDetailTickIcon(msg, isDark),
+                                                  _buildDetailTickIcon(
+                                                    msg,
+                                                    isDark,
+                                                  ),
                                                 ],
                                               ),
                                               const SizedBox(height: 4),
@@ -4076,7 +3845,9 @@ class _CasboxDetailPageState extends ConsumerState<_CasboxDetailPage> {
                                                 'To: $rEmail',
                                                 style: TextStyle(
                                                   fontSize: 12,
-                                                  color: isDark ? Colors.white60 : Colors.grey.shade600,
+                                                  color: isDark
+                                                      ? Colors.white60
+                                                      : Colors.grey.shade600,
                                                 ),
                                                 overflow: TextOverflow.ellipsis,
                                               ),
@@ -4089,13 +3860,19 @@ class _CasboxDetailPageState extends ConsumerState<_CasboxDetailPage> {
 
                                     // Message Body Text
                                     Padding(
-                                      padding: EdgeInsets.only(left: isMobile ? 0 : 52),
+                                      padding: EdgeInsets.only(
+                                        left: isMobile ? 0 : 52,
+                                      ),
                                       child: Text(
                                         msg.body,
                                         style: TextStyle(
                                           fontSize: 14,
                                           height: 1.5,
-                                          color: isDark ? Colors.white.withValues(alpha: 0.87) : const Color(0xFF334155),
+                                          color: isDark
+                                              ? Colors.white.withValues(
+                                                  alpha: 0.87,
+                                                )
+                                              : const Color(0xFF334155),
                                         ),
                                       ),
                                     ),
@@ -4117,36 +3894,61 @@ class _CasboxDetailPageState extends ConsumerState<_CasboxDetailPage> {
                                 controller: _replyController,
                                 maxLines: 3,
                                 minLines: 1,
-                                style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+                                style: TextStyle(
+                                  color: isDark ? Colors.white : Colors.black87,
+                                ),
                                 decoration: InputDecoration(
                                   hintText: 'Type your reply...',
-                                  hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.grey.shade400),
+                                  hintStyle: TextStyle(
+                                    color: isDark
+                                        ? Colors.white38
+                                        : Colors.grey.shade400,
+                                  ),
                                   isDense: true,
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 12,
+                                  ),
                                   filled: true,
-                                  fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                                  fillColor: isDark
+                                      ? const Color(0xFF0F172A)
+                                      : const Color(0xFFF8FAFC),
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide(color: isDark ? Colors.white24 : Colors.grey.shade300),
+                                    borderSide: BorderSide(
+                                      color: isDark
+                                          ? Colors.white24
+                                          : Colors.grey.shade300,
+                                    ),
                                   ),
                                   focusedBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
-                                    borderSide: const BorderSide(color: Color(0xFF195BAC), width: 1.5),
+                                    borderSide: const BorderSide(
+                                      color: Color(0xFF195BAC),
+                                      width: 1.5,
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
                             const SizedBox(width: 8),
                             IconButton(
-                              icon: const Icon(Icons.send_rounded, color: Color(0xFF195BAC)),
+                              icon: const Icon(
+                                Icons.send_rounded,
+                                color: Color(0xFF195BAC),
+                              ),
                               onPressed: () async {
                                 final text = _replyController.text.trim();
                                 if (text.isEmpty) return;
                                 _replyController.clear();
-                                final activeAcc = ref.read(activeAccountProvider);
+                                final activeAcc = ref.read(
+                                  activeAccountProvider,
+                                );
                                 final replyMsg = CasboxMessage(
                                   id: 'local_${DateTime.now().millisecondsSinceEpoch}',
-                                  sender: activeAcc.email.isNotEmpty ? activeAcc.email : 'me',
+                                  sender: activeAcc.email.isNotEmpty
+                                      ? activeAcc.email
+                                      : 'me',
                                   to: contactEmail,
                                   subject: initialMsg.subject,
                                   body: text,
@@ -4177,12 +3979,19 @@ class _CasboxDetailPageState extends ConsumerState<_CasboxDetailPage> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF195BAC),
                             elevation: 0,
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 12,
+                            ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(24),
                             ),
                           ),
-                          icon: const Icon(Icons.reply_rounded, size: 18, color: Colors.white),
+                          icon: const Icon(
+                            Icons.reply_rounded,
+                            size: 18,
+                            color: Colors.white,
+                          ),
                           label: const Text(
                             'Reply',
                             style: TextStyle(

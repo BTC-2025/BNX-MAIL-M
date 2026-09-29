@@ -4,9 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'avatar_widget.dart';
 import '../../data/app_state_provider.dart';
 import '../../data/account_provider.dart';
-import '../../data/email_provider.dart';
-import '../../data/repositories/auth_repository.dart';
-import '../../features/auth/presentation/notifiers/auth_notifier.dart';
 import '../theme/colors.dart';
 import '../constants/constants.dart';
 
@@ -88,13 +85,19 @@ class ProfileButton extends ConsumerWidget {
           } else if (value == 'theme') {
             ref.read(appUiProvider.notifier).toggleDarkMode();
           } else if (value == 'logout') {
-            final activeAccount = ref.read(accountsProvider.notifier).activeAccount;
-            final activeEmail = activeAccount.email.isNotEmpty ? activeAccount.email : activeAccount.id;
-            await ref.read(accountsProvider.notifier).signOutSingleAccount(
-              targetEmail: activeEmail,
-              ref: ref,
-              context: context,
-            );
+            final activeAccount = ref
+                .read(accountsProvider.notifier)
+                .activeAccount;
+            final activeEmail = activeAccount.email.isNotEmpty
+                ? activeAccount.email
+                : activeAccount.id;
+            await ref
+                .read(accountsProvider.notifier)
+                .signOutSingleAccount(
+                  targetEmail: activeEmail,
+                  ref: ref,
+                  context: context,
+                );
           }
         },
         itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[

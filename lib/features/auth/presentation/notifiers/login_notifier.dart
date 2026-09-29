@@ -81,7 +81,8 @@ class LoginNotifier extends ValueNotifier<LoginState> {
     } on ApiException catch (e) {
       value = value.copyWith(isLoading: false, generalError: e.message);
       return false;
-    } catch (e) {
+    } catch (e, stack) {
+      print('[LOGIN ERROR] Unexpected error during login: $e\n$stack');
       value = value.copyWith(
         isLoading: false,
         generalError: 'Failed to sign in. Please try again.',

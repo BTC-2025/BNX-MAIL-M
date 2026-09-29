@@ -522,9 +522,9 @@ class _EmailTileState extends ConsumerState<EmailTile> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const SizedBox(width: 16),
+                    const SizedBox(width: 8),
                     Expanded(
-                      flex: 7,
+                      flex: 6,
                       child: RichText(
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -552,176 +552,182 @@ class _EmailTileState extends ConsumerState<EmailTile> {
                         ),
                       ),
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 14),
-              if (email.hasAttachment)
-                Icon(
-                  Icons.attachment_rounded,
-                  size: 15,
-                  color: isDark
-                      ? BNXColors.darkTextSecondary
-                      : BNXColors.lightTextSecondary,
-                ),
-              const SizedBox(width: 12),
-              if (isSelectedForBulk) ...[
-                GestureDetector(
-                  onTap: widget.onTap,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF195BAC),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Text(
-                      'Open',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
+                    // ── Trailing: attachment + bulk + date/actions ──────
+                    // Kept inside the Expanded Row so everything participates
+                    // in flex layout — no rigid width outside causes overflow.
+                    if (email.hasAttachment) ...[
+                      const SizedBox(width: 8),
+                      Icon(
+                        Icons.attachment_rounded,
+                        size: 15,
+                        color: isDark
+                            ? BNXColors.darkTextSecondary
+                            : BNXColors.lightTextSecondary,
+                      ),
+                    ],
+                    if (isSelectedForBulk) ...[
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: widget.onTap,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF195BAC),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text(
+                            'Open',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 76,
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: AnimatedCrossFade(
+                          duration: BNXConstants.animationDurationFast,
+                          crossFadeState: _isHovered
+                              ? CrossFadeState.showSecond
+                              : CrossFadeState.showFirst,
+                          firstChild: Text(
+                            _formatDate(email.date),
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: textWeight,
+                              color: isDark
+                                  ? BNXColors.darkTextSecondary
+                                  : BNXColors.lightTextSecondary,
+                            ),
+                          ),
+                          secondChild: Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            mainAxisSize: MainAxisSize.min,
+                            children: isScheduledItem
+                                ? [
+                                    _buildQuickAction(
+                                      icon: Icons.send_rounded,
+                                      tooltip: 'Send now',
+                                      onTap: () {
+                                        ref
+                                            .read(emailProvider.notifier)
+                                            .sendScheduledEmailNow(email);
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(
+                                            content: Text('Sending scheduled mail now...'),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                    _buildQuickAction(
+                                      icon: Icons.delete_outline_rounded,
+                                      tooltip: 'Cancel schedule',
+                                      onTap: () {
+                                        ref
+                                            .read(emailProvider.notifier)
+                                            .cancelScheduledEmail(email.id);
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(
+                                            content: Text('Schedule cancelled.'),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ]
+                                : (email.isTrash || email.memberOfFolders.contains('Trash') || uiState.activeFolder == 'Trash')
+                                    ? [
+                                        _buildQuickAction(
+                                          icon: Icons.restore_from_trash_outlined,
+                                          tooltip: 'Restore',
+                                          onTap: () {
+                                            ref
+                                                .read(emailProvider.notifier)
+                                                .restoreEmail(email.id);
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(
+                                                content: Text('Restored email to Inbox.'),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                        _buildQuickAction(
+                                          icon: Icons.delete_forever_outlined,
+                                          tooltip: 'Delete permanently',
+                                          onTap: () {
+                                            ref
+                                                .read(emailProvider.notifier)
+                                                .permanentlyDeleteEmail(email.id, folder: uiState.activeFolder);
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(
+                                                content: Text('Permanently deleted.'),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ]
+                                    : [
+                                        _buildQuickAction(
+                                          icon: (email.isArchive ||
+                                                  email.memberOfFolders.contains('Archive'))
+                                              ? Icons.unarchive_outlined
+                                              : Icons.archive_outlined,
+                                          tooltip: (email.isArchive ||
+                                                  email.memberOfFolders.contains('Archive'))
+                                              ? 'Unarchive'
+                                              : 'Archive',
+                                          onTap: () {
+                                            if (email.isArchive ||
+                                                email.memberOfFolders.contains('Archive')) {
+                                              ref
+                                                  .read(emailProvider.notifier)
+                                                  .unarchiveEmail(email.id);
+                                            } else {
+                                              ref
+                                                  .read(emailProvider.notifier)
+                                                  .archiveEmail(email.id, uiState.activeFolder);
+                                            }
+                                          },
+                                        ),
+                                        _buildQuickAction(
+                                          icon: Icons.delete_outline_rounded,
+                                          tooltip: 'Delete',
+                                          onTap: () {
+                                            ref
+                                                .read(emailProvider.notifier)
+                                                .deleteEmail(
+                                                  email.id,
+                                                  uiState.activeFolder,
+                                                );
+                                          },
+                                        ),
+                                        _buildQuickAction(
+                                          icon: email.isRead
+                                              ? Icons.mark_email_unread_outlined
+                                              : Icons.mark_email_read_outlined,
+                                          tooltip: email.isRead
+                                              ? 'Mark as unread'
+                                              : 'Mark as read',
+                                          onTap: () {
+                                            ref
+                                                .read(emailProvider.notifier)
+                                                .toggleRead(email.id, uiState.activeFolder);
+                                          },
+                                        ),
+                                      ],
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-              ],
-              Container(
-                width: 90,
-                alignment: Alignment.centerRight,
-                child: AnimatedCrossFade(
-                  duration: BNXConstants.animationDurationFast,
-                  crossFadeState: _isHovered
-                      ? CrossFadeState.showSecond
-                      : CrossFadeState.showFirst,
-                  firstChild: Text(
-                    _formatDate(email.date),
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: textWeight,
-                      color: isDark
-                          ? BNXColors.darkTextSecondary
-                          : BNXColors.lightTextSecondary,
-                    ),
-                  ),
-                  secondChild: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    mainAxisSize: MainAxisSize.min,
-                    children: isScheduledItem
-                        ? [
-                            _buildQuickAction(
-                              icon: Icons.send_rounded,
-                              tooltip: 'Send now',
-                              onTap: () {
-                                ref
-                                    .read(emailProvider.notifier)
-                                    .sendScheduledEmailNow(email);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Sending scheduled mail now...'),
-                                  ),
-                                );
-                              },
-                            ),
-                            _buildQuickAction(
-                              icon: Icons.delete_outline_rounded,
-                              tooltip: 'Cancel schedule',
-                              onTap: () {
-                                ref
-                                    .read(emailProvider.notifier)
-                                    .cancelScheduledEmail(email.id);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Schedule cancelled.'),
-                                  ),
-                                );
-                              },
-                            ),
-                          ]
-                        : (email.isTrash || email.memberOfFolders.contains('Trash') || uiState.activeFolder == 'Trash')
-                            ? [
-                                _buildQuickAction(
-                                  icon: Icons.restore_from_trash_outlined,
-                                  tooltip: 'Restore',
-                                  onTap: () {
-                                    ref
-                                        .read(emailProvider.notifier)
-                                        .restoreEmail(email.id);
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('Restored email to Inbox.'),
-                                      ),
-                                    );
-                                  },
-                                ),
-                                _buildQuickAction(
-                                  icon: Icons.delete_forever_outlined,
-                                  tooltip: 'Delete permanently',
-                                  onTap: () {
-                                    ref
-                                        .read(emailProvider.notifier)
-                                        .permanentlyDeleteEmail(email.id, folder: uiState.activeFolder);
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('Permanently deleted.'),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ]
-                            : [
-                                _buildQuickAction(
-                                  icon: (email.isArchive ||
-                                          email.memberOfFolders.contains('Archive'))
-                                      ? Icons.unarchive_outlined
-                                      : Icons.archive_outlined,
-                                  tooltip: (email.isArchive ||
-                                          email.memberOfFolders.contains('Archive'))
-                                      ? 'Unarchive'
-                                      : 'Archive',
-                                  onTap: () {
-                                    if (email.isArchive ||
-                                        email.memberOfFolders.contains('Archive')) {
-                                      ref
-                                          .read(emailProvider.notifier)
-                                          .unarchiveEmail(email.id);
-                                    } else {
-                                      ref
-                                          .read(emailProvider.notifier)
-                                          .archiveEmail(email.id, uiState.activeFolder);
-                                    }
-                                  },
-                                ),
-                                _buildQuickAction(
-                                  icon: Icons.delete_outline_rounded,
-                                  tooltip: 'Delete',
-                                  onTap: () {
-                                    ref
-                                        .read(emailProvider.notifier)
-                                        .deleteEmail(
-                                          email.id,
-                                          uiState.activeFolder,
-                                        );
-                                  },
-                                ),
-                                _buildQuickAction(
-                                  icon: email.isRead
-                                      ? Icons.mark_email_unread_outlined
-                                      : Icons.mark_email_read_outlined,
-                                  tooltip: email.isRead
-                                      ? 'Mark as unread'
-                                      : 'Mark as read',
-                                  onTap: () {
-                                    ref
-                                        .read(emailProvider.notifier)
-                                        .toggleRead(email.id, uiState.activeFolder);
-                                  },
-                                ),
-                              ],
-                  ),
+                  ],
                 ),
               ),
             ],
