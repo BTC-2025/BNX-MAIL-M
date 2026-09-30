@@ -7,7 +7,10 @@ import 'package:go_router/go_router.dart';
 import '../../data/app_state_provider.dart';
 import '../../data/email_provider.dart';
 import '../../data/account_provider.dart';
+import '../../data/storage_provider.dart';
+import '../../data/repositories/storage_repository.dart';
 import '../../models/email_model.dart';
+import '../../models/label_model.dart';
 import '../theme/colors.dart';
 import '../theme/neumorphic.dart';
 import 'create_label_dialog.dart';
@@ -21,7 +24,7 @@ class Sidebar extends ConsumerStatefulWidget {
 }
 
 class _SidebarState extends ConsumerState<Sidebar> {
-  bool _isMoreExpanded = false;
+  bool _isMoreExpanded = true;
 
   Set<String> get _activeToolNames => ref.watch(appUiProvider).activeToolNames;
 
@@ -154,15 +157,16 @@ class _SidebarState extends ConsumerState<Sidebar> {
         .length;
 
     final bool isMobile = MediaQuery.of(context).size.width < 600;
-    // On desktop, the sidebar can be auto-collapsed to 80 px. In that state the
-    // full pill tile (icon + spacer + text = 94 px) overflows. We track this so
-    // that _buildPillTile can render a compact icon-only variant instead.
-    final bool isCollapsed = !isMobile && uiState.isSidebarCollapsed;
+    final bool isDesktopOS = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.macOS ||
+            defaultTargetPlatform == TargetPlatform.windows);
+    // On macOS and Windows desktop, the sidebar is always fully elaborated
+    final bool isCollapsed = isDesktopOS ? false : (!isMobile && uiState.isSidebarCollapsed);
 
     final labelsVis = uiState.sidebarLabelVisibility;
 
     final List<Widget> importantFolderTiles = [
-      if (labelsVis['Inbox'] ?? true)
+      if (!isDesktopOS && (labelsVis['Inbox'] ?? true))
         _buildPillTile(
           icon: Icons.all_inbox_rounded,
           title: 'All Inboxes',
@@ -287,6 +291,16 @@ class _SidebarState extends ConsumerState<Sidebar> {
         isSelected: uiState.activeFolder == 'All Mail',
         collapsed: isCollapsed, onTap: () => navigateToFolder('All Mail', '/'),
       ),
+      if (isDesktopOS)
+        _buildPillTile(
+          icon: Icons.all_inbox_rounded,
+          title: 'All inboxes',
+          isSelected: uiState.activeFolder == 'All Inboxes' ||
+              uiState.activeFolder == 'All inboxes',
+          badgeText: allInboxesCount > 0 ? '$allInboxesCount' : null,
+          collapsed: isCollapsed,
+          onTap: () => navigateToFolder('All Inboxes', '/'),
+        ),
       _buildPillTile(
         icon: Icons.report_gmailerrorred_outlined,
         title: 'Spam',
@@ -315,6 +329,17 @@ class _SidebarState extends ConsumerState<Sidebar> {
         collapsed: isCollapsed, onTap: () => navigateToFolder('Templates', '/'),
       ),
     ];
+
+    if (isDesktopOS) {
+      return _buildDesktopSidebar(
+        context,
+        uiState,
+        isDark,
+        false,
+        customLabels,
+        allInboxesCount: allInboxesCount,
+      );
+    }
 
     // If Chat/Colab section is active, show the specialized sidebar as per the screenshot
     if (uiState.activeFolder == 'Chat' || uiState.activeFolder == 'Casbox') {
@@ -676,6 +701,331 @@ class _SidebarState extends ConsumerState<Sidebar> {
     );
   }
 
+  Widget _buildDesktopSidebar(
+    BuildContext context,
+    AppUiState uiState,
+    bool isDark,
+    bool isCollapsed,
+    List<LabelModel> customLabels, {
+    int allInboxesCount = 0,
+  }) {
+    final currentRoute = GoRouterState.of(context).uri.toString();
+    final isColab = currentRoute == '/colab' ||
+        uiState.activeFolder == 'Chat' ||
+        uiState.activeFolder == 'Casbox' ||
+        uiState.activeFolder == 'Colab';
+
+    return Container(
+      color: isDark ? BNXColors.darkBg : const Color(0xFFE9F4FF),
+      child: SafeArea(
+        top: false,
+        bottom: false,
+        child: Column(
+          children: [
+            const SizedBox(height: 12),
+            Expanded(
+              child: ListView(
+                padding: EdgeInsets.zero,
+                physics: const BouncingScrollPhysics(),
+                children: isColab
+                    ? [
+                        _buildPillTile(
+                          icon: Icons.chat_bubble_outline_rounded,
+                          title: 'Casbox',
+                          isSelected: uiState.activeFolder == 'Casbox' ||
+                              (uiState.activeFolder != 'Chat' &&
+                                  uiState.activeFolder != 'Colab'),
+                          collapsed: isCollapsed,
+                          onTap: () => navigateToFolder('Casbox', '/colab'),
+                        ),
+                        _buildPillTile(
+                          icon: Icons.people_alt_outlined,
+                          title: 'Colab',
+                          isSelected: uiState.activeFolder == 'Chat' ||
+                              uiState.activeFolder == 'Colab',
+                          collapsed: isCollapsed,
+                          onTap: () => navigateToFolder('Chat', '/colab'),
+                        ),
+                      ]
+                    : [
+                        _buildPillTile(
+                          icon: Icons.inbox_rounded,
+                          title: 'Inbox',
+                          isSelected: uiState.activeFolder == 'Inbox' &&
+                              uiState.activeLabel == null,
+                          collapsed: isCollapsed,
+                          onTap: () => navigateToFolder('Inbox', '/home'),
+                        ),
+                        _buildPillTile(
+                          icon: Icons.star_border_rounded,
+                          title: 'Starred',
+                          isSelected: uiState.activeFolder == 'Starred' &&
+                              uiState.activeLabel == null,
+                          collapsed: isCollapsed,
+                          onTap: () => navigateToFolder('Starred', '/home'),
+                        ),
+                        _buildPillTile(
+                          icon: Icons.access_time_rounded,
+                          title: 'Snoozed',
+                          isSelected: uiState.activeFolder == 'Snoozed' &&
+                              uiState.activeLabel == null,
+                          collapsed: isCollapsed,
+                          onTap: () => navigateToFolder('Snoozed', '/home'),
+                        ),
+                        _buildPillTile(
+                          icon: Icons.send_outlined,
+                          title: 'Sent',
+                          isSelected: uiState.activeFolder == 'Sent' &&
+                              uiState.activeLabel == null,
+                          collapsed: isCollapsed,
+                          onTap: () => navigateToFolder('Sent', '/home'),
+                        ),
+                        _buildPillTile(
+                          icon: Icons.description_outlined,
+                          title: 'Draft',
+                          isSelected: uiState.activeFolder == 'Draft' &&
+                              uiState.activeLabel == null,
+                          collapsed: isCollapsed,
+                          onTap: () => navigateToFolder('Draft', '/home'),
+                        ),
+                        _buildPillTile(
+                          icon: Icons.delete_outline_rounded,
+                          title: 'Trash',
+                          isSelected: uiState.activeFolder == 'Trash' &&
+                              uiState.activeLabel == null,
+                          collapsed: isCollapsed,
+                          onTap: () => navigateToFolder('Trash', '/home'),
+                        ),
+                        if (!_isMoreExpanded)
+                          _buildPillTile(
+                            icon: Icons.keyboard_arrow_down_rounded,
+                            title: 'More',
+                            isSelected: false,
+                            collapsed: isCollapsed,
+                            onTap: () => setState(() => _isMoreExpanded = true),
+                          )
+                        else ...[
+                          _buildPillTile(
+                            icon: Icons.keyboard_arrow_up_rounded,
+                            title: 'Less',
+                            isSelected: false,
+                            collapsed: isCollapsed,
+                            onTap: () => setState(() => _isMoreExpanded = false),
+                          ),
+                          _buildPillTile(
+                            icon: Icons.schedule_rounded,
+                            title: 'Scheduled',
+                            isSelected: uiState.activeFolder == 'Scheduled',
+                            collapsed: isCollapsed,
+                            onTap: () => navigateToFolder('Scheduled', '/home'),
+                          ),
+                          _buildPillTile(
+                            icon: Icons.error_outline_rounded,
+                            title: 'Spam',
+                            isSelected: uiState.activeFolder == 'Spam',
+                            collapsed: isCollapsed,
+                            onTap: () => navigateToFolder('Spam', '/home'),
+                          ),
+                          _buildPillTile(
+                            icon: Icons.mail_outline_rounded,
+                            title: 'All Mail',
+                            isSelected: uiState.activeFolder == 'All Mail',
+                            collapsed: isCollapsed,
+                            onTap: () => navigateToFolder('All Mail', '/home'),
+                          ),
+                          _buildPillTile(
+                            icon: Icons.all_inbox_rounded,
+                            title: 'All inboxes',
+                            isSelected: uiState.activeFolder == 'All Inboxes' ||
+                                uiState.activeFolder == 'All inboxes',
+                            badgeText: allInboxesCount > 0 ? '$allInboxesCount' : null,
+                            collapsed: isCollapsed,
+                            onTap: () => navigateToFolder('All Inboxes', '/home'),
+                          ),
+                          _buildPillTile(
+                            icon: Icons.archive_outlined,
+                            title: 'Archive',
+                            isSelected: uiState.activeFolder == 'Archive',
+                            collapsed: isCollapsed,
+                            onTap: () => navigateToFolder('Archive', '/home'),
+                          ),
+                          _buildPillTile(
+                            icon: Icons.mark_email_unread_outlined,
+                            title: 'Unread',
+                            isSelected: uiState.activeFolder == 'Unread',
+                            collapsed: isCollapsed,
+                            onTap: () => navigateToFolder('Unread', '/home'),
+                          ),
+                          _buildPillTile(
+                            icon: Icons.assignment_outlined,
+                            title: 'Templates',
+                            isSelected: uiState.activeFolder == 'Templates',
+                            collapsed: isCollapsed,
+                            onTap: () => navigateToFolder('Templates', '/home'),
+                          ),
+                          _buildPillTile(
+                            icon: Icons.bar_chart_outlined,
+                            title: 'Analytics',
+                            isSelected: uiState.activeFolder == 'Analytics',
+                            collapsed: isCollapsed,
+                            onTap: () => navigateToFolder('Analytics', '/analytics'),
+                          ),
+                          _buildPillTile(
+                            icon: Icons.notifications_none_rounded,
+                            title: 'Subscriptions',
+                            isSelected: uiState.activeFolder == 'Subscriptions',
+                            collapsed: isCollapsed,
+                            onTap: () => navigateToFolder('Subscriptions', '/home'),
+                          ),
+                          _buildPillTile(
+                            icon: Icons.cloud_upload_outlined,
+                            title: 'Mail Backup',
+                            isSelected: uiState.activeFolder == 'Mail Backup',
+                            collapsed: isCollapsed,
+                            onTap: () => navigateToFolder('Mail Backup', '/backup'),
+                          ),
+                          _buildPillTile(
+                            icon: Icons.pie_chart_outline_rounded,
+                            title: 'Storage',
+                            isSelected: uiState.activeFolder == 'Storage',
+                            collapsed: isCollapsed,
+                            onTap: () => navigateToFolder('Storage', '/storage'),
+                          ),
+                        ],
+                        if (!isCollapsed) ...[
+                          const SizedBox(height: 12),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 8, 16, 4),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  'LABELS',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF2563EB),
+                                    letterSpacing: 1.1,
+                                  ),
+                                ),
+                                GestureDetector(
+                                  onTap: () => _showCreateLabelDialog(context),
+                                  child: const Icon(
+                                    Icons.add,
+                                    size: 18,
+                                    color: Color(0xFF2563EB),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (customLabels.isEmpty)
+                            _buildDesktopLabelTile(
+                              const LabelModel(
+                                id: 'innewacc',
+                                name: 'Innewacc',
+                                color: Color(0xFFE11D48),
+                              ),
+                              uiState,
+                              isDark,
+                            )
+                          else
+                            ...customLabels.map(
+                              (l) => _buildDesktopLabelTile(l, uiState, isDark),
+                            ),
+                        ],
+                      ],
+              ),
+            ),
+            if (!isCollapsed)
+              SidebarStorageCardWidget(
+                isDark: isDark,
+                onTap: () => navigateToFolder('Storage', '/storage'),
+              )
+            else
+              _buildPillTile(
+                icon: Icons.cloud_outlined,
+                iconColor: const Color(0xFF195BAC),
+                title: 'Storage',
+                isSelected: uiState.activeFolder == 'Storage',
+                collapsed: isCollapsed,
+                onTap: () => navigateToFolder('Storage', '/storage'),
+              ),
+            _buildPillTile(
+              icon: Icons.settings_outlined,
+              iconColor: const Color(0xFF195BAC),
+              title: 'Settings',
+              isSelected: uiState.activeFolder == 'Settings',
+              collapsed: isCollapsed,
+              onTap: () => navigateToFolder('Settings', '/settings'),
+            ),
+            _buildPillTile(
+              icon: Icons.help_outline_rounded,
+              iconColor: const Color(0xFF195BAC),
+              title: 'Support & Help',
+              isSelected: uiState.activeFolder == 'Help',
+              collapsed: isCollapsed,
+              onTap: () => navigateToFolder('Help', '/help'),
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopLabelTile(
+    LabelModel l,
+    AppUiState uiState,
+    bool isDark,
+  ) {
+    final isSelected = uiState.activeLabel == l.name;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      child: InkWell(
+        onTap: () {
+          ref.read(appUiProvider.notifier).selectLabel(l.name);
+          context.go('/home');
+        },
+        borderRadius: BorderRadius.circular(24),
+        child: Container(
+          height: 38,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? const Color(0xFF195BAC).withValues(alpha: 0.08)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.folder_rounded,
+                size: 16,
+                color: l.color,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  l.name,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                    color: isSelected
+                        ? const Color(0xFF195BAC)
+                        : (isDark ? Colors.white : const Color(0xFF1E293B)),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildDynamicBitToolRail(bool isDark) {
     if (_showCustomizer) {
       // Inline edit mode: shows all tools with selection indicator
@@ -933,13 +1283,19 @@ class _SidebarState extends ConsumerState<Sidebar> {
         onTap: onTap,
         borderRadius: BorderRadius.circular(24),
         child: Container(
-          height: 48,
+          height: 40,
           padding: const EdgeInsets.symmetric(horizontal: 16),
           decoration: BoxDecoration(
             color: isSelected
-                ? activeColor.withValues(alpha: 0.08)
+                ? (isDark ? const Color(0xFF1E293B) : const Color(0xFFD6E8FF))
                 : Colors.transparent,
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(20),
+            border: isSelected
+                ? Border.all(
+                    color: const Color(0xFF195BAC).withValues(alpha: 0.2),
+                    width: 1,
+                  )
+                : null,
           ),
           child: Row(
             children: [
@@ -948,8 +1304,8 @@ class _SidebarState extends ConsumerState<Sidebar> {
                 color: iconColor ??
                     (isSelected
                         ? activeColor
-                        : (isDark ? Colors.white70 : Colors.black54)),
-                size: 22,
+                        : (isDark ? Colors.white70 : const Color(0xFF195BAC))),
+                size: 20,
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -960,7 +1316,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
                     fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                     color: isSelected
                         ? activeColor
-                        : (isDark ? Colors.white : Colors.black87),
+                        : (isDark ? Colors.white : const Color(0xFF195BAC)),
                   ),
                 ),
               ),
@@ -1198,6 +1554,18 @@ class _SidebarState extends ConsumerState<Sidebar> {
   }
 
   void navigateToFolder(String folderName, String routePath) {
+    if (folderName == 'Storage') {
+      ref.read(storageQuotaProvider.notifier).refresh();
+      ref.read(appUiProvider.notifier).selectFolder('Storage');
+      ref.read(appUiProvider.notifier).selectEmail(null);
+      final scaffold = Scaffold.maybeOf(context);
+      if (scaffold != null && scaffold.isDrawerOpen) Navigator.pop(context);
+      if (GoRouterState.of(context).uri.toString() != '/storage') {
+        context.go('/storage');
+      }
+      return;
+    }
+
     ref.read(appUiProvider.notifier).selectFolder(folderName);
     ref.read(appUiProvider.notifier).selectEmail(null);
     final scaffold = Scaffold.maybeOf(context);
@@ -1994,6 +2362,130 @@ class _SidebarNewsWidgetState extends State<SidebarNewsWidget> {
           ),
         );
       }),
+    );
+  }
+}
+
+/// Standalone, dedicated storage quota card for the desktop sidebar.
+/// Subscribes directly to [storageQuotaProvider] with its own Element lifecycle,
+/// guaranteeing real-time updates when quota is fetched or account changes.
+class SidebarStorageCardWidget extends ConsumerWidget {
+  final bool isDark;
+  final VoidCallback onTap;
+
+  const SidebarStorageCardWidget({
+    super.key,
+    required this.isDark,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final quotaAsync = ref.watch(storageQuotaProvider);
+    StorageDebug.log(
+      '[SIDEBAR STORAGE CARD] build: state=$quotaAsync, email=${quotaAsync.valueOrNull?.email}, used=${quotaAsync.valueOrNull?.usedFormatted}',
+    );
+
+    final quota = quotaAsync.valueOrNull;
+
+    // True loading: no API data yet
+    final bool isLoading = quotaAsync.isLoading && quota == null;
+    // True error: API failed and no cached value
+    final bool isError = quotaAsync.hasError && quota == null;
+
+    final String usageText = isLoading
+        ? 'Loading storage...'
+        : isError
+            ? 'Unavailable — tap to retry'
+            : '${quota!.usedFormatted} of ${quota.limitFormatted} used';
+    final String percentText = (isLoading || isError) ? '--' : quota!.percentageFormatted;
+    final double? ringValue = (isLoading || isError) ? null : quota!.fraction;
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: isDark ? BNXColors.darkSurface : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.cloud_outlined,
+                color: Color(0xFF195BAC),
+                size: 24,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Storage',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      usageText,
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        color: isDark ? Colors.white60 : Colors.grey.shade600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(
+                width: 32,
+                height: 32,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    CircularProgressIndicator(
+                      value: ringValue,
+                      strokeWidth: 3,
+                      backgroundColor:
+                          isDark ? Colors.white12 : const Color(0xFFE8F0FE),
+                      color: const Color(0xFF195BAC),
+                    ),
+                    Text(
+                      percentText,
+                      style: const TextStyle(
+                        fontSize: 8.5,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF195BAC),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

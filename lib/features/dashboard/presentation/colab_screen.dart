@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -7,6 +8,7 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/neumorphic.dart';
 import '../../../data/app_state_provider.dart';
 import '../../../data/account_provider.dart';
+import '../../../models/account_model.dart';
 import '../../../data/colab_provider.dart';
 import '../../../data/email_provider.dart';
 import '../../../data/repositories/casbox_repository.dart';
@@ -2205,6 +2207,16 @@ class _CasboxInteractiveWidgetState
   bool _isLoading = true;
   String _activeTab = 'Received';
   Timer? _casboxPollingTimer;
+  CasboxMessage? _selectedDesktopMessage;
+  bool _showConnectionsPopup = false;
+  final List<String> _blockedUsers = [];
+  final Map<String, bool> _contactConnectionStatus = {
+    'itsokletssee123': true,
+    'ravinew2004': true,
+  };
+  final TextEditingController _desktopChatInputController =
+      TextEditingController();
+  final ScrollController _desktopChatScrollController = ScrollController();
 
   @override
   void initState() {
@@ -2227,6 +2239,8 @@ class _CasboxInteractiveWidgetState
   @override
   void dispose() {
     _casboxPollingTimer?.cancel();
+    _desktopChatInputController.dispose();
+    _desktopChatScrollController.dispose();
     super.dispose();
   }
 
@@ -2627,6 +2641,19 @@ class _CasboxInteractiveWidgetState
       );
     }
 
+    final bool isDesktopOS = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.macOS ||
+            defaultTargetPlatform == TargetPlatform.windows);
+
+    if (isDesktopOS) {
+      return _buildDesktopCasboxView(
+        isDark,
+        messages,
+        allMessages,
+        activeAccount,
+      );
+    }
+
     return Scaffold(
       backgroundColor: isDark ? BNXColors.darkBg : BNXColors.lightBg,
       body: SafeArea(
@@ -2653,6 +2680,1191 @@ class _CasboxInteractiveWidgetState
       ),
     );
   }
+
+  Widget _buildDesktopCasboxView(
+    bool isDark,
+    List<CasboxMessage> messages,
+    List<CasboxMessage> allMessages,
+    AccountModel activeAccount,
+  ) {
+    return Container(
+      color: isDark ? BNXColors.darkSurface : Colors.white,
+      child: Stack(
+        children: [
+          Column(
+            children: [
+              _buildDesktopCasboxHeader(isDark),
+              Expanded(
+                child: _selectedDesktopMessage != null
+                    ? Row(
+                        children: [
+                          SizedBox(
+                            width: 360,
+                            child: _buildDesktopMessageList(isDark, messages, isSplit: true),
+                          ),
+                          VerticalDivider(
+                            width: 1,
+                            thickness: 1,
+                            color: isDark ? Colors.white12 : const Color(0xFFF1F5F9),
+                          ),
+                          Expanded(
+                            child: _buildDesktopChatConversationView(
+                              isDark,
+                              _selectedDesktopMessage!,
+                              allMessages,
+                              activeAccount,
+                            ),
+                          ),
+                        ],
+                      )
+                    : _buildDesktopMessageList(isDark, messages, isSplit: false),
+              ),
+            ],
+          ),
+          if (_showConnectionsPopup)
+            Positioned(
+              top: 52,
+              right: 80,
+              child: _buildConnectionsPopup(isDark),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopCasboxHeader(bool isDark) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: isDark ? BNXColors.darkSurface : Colors.white,
+        border: Border(
+          bottom: BorderSide(
+            color: isDark ? Colors.white12 : const Color(0xFFF1F5F9),
+            width: 1,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          // Segmented switcher: Messages / Requests / >
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildDesktopSegment('Messages', _activeTab == 'Received', () {
+                  setState(() {
+                    _activeTab = 'Received';
+                    _selectedDesktopMessage = null;
+                  });
+                }, isDark),
+                _buildDesktopSegment('Requests', _activeTab == 'Requests', () {
+                  setState(() {
+                    _activeTab = 'Requests';
+                    _selectedDesktopMessage = null;
+                  });
+                }, isDark),
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  size: 16,
+                  color: isDark ? Colors.white38 : const Color(0xFF94A3B8),
+                ),
+                const SizedBox(width: 4),
+              ],
+            ),
+          ),
+          const Spacer(),
+          // Button 1: Connections icon button (User +)
+          MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _showConnectionsPopup = !_showConnectionsPopup;
+                });
+              },
+              child: Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _showConnectionsPopup
+                      ? const Color(0xFFDBEAFE)
+                      : (isDark ? Colors.white10 : const Color(0xFFEFF6FF)),
+                ),
+                alignment: Alignment.center,
+                child: const Icon(
+                  Icons.person_add_alt_1_rounded,
+                  size: 18,
+                  color: Color(0xFF195BAC),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          // Button 2: Compose button (blue pill with white text)
+          ElevatedButton(
+            onPressed: () {
+              ref
+                  .read(appUiProvider.notifier)
+                  .setComposeStatus(ComposeStatus.normal);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF195BAC),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20)),
+            ),
+            child: const Text('Compose',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          ),
+          const SizedBox(width: 8),
+          // Button 3: Block Users list icon
+          IconButton(
+            icon: Icon(
+              Icons.do_not_disturb_alt_outlined,
+              size: 20,
+              color: isDark ? Colors.white70 : const Color(0xFF475569),
+            ),
+            tooltip: 'Blocked Users',
+            onPressed: () => _showBlockedUsersDialog(context, isDark),
+          ),
+          // Button 4: Refresh icon
+          IconButton(
+            icon: Icon(
+              Icons.refresh_rounded,
+              size: 20,
+              color: isDark ? Colors.white70 : const Color(0xFF475569),
+            ),
+            tooltip: 'Refresh',
+            onPressed: _triggerRefresh,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildConnectionsPopup(bool isDark) {
+    final contacts = [
+      {
+        'id': 'itsokletssee123',
+        'name': 'itsokletssee123',
+        'handle': '@itsokletssee123',
+        'letter': 'I',
+        'isPhoto': false,
+      },
+      {
+        'id': 'ravinew2004',
+        'name': 'ravinew2004',
+        'handle': '@ravinew2004',
+        'letter': 'R',
+        'isPhoto': true,
+      },
+    ];
+
+    return Container(
+      width: 430,
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.12),
+            blurRadius: 28,
+            offset: const Offset(0, 10),
+            spreadRadius: -2,
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header Row
+          Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFEFF6FF),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.person_add_alt_1_rounded,
+                  size: 16,
+                  color: Color(0xFF2563EB),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Connections',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : const Color(0xFF0F172A),
+                    ),
+                  ),
+                  Text(
+                    '${contacts.length} accepted contacts',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark ? Colors.white54 : const Color(0xFF64748B),
+                    ),
+                  ),
+                ],
+              ),
+              const Spacer(),
+              MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  onTap: () => setState(() => _showConnectionsPopup = false),
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isDark ? Colors.white10 : Colors.transparent,
+                    ),
+                    child: Icon(
+                      Icons.close_rounded,
+                      size: 16,
+                      color: isDark ? Colors.white60 : const Color(0xFF94A3B8),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Divider(
+            height: 1,
+            color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+          ),
+          const SizedBox(height: 10),
+          // Contact list items
+          ...contacts.map((c) {
+            final id = c['id'] as String;
+            final isConnected = _contactConnectionStatus[id] ?? true;
+            final isPhoto = c['isPhoto'] as bool;
+
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Row(
+                children: [
+                  // Avatar
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Color(0xFFDBEAFE),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: isPhoto
+                        ? Image.asset(
+                            'assets/bit_tool_logo.png',
+                            fit: BoxFit.cover,
+                            errorBuilder: (ctx, err, stack) => Center(
+                              child: Text(
+                                c['letter'] as String,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF195BAC),
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                          )
+                        : Center(
+                            child: Text(
+                              c['letter'] as String,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF195BAC),
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                c['name'] as String,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 5),
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF10B981),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Text(
+                          c['handle'] as String,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark ? Colors.white54 : const Color(0xFF94A3B8),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Connected pill button
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _contactConnectionStatus[id] = true;
+                      });
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: isConnected
+                            ? (isDark ? const Color(0xFF064E3B) : const Color(0xFFF0FDF4))
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: isConnected
+                              ? const Color(0xFF86EFAC)
+                              : (isDark ? Colors.white12 : const Color(0xFFE2E8F0)),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (isConnected) ...[
+                            const Icon(
+                              Icons.check,
+                              size: 11,
+                              color: Color(0xFF16A34A),
+                            ),
+                            const SizedBox(width: 4),
+                          ],
+                          Text(
+                            'Connected',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: isConnected ? FontWeight.w600 : FontWeight.w400,
+                              color: isConnected
+                                  ? const Color(0xFF16A34A)
+                                  : (isDark ? Colors.white38 : Colors.grey.shade500),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  // Disconnected button
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _contactConnectionStatus[id] = false;
+                      });
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: !isConnected
+                            ? (isDark ? Colors.white10 : const Color(0xFFF1F5F9))
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: !isConnected
+                              ? const Color(0xFFCBD5E1)
+                              : (isDark ? Colors.white12 : const Color(0xFFE2E8F0)),
+                        ),
+                      ),
+                      child: Text(
+                        'Disconnected',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: !isConnected ? FontWeight.w600 : FontWeight.w400,
+                          color: !isConnected
+                              ? (isDark ? Colors.white : const Color(0xFF334155))
+                              : (isDark ? Colors.white38 : Colors.grey.shade500),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  void _showBlockedUsersDialog(BuildContext context, bool isDark) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (dialogCtx, setDialogState) {
+            return Dialog(
+              backgroundColor: isDark ? BNXColors.darkSurface : Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(22),
+              ),
+              elevation: 20,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Header: Red block circle + Title + Close icon
+                      Row(
+                        children: [
+                          Container(
+                            width: 28,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: const Color(0xFFEF4444),
+                                width: 2,
+                              ),
+                            ),
+                            alignment: Alignment.center,
+                            child: const Icon(
+                              Icons.block,
+                              size: 16,
+                              color: Color(0xFFEF4444),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            'Blocked Users',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? Colors.white : const Color(0xFF0F172A),
+                            ),
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            icon: Icon(
+                              Icons.close_rounded,
+                              size: 18,
+                              color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                            ),
+                            onPressed: () => Navigator.pop(dialogCtx),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Divider(
+                        height: 1,
+                        color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+                      ),
+                      const SizedBox(height: 36),
+                      if (_blockedUsers.isEmpty) ...[
+                        // Green soft checkmark icon as shown in Image 2
+                        Container(
+                          width: 44,
+                          height: 44,
+                          alignment: Alignment.center,
+                          child: const Icon(
+                            Icons.check_rounded,
+                            size: 38,
+                            color: Color(0xFF86EFAC),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Text(
+                          'No blocked users',
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            color: isDark ? Colors.white54 : const Color(0xFF64748B),
+                          ),
+                        ),
+                        const SizedBox(height: 36),
+                      ] else ...[
+                        ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: _blockedUsers.length,
+                          itemBuilder: (c, i) {
+                            final u = _blockedUsers[i];
+                            return ListTile(
+                              leading: const CircleAvatar(child: Icon(Icons.person)),
+                              title: Text(u),
+                              trailing: TextButton(
+                                onPressed: () {
+                                  setDialogState(() => _blockedUsers.remove(u));
+                                  setState(() => _blockedUsers.remove(u));
+                                },
+                                child: const Text('Unblock'),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildDesktopSegment(
+      String label, bool isSelected, VoidCallback onTap, bool isDark) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? (isDark ? const Color(0xFF334155) : Colors.white)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
+                  ),
+                ]
+              : null,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            color: isSelected
+                ? const Color(0xFF195BAC)
+                : (isDark ? Colors.white70 : const Color(0xFF64748B)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopMessageList(
+    bool isDark,
+    List<CasboxMessage> messages, {
+    required bool isSplit,
+  }) {
+    if (_isLoading) {
+      return _buildLoadingIndicator(isDark);
+    }
+    if (messages.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              _activeTab == 'Requests'
+                  ? Icons.person_add_outlined
+                  : Icons.mail_outline_rounded,
+              size: 40,
+              color: isDark ? Colors.white24 : Colors.grey.shade300,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _activeTab == 'Requests'
+                  ? 'No pending requests'
+                  : 'No messages in Casbox',
+              style: TextStyle(
+                  color: isDark ? Colors.white54 : Colors.grey.shade600,
+                  fontSize: 13),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final activeAccount = ref.read(activeAccountProvider);
+    final currentUserEmail = activeAccount.email.toLowerCase().trim();
+
+    bool isSentByMe(CasboxMessage m) {
+      final s = m.sender.toLowerCase().trim();
+      if (s == 'me' || s == 'ravi' || m.id.startsWith('local_')) return true;
+      if (currentUserEmail.isEmpty) return false;
+      if (s == currentUserEmail) return true;
+      final sHandle = s.contains('@') ? s.split('@').first : s;
+      final meHandle = currentUserEmail.contains('@')
+          ? currentUserEmail.split('@').first
+          : currentUserEmail;
+      return sHandle.isNotEmpty && sHandle == meHandle;
+    }
+
+    return ListView.separated(
+      itemCount: messages.length,
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      separatorBuilder: (context, idx) => Divider(
+        height: 1,
+        thickness: 0.6,
+        color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+      ),
+      itemBuilder: (context, idx) {
+        final msg = messages[idx];
+        final sentByMe = isSentByMe(msg);
+        final otherEmail = sentByMe ? msg.to : msg.sender;
+        final displayTitle = otherEmail.contains('@')
+            ? otherEmail.split('@').first
+            : otherEmail;
+        final isSelected = _selectedDesktopMessage?.id == msg.id;
+        final avatarLetter =
+            displayTitle.isNotEmpty ? displayTitle[0].toUpperCase() : 'C';
+
+        final int hour = msg.timestamp.toLocal().hour;
+        final int hour12 = hour % 12 == 0 ? 12 : hour % 12;
+        final String ampm = hour >= 12 ? 'PM' : 'AM';
+        final timeStr =
+            '$hour12:${msg.timestamp.toLocal().minute.toString().padLeft(2, '0')} $ampm';
+
+        final bodySnippet = sentByMe ? 'You: ${msg.body}' : msg.body;
+
+        return MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            onTap: () {
+              setState(() {
+                _selectedDesktopMessage = msg;
+              });
+              if (!msg.isRead) {
+                ref.read(casboxMessagesProvider.notifier).markAsRead(msg.id);
+              }
+            },
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? (isDark ? const Color(0xFF1E293B) : const Color(0xFFEAF2FF))
+                    : Colors.transparent,
+              ),
+              child: Row(
+                children: [
+                  // Circle Avatar with Letter matching Image 2 & 4
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isDark
+                          ? const Color(0xFF1E3A5F)
+                          : const Color(0xFFDBEAFE),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      avatarLetter,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        color: Color(0xFF195BAC),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          displayTitle,
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: !msg.isRead
+                                ? FontWeight.bold
+                                : FontWeight.w600,
+                            color: isDark
+                                ? Colors.white
+                                : const Color(0xFF0F172A),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          bodySnippet,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark
+                                ? Colors.white60
+                                : Colors.grey.shade600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            timeStr,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: isDark
+                                  ? Colors.white38
+                                  : Colors.grey.shade500,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Icon(
+                            Icons.more_vert_rounded,
+                            size: 15,
+                            color: isDark
+                                ? Colors.white38
+                                : Colors.grey.shade400,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      if (sentByMe)
+                        const Icon(
+                          Icons.done_all_rounded,
+                          size: 15,
+                          color: Color(0xFF3B82F6),
+                        )
+                      else if (!msg.isRead)
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Color(0xFF195BAC),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDesktopChatConversationView(
+    bool isDark,
+    CasboxMessage selectedMsg,
+    List<CasboxMessage> allMessages,
+    AccountModel activeAccount,
+  ) {
+    final currentUserEmail = activeAccount.email.toLowerCase().trim();
+    bool isSentByMe(CasboxMessage m) {
+      final s = m.sender.toLowerCase().trim();
+      if (s == 'me' || s == 'ravi' || m.id.startsWith('local_')) return true;
+      if (currentUserEmail.isEmpty) return false;
+      if (s == currentUserEmail) return true;
+      final sHandle = s.contains('@') ? s.split('@').first : s;
+      final meHandle = currentUserEmail.contains('@')
+          ? currentUserEmail.split('@').first
+          : currentUserEmail;
+      return sHandle.isNotEmpty && sHandle == meHandle;
+    }
+
+    final otherEmail =
+        isSentByMe(selectedMsg) ? selectedMsg.to : selectedMsg.sender;
+    final otherName = otherEmail.contains('@')
+        ? otherEmail.split('@').first
+        : otherEmail;
+    final avatarLetter =
+        otherName.isNotEmpty ? otherName[0].toUpperCase() : 'C';
+
+    final threadMessages = allMessages.where((m) {
+      final mOther =
+          isSentByMe(m) ? m.to.toLowerCase().trim() : m.sender.toLowerCase().trim();
+      return mOther == otherEmail.toLowerCase().trim() ||
+          (otherEmail.contains('@') &&
+              mOther.contains(otherEmail.split('@').first.toLowerCase()));
+    }).toList();
+
+    threadMessages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+    return Column(
+      children: [
+        // 1. Conversation Header (matching Image 4)
+        Container(
+          height: 52,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: isDark ? BNXColors.darkSurface : Colors.white,
+            border: Border(
+              bottom: BorderSide(
+                color: isDark ? Colors.white12 : const Color(0xFFF1F5F9),
+                width: 1,
+              ),
+            ),
+          ),
+          child: Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back_rounded, size: 20),
+                onPressed: () => setState(() => _selectedDesktopMessage = null),
+                tooltip: 'Back to full list',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isDark
+                      ? const Color(0xFF1E3A5F)
+                      : const Color(0xFFDBEAFE),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  avatarLetter,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF195BAC),
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    otherName,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13.5,
+                      color: isDark ? Colors.white : const Color(0xFF0F172A),
+                    ),
+                  ),
+                  Text(
+                    otherEmail.contains('@')
+                        ? otherEmail
+                        : '$otherEmail@bnxmail.com',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark ? Colors.white54 : Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
+              const Spacer(),
+              IconButton(
+                icon: const Icon(Icons.archive_outlined, size: 19),
+                tooltip: 'Archive',
+                onPressed: () {},
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline_rounded, size: 19),
+                tooltip: 'Delete',
+                onPressed: () {
+                  ref
+                      .read(casboxMessagesProvider.notifier)
+                      .deleteMessage(selectedMsg.id);
+                  setState(() => _selectedDesktopMessage = null);
+                },
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              ),
+              IconButton(
+                icon: const Icon(Icons.more_vert_rounded, size: 19),
+                tooltip: 'More options',
+                onPressed: () {},
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              ),
+            ],
+          ),
+        ),
+
+        // 2. Chat Messages Stream
+        Expanded(
+          child: threadMessages.isEmpty
+              ? Center(
+                  child: Text(
+                    'No message history with $otherName yet.',
+                    style: TextStyle(
+                        color:
+                            isDark ? Colors.white38 : Colors.grey.shade500),
+                  ),
+                )
+              : ListView.builder(
+                  controller: _desktopChatScrollController,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  itemCount: threadMessages.length,
+                  itemBuilder: (context, idx) {
+                    final m = threadMessages[idx];
+                    final byMe = isSentByMe(m);
+                    final int hour = m.timestamp.toLocal().hour;
+                    final int hour12 = hour % 12 == 0 ? 12 : hour % 12;
+                    final String ampm = hour >= 12 ? 'PM' : 'AM';
+                    final time =
+                        '$hour12:${m.timestamp.toLocal().minute.toString().padLeft(2, '0')} $ampm';
+
+                    if (byMe) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Container(
+                              constraints: BoxConstraints(
+                                  maxWidth:
+                                      MediaQuery.of(context).size.width * 0.4),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF195BAC),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Text(
+                                m.body,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13.5,
+                                  height: 1.35,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              time,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: isDark
+                                    ? Colors.white38
+                                    : Colors.grey.shade500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    } else {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: isDark
+                                    ? const Color(0xFF1E3A5F)
+                                    : const Color(0xFFDBEAFE),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                avatarLetter,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF195BAC),
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  constraints: BoxConstraints(
+                                      maxWidth:
+                                          MediaQuery.of(context).size.width *
+                                              0.4),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? const Color(0xFF334155)
+                                        : const Color(0xFFF1F5F9),
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  child: Text(
+                                    m.body,
+                                    style: TextStyle(
+                                      color: isDark
+                                          ? Colors.white
+                                          : const Color(0xFF1E293B),
+                                      fontSize: 13.5,
+                                      height: 1.35,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  time,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: isDark
+                                        ? Colors.white38
+                                        : Colors.grey.shade500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+                  },
+                ),
+        ),
+
+        // 3. Bottom Chat Input Bar (matching Image 4)
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: isDark ? BNXColors.darkSurface : Colors.white,
+            border: Border(
+              top: BorderSide(
+                color: isDark ? Colors.white12 : const Color(0xFFF1F5F9),
+                width: 1,
+              ),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.sentiment_satisfied_alt_outlined,
+                color: isDark ? Colors.white54 : Colors.grey.shade600,
+                size: 22,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Container(
+                  height: 38,
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white10 : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color:
+                          isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                      width: 1,
+                    ),
+                  ),
+                  child: TextField(
+                    controller: _desktopChatInputController,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'Type a message...',
+                      hintStyle: TextStyle(
+                        fontSize: 13,
+                        color: isDark
+                            ? Colors.white38
+                            : Colors.grey.shade400,
+                      ),
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 9),
+                    ),
+                    onSubmitted: (val) => _sendDesktopCasboxMessage(
+                        otherEmail, selectedMsg.subject),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              GestureDetector(
+                onTap: () => _sendDesktopCasboxMessage(
+                    otherEmail, selectedMsg.subject),
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Color(0xFF195BAC),
+                  ),
+                  alignment: Alignment.center,
+                  child: const Icon(
+                    Icons.send_rounded,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _sendDesktopCasboxMessage(String to, String subject) async {
+    final text = _desktopChatInputController.text.trim();
+    if (text.isEmpty) return;
+    _desktopChatInputController.clear();
+    await ref.read(casboxMessagesProvider.notifier).addMessage(
+          to: to,
+          subject: subject.isNotEmpty ? subject : 'Chat Message',
+          body: text,
+        );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_desktopChatScrollController.hasClients) {
+        _desktopChatScrollController.animateTo(
+          _desktopChatScrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
 
   Widget _buildMessageListContent(
     bool isDark,

@@ -16,6 +16,7 @@ import '../../features/auth/presentation/pages/register_account_type_screen.dart
 import '../widgets/email_body.dart';
 import '../../features/dashboard/presentation/connect_settings_screen.dart';
 import '../../features/profile/presentation/manage_account_screen.dart';
+import '../../standalone_macos_storage/standalone_macos_storage.dart';
 
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>(
   debugLabel: 'root',
@@ -34,6 +35,22 @@ final goRouter = GoRouter(
     GoRoute(
       path: '/manage-account',
       builder: (context, state) => const ManageAccountScreen(),
+    ),
+    GoRoute(
+      path: '/storage',
+      pageBuilder: (context, state) => NoTransitionPage(
+        key: state.pageKey,
+        child: MacOsStoragePage(
+          onBack: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/home');
+            }
+          },
+          backButtonTooltip: 'Back to Mail',
+        ),
+      ),
     ),
     ShellRoute(
       builder: (context, state, child) {

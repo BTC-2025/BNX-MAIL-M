@@ -370,3 +370,5 @@ final customLabelsProvider =
     StateNotifierProvider<CustomLabelsNotifier, List<LabelModel>>((ref) {
       return CustomLabelsNotifier(ref);
     });
+
+final desktopRightRailVisibleProvider = StateProvider<bool>((ref) => true);

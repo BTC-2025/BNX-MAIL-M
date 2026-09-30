@@ -1,4 +1,4 @@
-package com.example.flutter_bnx_mail
+package com.bnxmail.com
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -89,4 +89,3 @@ class MainActivity : FlutterActivity() {
         notificationManager.notify(id, builder.build())
     }
 }
-

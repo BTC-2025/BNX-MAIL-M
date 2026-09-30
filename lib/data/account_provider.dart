@@ -10,6 +10,7 @@ import '../core/network/token_service.dart';
 import 'email_provider.dart';
 import 'colab_provider.dart';
 import 'app_state_provider.dart';
+import 'storage_provider.dart';
 
 class AccountsNotifier extends StateNotifier<List<AccountModel>> {
   AccountsNotifier()
@@ -138,6 +139,7 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
       ref.read(colabInvitationsProvider.notifier).switchAccountContext(cleanId);
       ref.read(casboxMessagesProvider.notifier).switchAccountContext(cleanId);
       ref.read(customLabelsProvider.notifier).switchAccountContext(cleanId);
+      ref.read(storageQuotaProvider.notifier).refresh();
 
       // Reset active folder to 'Inbox' so app lands on Mail section
       ref.read(appUiProvider.notifier).selectFolder('Inbox');

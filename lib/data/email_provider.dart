@@ -353,6 +353,7 @@ class EmailNotifier extends StateNotifier<EmailState> {
   // ── Load a specific folder (lazy) ───────────────────────────────────────
 
   Future<void> loadFolder(String folder, {bool background = false}) async {
+    if (folder == 'Storage') return;
     if (state.isLoading && !background) return;
 
     if (!background) {
@@ -412,6 +413,7 @@ class EmailNotifier extends StateNotifier<EmailState> {
 
   /// Force-reloads a folder, bypassing the cache guard.
   Future<void> forceRefreshFolder(String folder) async {
+    if (folder == 'Storage') return;
     try {
       final fetched = await MailRepository.fetchFolder(folder, limit: 50);
       final merged = <String, EmailModel>{};

@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.flutter_bnx_mail"
+    namespace = "com.bnxmail.com"
     compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
@@ -18,7 +18,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.flutter_bnx_mail"
+        applicationId = "com.bnxmail.com"
         minSdk = flutter.minSdkVersion
         targetSdk = 34
         versionCode = flutter.versionCode

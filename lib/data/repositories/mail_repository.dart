@@ -62,6 +62,9 @@ class MailRepository {
     String folder, {
     int limit = 50,
   }) async {
+    if (folder == 'Storage') {
+      return [];
+    }
     final path = _folderPaths[folder] ?? '/api/mail/inbox';
     dynamic res;
 
@@ -126,6 +129,9 @@ class MailRepository {
     int limit = 50,
     String? ownerEmail,
   }) async {
+    if (folder == 'Storage') {
+      return [];
+    }
     final path = _folderPaths[folder] ?? '/api/mail/inbox';
     dynamic res;
     final candidates = <Map<String, dynamic>>[

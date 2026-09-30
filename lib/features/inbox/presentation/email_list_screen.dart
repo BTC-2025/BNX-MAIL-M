@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -13,6 +12,7 @@ import '../../../models/label_model.dart';
 import '../../../models/account_model.dart';
 import '../../../data/account_provider.dart';
 import '../../../data/all_inboxes_provider.dart';
+import '../../../data/storage_provider.dart';
 import 'templates_view.dart';
 
 class EmailListScreen extends ConsumerStatefulWidget {
@@ -26,6 +26,79 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
     with SingleTickerProviderStateMixin {
   static const List<String> _tabs = ['Primary', 'Unread', 'Sent', 'Draft'];
   late TabController _tabController;
+  final ScrollController _desktopScrollController = ScrollController();
+  int _desktopCurrentPage = 1;
+  String? _lastTrackedFolder;
+  String? _lastTrackedLabel;
+  String? _lastTrackedSearch;
+  int? _lastTrackedTab;
+
+  bool _isCustomizeTabsOpen = false;
+  final Set<String> _enabledTabs = {'All', 'Important', 'Promotions', 'Social'};
+  String _selectedDesktopTab = 'All';
+
+  static const List<Map<String, dynamic>> _allAvailableTabs = [
+    {
+      'key': 'All',
+      'label': 'All',
+      'icon': Icons.check_box_outlined,
+      'color': Color(0xFF64748B),
+    },
+    {
+      'key': 'Important',
+      'label': 'Important',
+      'icon': Icons.play_arrow_rounded,
+      'color': Color(0xFFF59E0B),
+    },
+    {
+      'key': 'Promotions',
+      'label': 'Promotions',
+      'icon': Icons.local_offer_rounded,
+      'color': Color(0xFF10B981),
+    },
+    {
+      'key': 'Social',
+      'label': 'Social',
+      'icon': Icons.people_rounded,
+      'color': Color(0xFF2563EB),
+    },
+    {
+      'key': 'Updates',
+      'label': 'Updates',
+      'icon': Icons.info_rounded,
+      'color': Color(0xFFF97316),
+    },
+    {
+      'key': 'Job',
+      'label': 'Job',
+      'icon': Icons.work_rounded,
+      'color': Color(0xFF0D9488),
+    },
+    {
+      'key': 'Sent',
+      'label': 'Sent',
+      'icon': Icons.send_rounded,
+      'color': Color(0xFF8B5CF6),
+    },
+    {
+      'key': 'Drafts',
+      'label': 'Drafts',
+      'icon': Icons.folder_rounded,
+      'color': Color(0xFF64748B),
+    },
+    {
+      'key': 'Starred',
+      'label': 'Starred',
+      'icon': Icons.star_rounded,
+      'color': Color(0xFFEAB308),
+    },
+    {
+      'key': 'Trash',
+      'label': 'Trash',
+      'icon': Icons.delete_rounded,
+      'color': Color(0xFFEF4444),
+    },
+  ];
 
   @override
   void initState() {
@@ -39,13 +112,18 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         final initialFolder = ref.read(appUiProvider).activeFolder;
-        ref.read(emailProvider.notifier).loadFolder(initialFolder);
+        if (initialFolder == 'Storage') {
+          ref.read(storageQuotaProvider.notifier).refresh();
+        } else {
+          ref.read(emailProvider.notifier).loadFolder(initialFolder);
+        }
       }
     });
   }
 
   @override
   void dispose() {
+    _desktopScrollController.dispose();
     _tabController.dispose();
     super.dispose();
   }
@@ -96,9 +174,9 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
     final emails = ref.watch(emailListProvider);
     final activeAccount = ref.watch(activeAccountProvider);
     final isDark = uiState.isDarkMode;
-    final double screenWidth = MediaQuery.of(context).size.width;
-    final bool isMobile = screenWidth < 600;
-    final bool isMacOS = !kIsWeb && Platform.isMacOS;
+    final bool isDesktopOS = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.macOS ||
+            defaultTargetPlatform == TargetPlatform.windows);
 
     // Reactively load folder or category only when activeFolder changes
     ref.listen<String>(appUiProvider.select((s) => s.activeFolder), (
@@ -108,6 +186,10 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
       if (previous != next) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!context.mounted) return;
+          if (next == 'Storage') {
+            ref.read(storageQuotaProvider.notifier).refresh();
+            return;
+          }
           if (next == 'All Inboxes' || next == 'All inboxes') {
             ref.read(allInboxesProvider.notifier).loadAllInboxes();
           } else if ([
@@ -435,8 +517,46 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
     final seenIds = <String>{};
     filtered = filtered.where((e) => seenIds.add(e.id)).toList();
 
+    // Reset desktop pagination to page 1 if folder, label, search, or subtab changes
+    final String currentFolder = uiState.activeFolder;
+    final String? currentLabel = uiState.activeLabel;
+    final String currentSearch = uiState.searchQuery;
+    if (_lastTrackedFolder != currentFolder ||
+        _lastTrackedLabel != currentLabel ||
+        _lastTrackedSearch != currentSearch ||
+        _lastTrackedTab != currentTabIndex) {
+      _lastTrackedFolder = currentFolder;
+      _lastTrackedLabel = currentLabel;
+      _lastTrackedSearch = currentSearch;
+      _lastTrackedTab = currentTabIndex;
+      _desktopCurrentPage = 1;
+    }
+
+    // Desktop pagination: 20 emails per page
+    const int pageSize = 20;
+    final int totalEmailCount = filtered.length;
+    final int totalPages =
+        totalEmailCount == 0 ? 1 : ((totalEmailCount + pageSize - 1) ~/ pageSize);
+    final int safePage = _desktopCurrentPage.clamp(1, totalPages);
+    if (_desktopCurrentPage != safePage) {
+      _desktopCurrentPage = safePage;
+    }
+    final int startIndex =
+        totalEmailCount == 0 ? 0 : (safePage - 1) * pageSize;
+    final int endIndex = (startIndex + pageSize > totalEmailCount)
+        ? totalEmailCount
+        : (startIndex + pageSize);
+    final int startItem = totalEmailCount == 0 ? 0 : (startIndex + 1);
+    final int endItem = endIndex;
+
+    final List<EmailModel> desktopPagedList = isDesktopOS
+        ? (filtered.isEmpty
+            ? <EmailModel>[]
+            : filtered.sublist(startIndex, endIndex))
+        : filtered;
+
     print(
-      '[UI RENDER DIAGNOSTIC] Active Folder: ${uiState.activeFolder} | SubTab: $currentTabIndex | Total Provider State Emails: ${emails.length} | UI Filtered Rendered Count: ${filtered.length}',
+      '[UI RENDER DIAGNOSTIC] Active Folder: ${uiState.activeFolder} | SubTab: $currentTabIndex | Total Provider State Emails: ${emails.length} | UI Filtered Rendered Count: ${filtered.length} | Page: $safePage/$totalPages (Showing $startItem-$endItem)',
     );
 
     // 4. HANDLE VIEW TOGGLING: DETAIL VIEW vs. LIST VIEW
@@ -448,154 +568,134 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
       // Otherwise render the Email List
       mainBody = Column(
         children: [
-          // --- INBOX TAB BAR (only shown in Inbox / Primary) ---
-          if ((uiState.activeFolder == 'Inbox' ||
+          // --- INBOX TAB / ACTION BAR ---
+          if (isDesktopOS)
+            _buildDesktopEmailHeaderBar(
+              context,
+              ref,
+              uiState,
+              isDark,
+              filtered,
+            )
+          else if ((uiState.activeFolder == 'Inbox' ||
                   uiState.activeFolder == 'Primary') &&
               uiState.activeLabel == null &&
               uiState.searchQuery.isEmpty)
-            isMacOS && !isMobile
-                ? Container(
-                    height: 46,
-                    decoration: BoxDecoration(
-                      color: isDark ? BNXColors.darkBg : Colors.white,
-                      border: Border(
-                        bottom: BorderSide(
-                          color: isDark
-                              ? BNXColors.darkBorder
-                              : BNXColors.lightBorder,
-                          width: 1,
-                        ),
-                      ),
-                    ),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: TabBar(
-                        controller: _tabController,
-                        onTap: (index) => setState(() {}),
-                        isScrollable: true,
-                        tabAlignment: TabAlignment.start,
-                        indicatorColor: const Color(0xFF195bac),
-                        indicatorWeight: 3,
-                        indicatorSize: TabBarIndicatorSize.label,
-                        labelColor: const Color(0xFF195bac),
-                        unselectedLabelColor: isDark
-                            ? Colors.white60
-                            : Colors.grey.shade600,
-                        labelStyle: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        unselectedLabelStyle: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.normal,
-                        ),
-                        dividerColor: Colors.transparent,
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        labelPadding:
-                            const EdgeInsets.symmetric(horizontal: 16),
-                        tabs: const [
-                          Tab(
-                            height: 42,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.inbox_rounded, size: 16),
-                                SizedBox(width: 8),
-                                Text('Primary'),
-                              ],
-                            ),
-                          ),
-                          Tab(
-                            height: 42,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.mark_email_unread_rounded, size: 16),
-                                SizedBox(width: 8),
-                                Text('Unread'),
-                              ],
-                            ),
-                          ),
-                          Tab(
-                            height: 42,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.send_rounded, size: 16),
-                                SizedBox(width: 8),
-                                Text('Sent'),
-                              ],
-                            ),
-                          ),
-                          Tab(
-                            height: 42,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.drafts_rounded, size: 16),
-                                SizedBox(width: 8),
-                                Text('Draft'),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                : Container(
-                    color: isDark ? BNXColors.darkBg : Colors.white,
-                    child: TabBar(
-                      controller: _tabController,
-                      onTap: (index) => setState(() {}),
-                      isScrollable: false,
-                      indicatorColor: const Color(0xFF195bac),
-                      indicatorWeight: 3,
-                      indicatorSize: TabBarIndicatorSize.tab,
-                      labelColor: const Color(0xFF195bac),
-                      unselectedLabelColor: isDark
-                          ? Colors.white54
-                          : Colors.grey.shade500,
-                      labelStyle: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      unselectedLabelStyle: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      dividerColor: isDark
-                          ? BNXColors.darkBorder
-                          : BNXColors.lightBorder,
-                      padding: EdgeInsets.zero,
-                      labelPadding: EdgeInsets.zero,
-                      tabs: const [
-                        Tab(
-                          icon: Icon(Icons.inbox_rounded, size: 20),
-                          text: 'Primary',
-                          iconMargin: EdgeInsets.only(bottom: 3),
-                        ),
-                        Tab(
-                          icon: Icon(Icons.mark_email_unread_rounded, size: 20),
-                          text: 'Unread',
-                          iconMargin: EdgeInsets.only(bottom: 3),
-                        ),
-                        Tab(
-                          icon: Icon(Icons.send_rounded, size: 20),
-                          text: 'Sent',
-                          iconMargin: EdgeInsets.only(bottom: 3),
-                        ),
-                        Tab(
-                          icon: Icon(Icons.drafts_rounded, size: 20),
-                          text: 'Draft',
-                          iconMargin: EdgeInsets.only(bottom: 3),
-                        ),
-                      ],
-                    ),
+            Container(
+              color: isDark ? BNXColors.darkBg : Colors.white,
+              child: TabBar(
+                controller: _tabController,
+                onTap: (index) => setState(() {}),
+                isScrollable: false,
+                indicatorColor: const Color(0xFF195bac),
+                indicatorWeight: 3,
+                indicatorSize: TabBarIndicatorSize.tab,
+                labelColor: const Color(0xFF195bac),
+                unselectedLabelColor:
+                    isDark ? Colors.white54 : Colors.grey.shade500,
+                labelStyle: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                ),
+                unselectedLabelStyle: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+                dividerColor:
+                    isDark ? BNXColors.darkBorder : BNXColors.lightBorder,
+                padding: EdgeInsets.zero,
+                labelPadding: EdgeInsets.zero,
+                tabs: const [
+                  Tab(
+                    icon: Icon(Icons.inbox_rounded, size: 20),
+                    text: 'Primary',
+                    iconMargin: EdgeInsets.only(bottom: 3),
                   ),
+                  Tab(
+                    icon: Icon(Icons.mark_email_unread_rounded, size: 20),
+                    text: 'Unread',
+                    iconMargin: EdgeInsets.only(bottom: 3),
+                  ),
+                  Tab(
+                    icon: Icon(Icons.send_rounded, size: 20),
+                    text: 'Sent',
+                    iconMargin: EdgeInsets.only(bottom: 3),
+                  ),
+                  Tab(
+                    icon: Icon(Icons.drafts_rounded, size: 20),
+                    text: 'Draft',
+                    iconMargin: EdgeInsets.only(bottom: 3),
+                  ),
+                ],
+              ),
+            ),
 
           // List Content
           Expanded(
-            child: AnimatedSwitcher(
+            child: isDesktopOS
+                ? (filtered.isEmpty
+                    ? _buildEmptyState(
+                        (uiState.activeFolder == 'Inbox' ||
+                                    uiState.activeFolder == 'Primary') &&
+                                uiState.activeLabel == null
+                            ? _tabs[currentTabIndex]
+                            : uiState.activeFolder,
+                        isDark,
+                      )
+                    : ListView.separated(
+                        controller: _desktopScrollController,
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        itemCount: desktopPagedList.length,
+                        separatorBuilder: (context, idx) => Divider(
+                          height: 1,
+                          thickness: 0.6,
+                          color: isDark
+                              ? BNXColors.darkBorder
+                              : const Color(0xFFF1F5F9),
+                        ),
+                        itemBuilder: (context, idx) {
+                          final email = desktopPagedList[idx];
+                          return EmailTile(
+                            email: email,
+                            isSelected:
+                                uiState.selectedEmailIds.contains(email.id),
+                            onTap: () {
+                              if (uiState.isSelectionMode) {
+                                ref
+                                    .read(appUiProvider.notifier)
+                                    .toggleEmailSelection(email.id);
+                              } else if (email.isDraft ||
+                                  email.memberOfFolders.contains('Draft') ||
+                                  uiState.activeFolder == 'Draft') {
+                                if (!email.isRead) {
+                                  ref
+                                      .read(emailProvider.notifier)
+                                      .toggleRead(
+                                        email.id,
+                                        'Draft',
+                                        forceValue: true,
+                                      );
+                                }
+                                context.push('/draft/${email.id}');
+                              } else {
+                                if (!email.isRead &&
+                                    uiState.activeFolder != 'All Inboxes' &&
+                                    uiState.activeFolder != 'All inboxes') {
+                                  ref
+                                      .read(emailProvider.notifier)
+                                      .toggleRead(
+                                        email.id,
+                                        uiState.activeFolder,
+                                        forceValue: true,
+                                      );
+                                }
+                                context.push('/email/${email.id}');
+                              }
+                            },
+                          );
+                        },
+                      ))
+                : AnimatedSwitcher(
               duration: const Duration(milliseconds: 200),
               switchInCurve: Curves.easeOutCubic,
               switchOutCurve: Curves.easeInCubic,
@@ -779,13 +879,48 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
               ),
             ),
           ),
+          if (isDesktopOS)
+            _buildDesktopPaginationBar(
+              isDark: isDark,
+              startItem: startItem,
+              endItem: endItem,
+              totalCount: totalEmailCount,
+              currentPage: safePage,
+              totalPages: totalPages,
+            ),
         ],
       );
     }
 
+    final Widget finalBody = isDesktopOS
+        ? Stack(
+            children: [
+              mainBody,
+              if (_isCustomizeTabsOpen) ...[
+                Positioned.fill(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      setState(() {
+                        _isCustomizeTabsOpen = false;
+                      });
+                    },
+                    child: Container(color: Colors.transparent),
+                  ),
+                ),
+                Positioned(
+                  top: 48,
+                  left: 14,
+                  child: _buildCustomizeTabsPopup(isDark),
+                ),
+              ],
+            ],
+          )
+        : mainBody;
+
     return Container(
-      color: isDark ? Colors.transparent : const Color(0xFFE9F4FF),
-      child: mainBody,
+      color: isDark ? Colors.transparent : (isDesktopOS ? Colors.white : const Color(0xFFE9F4FF)),
+      child: finalBody,
     );
   }
 
@@ -881,6 +1016,352 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
           ),
         );
       },
+    );
+  }
+
+  Widget _buildDesktopEmailHeaderBar(
+    BuildContext context,
+    WidgetRef ref,
+    AppUiState uiState,
+    bool isDark,
+    List<EmailModel> currentEmails,
+  ) {
+    final bool allSelected = currentEmails.isNotEmpty &&
+        currentEmails.every((e) => uiState.selectedEmailIds.contains(e.id));
+
+    return Container(
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: isDark ? BNXColors.darkBg : Colors.white,
+        border: Border(
+          bottom: BorderSide(
+            color: isDark ? BNXColors.darkBorder : const Color(0xFFF1F5F9),
+            width: 1,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            icon: Icon(
+              Icons.edit_outlined,
+              size: 18,
+              color: _isCustomizeTabsOpen
+                  ? const Color(0xFF195BAC)
+                  : (isDark ? Colors.white70 : Colors.black87),
+            ),
+            tooltip: 'Customize tabs',
+            onPressed: () {
+              setState(() {
+                _isCustomizeTabsOpen = !_isCustomizeTabsOpen;
+              });
+            },
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded, size: 20),
+            color: isDark ? Colors.white70 : Colors.black87,
+            tooltip: 'Refresh',
+            onPressed: () {
+              if (uiState.activeFolder == 'Storage') {
+                ref.read(storageQuotaProvider.notifier).refresh();
+              } else {
+                ref.read(emailProvider.notifier).loadFolder(uiState.activeFolder);
+              }
+            },
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            icon: Icon(
+              allSelected
+                  ? Icons.check_box_rounded
+                  : Icons.check_box_outline_blank_rounded,
+              size: 19,
+              color: allSelected
+                  ? const Color(0xFF195BAC)
+                  : (isDark ? Colors.white54 : Colors.black54),
+            ),
+            tooltip: 'Select all',
+            onPressed: () {
+              if (allSelected) {
+                ref.read(appUiProvider.notifier).clearSelection();
+              } else {
+                ref
+                    .read(appUiProvider.notifier)
+                    .selectAllEmails(currentEmails.map((e) => e.id).toList());
+              }
+            },
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+          const SizedBox(width: 16),
+          // Enabled tabs list (All, Important, Promotions, Social, etc.)
+          ..._allAvailableTabs
+              .where((t) => _enabledTabs.contains(t['key']))
+              .map((tab) {
+            final String key = tab['key'];
+            final String label = tab['label'];
+            final IconData icon = tab['icon'];
+            final Color color = tab['color'];
+            final bool isSelected = _selectedDesktopTab == key;
+
+            return InkWell(
+              onTap: () {
+                setState(() {
+                  _selectedDesktopTab = key;
+                });
+                if (key == 'All') {
+                  ref.read(appUiProvider.notifier).selectFolder('Inbox');
+                } else if (key == 'Drafts') {
+                  ref.read(appUiProvider.notifier).selectFolder('Draft');
+                } else {
+                  ref.read(appUiProvider.notifier).selectFolder(key);
+                }
+              },
+              child: Container(
+                height: 48,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(
+                      color: isSelected
+                          ? const Color(0xFF195BAC)
+                          : Colors.transparent,
+                      width: 3,
+                    ),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (key == 'All') ...[
+                      const Icon(
+                        Icons.check_box_outlined,
+                        size: 16,
+                        color: Color(0xFF195BAC),
+                      ),
+                      const SizedBox(width: 6),
+                    ] else ...[
+                      Icon(icon, size: 16, color: color),
+                      const SizedBox(width: 6),
+                    ],
+                    Text(
+                      label,
+                      style: TextStyle(
+                        color: isSelected
+                            ? const Color(0xFF195BAC)
+                            : (isDark ? Colors.white70 : const Color(0xFF475569)),
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                        fontSize: 13.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCustomizeTabsPopup(bool isDark) {
+    return Material(
+      elevation: 12,
+      borderRadius: BorderRadius.circular(16),
+      color: isDark ? const Color(0xFF1E293B) : Colors.white,
+      shadowColor: Colors.black.withValues(alpha: 0.15),
+      child: Container(
+        width: 195,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E293B) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isDark ? BNXColors.darkBorder : const Color(0xFFE2E8F0),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 18,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(left: 6, bottom: 8),
+              child: Text(
+                'CUSTOMIZE TABS',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ),
+            ..._allAvailableTabs.map((tab) {
+              final String key = tab['key'];
+              final String label = tab['label'];
+              final IconData icon = tab['icon'];
+              final Color color = tab['color'];
+              final bool isChecked = _enabledTabs.contains(key);
+              final bool isHighlighted = isChecked && key == 'Social';
+
+              return InkWell(
+                onTap: () {
+                  setState(() {
+                    if (key == 'All') return;
+                    if (_enabledTabs.contains(key)) {
+                      _enabledTabs.remove(key);
+                    } else {
+                      _enabledTabs.add(key);
+                    }
+                  });
+                },
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  height: 32,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  margin: const EdgeInsets.symmetric(vertical: 1.5),
+                  decoration: BoxDecoration(
+                    color: isHighlighted
+                        ? const Color(0xFFEBF5FF)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(8),
+                    border: isHighlighted
+                        ? Border.all(color: const Color(0xFF2563EB), width: 1.2)
+                        : null,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(icon, size: 16, color: color),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          label,
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: isChecked ? FontWeight.w600 : FontWeight.w500,
+                            color: isDark ? Colors.white : const Color(0xFF1E293B),
+                          ),
+                        ),
+                      ),
+                      if (isChecked)
+                        const Icon(
+                          Icons.check,
+                          size: 15,
+                          color: Color(0xFF2563EB),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopPaginationBar({
+    required bool isDark,
+    required int startItem,
+    required int endItem,
+    required int totalCount,
+    required int currentPage,
+    required int totalPages,
+  }) {
+    final bool canPrev = currentPage > 1;
+    final bool canNext = currentPage < totalPages;
+
+    return Container(
+      height: 44,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      decoration: BoxDecoration(
+        color: isDark ? BNXColors.darkBg : Colors.white,
+        border: Border(
+          top: BorderSide(
+            color: isDark ? BNXColors.darkBorder : const Color(0xFFF1F5F9),
+            width: 1,
+          ),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            'Showing $startItem to $endItem of $totalCount emails',
+            style: TextStyle(
+              fontSize: 12,
+              color: isDark ? Colors.white54 : Colors.grey.shade600,
+            ),
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.chevron_left_rounded, size: 20),
+                color: canPrev
+                    ? (isDark ? Colors.white70 : Colors.black87)
+                    : (isDark ? Colors.white24 : Colors.grey.shade300),
+                onPressed: canPrev
+                    ? () {
+                        setState(() {
+                          _desktopCurrentPage = currentPage - 1;
+                        });
+                        if (_desktopScrollController.hasClients) {
+                          _desktopScrollController.jumpTo(0);
+                        }
+                      }
+                    : null,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                tooltip: canPrev ? 'Previous page' : null,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '$currentPage/$totalPages',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white70 : Colors.black87,
+                ),
+              ),
+              const SizedBox(width: 6),
+              IconButton(
+                icon: const Icon(Icons.chevron_right_rounded, size: 20),
+                color: canNext
+                    ? (isDark ? Colors.white70 : Colors.black87)
+                    : (isDark ? Colors.white24 : Colors.grey.shade300),
+                onPressed: canNext
+                    ? () {
+                        setState(() {
+                          _desktopCurrentPage = currentPage + 1;
+                        });
+                        if (_desktopScrollController.hasClients) {
+                          _desktopScrollController.jumpTo(0);
+                        }
+                      }
+                    : null,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                tooltip: canNext ? 'Next page' : null,
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

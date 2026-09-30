@@ -1,0 +1,694 @@
+# BNX Mail - Complete API Documentation
+> Comprehensive API specification for **Storage, Subscription, Mail Backup (Vault), Settings, and Account Management**.
+
+---
+
+## 📌 Global Specifications
+- **Base URL:** `http://localhost:8080` (or `https://api.bnxmail.com`)
+- **Default Authentication:** Bearer JWT Token
+  ```http
+  Authorization: Bearer <jwt_token>
+  ```
+- **Content Type:** `application/json` (except file uploads which use `multipart/form-data`)
+
+---
+
+## 📑 Table of Contents
+1. [Storage APIs](#1-storage-apis)
+2. [Subscription & Organization Plans](#2-subscription--organization-plans)
+3. [Mail Backup & Data Vault](#3-mail-backup--data-vault)
+4. [Settings & Customization](#4-settings--customization)
+5. [Manage Accounts & Sub-IDs](#5-manage-accounts--sub-ids)
+
+---
+
+# 1. Storage APIs
+
+Handles real-time mail server quota, mailbox storage consumption, and account plan limits.
+
+---
+
+### 1.1 Get Live Mail Storage Quota
+Fetches real-time mailbox quota from Dovecot / IMAP.
+
+- **Method:** `GET`
+- **Route:** `/api/mail/storage-quota`
+- **Headers:**
+  ```http
+  Authorization: Bearer <token>
+  ```
+
+#### Response (`200 OK`)
+```json
+{
+  "success": true,
+  "message": "Storage quota fetched successfully",
+  "data": {
+    "email": "user@bnxmail.com",
+    "storageLimit": 5368709120,
+    "storageUsed": 268435456,
+    "storagePercentage": 5.0
+  },
+  "error": null
+}
+```
+
+#### Field Specifications
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `email` | `String` | Email address of the authenticated mailbox |
+| `storageLimit` | `Long` | Maximum storage allocated on mail server in **Bytes** (`5368709120` = 5 GB) |
+| `storageUsed` | `Long` | Consumed storage in **Bytes** (`268435456` = 256 MB) |
+| `storagePercentage` | `Double` | Utilization percentage |
+
+---
+
+### 1.2 Storage Unit Reference
+| Unit | Size in Bytes |
+| :--- | :--- |
+| **1 GB** | `1073741824` |
+| **5 GB** *(Default Server Quota)* | `5368709120` |
+| **15 GB** *(Default User Plan Limit)* | `16106127360` |
+| **30 GB** | `32212254720` |
+
+---
+
+# 2. Subscription & Organization Plans
+
+Manages user subscription tiers (`INDIVIDUAL`, `BUSINESS`, `SUB_USER`), custom domain verification, and team invitations.
+
+---
+
+### 2.1 Get Current Subscription & Quota Status
+- **Method:** `GET`
+- **Route:** `/api/users/me`
+- **Headers:** `Authorization: Bearer <token>`
+
+#### Response (`200 OK`)
+```json
+{
+  "success": true,
+  "message": "User profile retrieved successfully",
+  "data": {
+    "id": 1,
+    "username": "ashwin",
+    "email": "ashwin@bnxmail.com",
+    "accountType": "BUSINESS",
+    "role": "ORG_ADMIN",
+    "active": true,
+    "approved": true,
+    "onboarded": true,
+    "storageUsed": 268435456,
+    "storageLimit": 16106127360,
+    "organization": {
+      "id": 5,
+      "name": "BTC Technologies"
+    },
+    "isSubId": false
+  },
+  "error": null
+}
+```
+
+---
+
+### 2.2 Initialize Domain Verification (DNS TXT)
+- **Method:** `POST`
+- **Route:** `/api/business/domain/init`
+- **Headers:** `Authorization: Bearer <token>`
+
+#### Request Body
+```json
+{
+  "organizationId": 5
+}
+```
+
+#### Response (`200 OK`)
+```json
+{
+  "success": true,
+  "message": "Domain verification initialized",
+  "data": {
+    "domain": "btctech.com",
+    "verificationToken": "bnx-verify-98fbc18d-4a1e-4509-9dbb",
+    "dnsRecordType": "TXT",
+    "host": "@",
+    "status": "PENDING_VERIFICATION"
+  },
+  "error": null
+}
+```
+
+---
+
+### 2.3 Verify Custom Domain
+- **Method:** `POST`
+- **Route:** `/api/business/domain/verify`
+- **Headers:** `Authorization: Bearer <token>`
+
+#### Request Body
+```json
+{
+  "organizationId": 5
+}
+```
+
+#### Response (`200 OK`)
+```json
+{
+  "success": true,
+  "message": "Domain verified successfully",
+  "data": {
+    "verified": true,
+    "domain": "btctech.com",
+    "mxStatus": "VALID",
+    "spfStatus": "VALID",
+    "dkimStatus": "VALID"
+  },
+  "error": null
+}
+```
+
+---
+
+### 2.4 Invite Member to Business Plan
+- **Method:** `POST`
+- **Route:** `/api/business/invite-member`
+- **Headers:** `Authorization: Bearer <token>`
+
+#### Request Body
+```json
+{
+  "email": "colleague@example.com",
+  "role": "MEMBER",
+  "organizationId": 5
+}
+```
+
+#### Response (`200 OK`)
+```json
+{
+  "success": true,
+  "message": "Invitation generated successfully",
+  "data": {
+    "inviteToken": "inv_7c9e2b10a5",
+    "email": "colleague@example.com",
+    "expiresAt": "2026-10-06T17:30:00"
+  },
+  "error": null
+}
+```
+
+---
+
+### 2.5 Accept Business Invitation
+- **Method:** `POST`
+- **Route:** `/api/business/accept-invite`
+
+#### Request Body
+```json
+{
+  "inviteToken": "inv_7c9e2b10a5",
+  "password": "StrongPassword123!",
+  "firstName": "John",
+  "lastName": "Doe"
+}
+```
+
+#### Response (`200 OK`)
+```json
+{
+  "success": true,
+  "message": "Welcome to the team! Invitation accepted.",
+  "data": {
+    "joined": true,
+    "organization": "BTC Technologies",
+    "email": "johndoe@btctech.com"
+  },
+  "error": null
+}
+```
+
+---
+
+### 2.6 Business Profile Onboarding
+- **Method:** `POST`
+- **Route:** `/api/business/onboard`
+- **Headers:** `Authorization: Bearer <token>`
+
+#### Request Body
+```json
+{
+  "businessType": "IT & Software",
+  "industry": "Cloud Computing",
+  "companySize": "10-50",
+  "businessWebsite": "https://btctech.com",
+  "businessAddress": "123 Tech Park, Suite 400",
+  "timeZone": "Asia/Kolkata",
+  "language": "en",
+  "acceptTerms": true
+}
+```
+
+#### Response (`200 OK`)
+```json
+{
+  "success": true,
+  "message": "Business profile onboarded successfully",
+  "data": {
+    "onboarded": true,
+    "businessName": "BTC Technologies",
+    "businessType": "IT & Software"
+  },
+  "error": null
+}
+```
+
+---
+
+# 3. Mail Backup & Data Vault
+
+Secure persistent storage for email backups, exports, archives, and encrypted attachments.
+
+---
+
+### 3.1 Upload / Store Backup in Vault
+- **Method:** `POST`
+- **Route:** `/api/vault/upload`
+- **Headers:**
+  ```http
+  Authorization: Bearer <token>
+  Content-Type: multipart/form-data
+  ```
+
+#### Form Data Parameters
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `file` | `Binary File` | Backup file (`.zip`, `.eml`, `.mbox`, `.pdf`, etc.) |
+
+#### Response (`200 OK`)
+```json
+{
+  "message": "File uploaded successfully",
+  "id": 104,
+  "filename": "mail_backup_2026.zip"
+}
+```
+
+---
+
+### 3.2 List All Backed-Up Files
+- **Method:** `GET`
+- **Route:** `/api/vault`
+- **Headers:** `Authorization: Bearer <token>`
+
+#### Response (`200 OK`)
+```json
+[
+  {
+    "id": 104,
+    "filename": "mail_backup_2026.zip",
+    "contentType": "application/zip",
+    "size": 48291040,
+    "createdAt": "2026-09-29T16:40:00"
+  },
+  {
+    "id": 101,
+    "filename": "contacts_export.csv",
+    "contentType": "text/csv",
+    "size": 15420,
+    "createdAt": "2026-09-15T11:20:00"
+  }
+]
+```
+
+---
+
+### 3.3 Download Backup File
+- **Method:** `GET`
+- **Route:** `/api/vault/{id}/download`
+- **Headers:** `Authorization: Bearer <token>`
+- **Response:** Raw binary file stream
+
+---
+
+### 3.4 Delete Backup
+- **Method:** `DELETE`
+- **Route:** `/api/vault/{id}`
+- **Headers:** `Authorization: Bearer <token>`
+
+#### Response (`200 OK`)
+```json
+{
+  "message": "File deleted successfully"
+}
+```
+
+---
+
+# 4. Settings & Customization
+
+Endpoints for managing appearance, composing behaviors, signatures, and 2FA.
+
+---
+
+### 4.1 Get Full Settings
+- **Method:** `GET`
+- **Route:** `/api/users/settings`
+- **Headers:** `Authorization: Bearer <token>`
+
+#### Response (`200 OK`)
+```json
+{
+  "success": true,
+  "message": "Settings retrieved successfully",
+  "data": {
+    "storageLimit": 16106127360,
+    "phoneNumber": "+1234567890",
+    "location": "Chennai, India",
+    "jobTitle": "Software Engineer",
+    "inboxNotifications": true,
+    "sentNotifications": false,
+    "starredNotifications": true,
+    "snoozedNotifications": true,
+    "soundEnabled": true,
+    "vibrationEnabled": true,
+    "quietHoursEnabled": false,
+    "themeMode": "DARK",
+    "accentColor": "#4F46E5",
+    "fontSize": "MEDIUM",
+    "density": "DEFAULT",
+    "profilePictureUrl": "/api/users/profile-picture/ashwin",
+    "undoSendDelay": 10,
+    "spellingCheckEnabled": true,
+    "grammarCheckEnabled": true,
+    "autoCorrectEnabled": true,
+    "smartComposeEnabled": true,
+    "readingPaneMode": "RIGHT",
+    "twoFactorEnabled": true,
+    "biometricsEnabled": false,
+    "language": "en",
+    "fontFamily": "Arial",
+    "textStyleFontSize": "Normal",
+    "textColor": "#000000",
+    "casboxAccepted": true
+  },
+  "error": null
+}
+```
+
+---
+
+### 4.2 Update Settings
+- **Method:** `PATCH`
+- **Route:** `/api/users/settings`
+- **Headers:** `Authorization: Bearer <token>`
+
+#### Request Body
+```json
+{
+  "themeMode": "DARK",
+  "accentColor": "#6366F1",
+  "fontSize": "LARGE",
+  "density": "COMPACT",
+  "undoSendDelay": 15,
+  "inboxNotifications": true
+}
+```
+
+---
+
+### 4.3 Language Preferences
+- **Get:** `GET /api/settings/language`
+- **Update:** `PUT /api/settings/language`
+- **Supported Languages:** `en`, `ta`, `hi`, `te`, `ml`, `kn`
+- **Request Body:**
+  ```json
+  {
+    "language": "ta"
+  }
+  ```
+
+---
+
+### 4.4 Composing & Smart AI Preferences
+- **Get:** `GET /api/settings/composing`
+- **Update:** `PUT /api/settings/composing`
+- **Request Body:**
+  ```json
+  {
+    "spellingCheckEnabled": true,
+    "grammarCheckEnabled": true,
+    "autoCorrectEnabled": false,
+    "smartComposeEnabled": true
+  }
+  ```
+
+---
+
+### 4.5 Typography & Text Style
+- **Get:** `GET /api/settings/text-style`
+- **Update:** `PUT /api/settings/text-style`
+- **Supported Fonts:** `Arial`, `Calibri`, `Times New Roman`, `Georgia`, `Verdana`, `Courier New`, `Tahoma`, `Trebuchet MS`
+- **Supported Sizes:** `Small`, `Normal`, `Large`, `Extra Large`
+- **Request Body:**
+  ```json
+  {
+    "fontFamily": "Georgia",
+    "fontSize": "Large",
+    "textColor": "#1E293B"
+  }
+  ```
+
+---
+
+### 4.6 Wallpaper & Theme Customization
+- **Get:** `GET /api/settings/wallpaper`
+- **Update:** `PUT /api/settings/wallpaper` (`{"wallpaper": "aurora_dark"}`)
+- **Reset:** `POST` or `PUT` `/api/settings/wallpaper/reset`
+
+---
+
+### 4.7 Signatures
+- **List:** `GET /api/signatures`
+- **Create:** `POST /api/signatures`
+  ```json
+  {
+    "name": "Work Signature",
+    "content": "<p>Best regards,<br><b>Ashwin Kumar</b></p>",
+    "isDefault": true
+  }
+  ```
+- **Update:** `PUT /api/signatures/{id}`
+- **Delete:** `DELETE /api/signatures/{id}`
+- **Set Default:** `PATCH /api/signatures/{id}/default`
+
+---
+
+### 4.8 Two-Factor Authentication (2FA)
+- **Setup (Generate Secret & QR):** `POST /api/users/2fa/setup`
+- **Verify & Enable:** `POST /api/users/2fa/verify`
+  ```json
+  {
+    "code": "492817"
+  }
+  ```
+
+---
+
+# 5. Manage Accounts & Sub-IDs
+
+Multi-mailbox management, primary account switching, and Sub-ID provisioning.
+
+---
+
+### 5.1 List Connected Mail Accounts
+- **Method:** `GET`
+- **Route:** `/api/emails/list`
+- **Headers:** `Authorization: Bearer <token>`
+
+#### Response (`200 OK`)
+```json
+{
+  "success": true,
+  "message": "Emails retrieved",
+  "data": {
+    "count": 2,
+    "emails": [
+      {
+        "id": 1,
+        "emailName": "ashwin",
+        "email": "ashwin@bnxmail.com",
+        "isPrimary": true,
+        "active": true,
+        "createdAt": "2026-01-15T10:00:00"
+      },
+      {
+        "id": 8,
+        "emailName": "ashwin.work",
+        "email": "ashwin.work@bnxmail.com",
+        "isPrimary": false,
+        "active": true,
+        "createdAt": "2026-03-10T14:20:00"
+      }
+    ]
+  },
+  "error": null
+}
+```
+
+---
+
+### 5.2 Create New Mailbox / Alias
+- **Method:** `POST`
+- **Route:** `/api/emails/create`
+- **Headers:** `Authorization: Bearer <token>`
+
+#### Request Body
+```json
+{
+  "emailName": "ashwin.work",
+  "password": "AccountPassword123!"
+}
+```
+
+#### Response (`200 OK`)
+```json
+{
+  "success": true,
+  "message": "Email created successfully",
+  "data": {
+    "emailId": 8,
+    "email": "ashwin.work@bnxmail.com",
+    "emailName": "ashwin.work",
+    "isPrimary": false,
+    "message": "Email created successfully!"
+  },
+  "error": null
+}
+```
+
+---
+
+### 5.3 Switch Primary Mailbox
+- **Method:** `POST`
+- **Route:** `/api/emails/{emailId}/set-primary`
+- **Headers:** `Authorization: Bearer <token>`
+
+#### Response (`200 OK`)
+```json
+{
+  "success": true,
+  "message": "Primary email updated",
+  "data": {
+    "primaryEmail": "ashwin.work@bnxmail.com"
+  },
+  "error": null
+}
+```
+
+---
+
+### 5.4 Create Sub-ID Account (Child / Managed Account)
+- **Method:** `POST`
+- **Route:** `/api/subid/create`
+- **Headers:** `Authorization: Bearer <token>`
+
+#### Request Body
+```json
+{
+  "prefix": "support",
+  "password": "SubPassword123!",
+  "firstName": "Customer",
+  "lastName": "Support",
+  "accountType": "BUSINESS",
+  "permissions": ["READ_MAIL", "SEND_MAIL"]
+}
+```
+
+#### Response (`200 OK`)
+```json
+{
+  "success": true,
+  "message": "Sub-ID created successfully",
+  "data": {
+    "subUsername": "support.ashwin"
+  },
+  "error": null
+}
+```
+
+---
+
+### 5.5 List Sub-ID Accounts
+- **Method:** `GET`
+- **Route:** `/api/subid/list`
+- **Headers:** `Authorization: Bearer <token>`
+
+#### Response (`200 OK`)
+```json
+{
+  "success": true,
+  "message": "Fetched Sub-IDs",
+  "data": [
+    {
+      "id": 25,
+      "username": "support.ashwin",
+      "email": "support.ashwin@bnxmail.com",
+      "firstName": "Customer",
+      "lastName": "Support",
+      "isSubId": true,
+      "accountType": "BUSINESS",
+      "role": "SUB_USER",
+      "active": true,
+      "approved": true
+    }
+  ],
+  "error": null
+}
+```
+
+---
+
+### 5.6 Parent Approval for Child Accounts
+- **Method:** `PATCH`
+- **Route:** `/api/users/{id}/approve`
+- **Headers:** `Authorization: Bearer <token>`
+
+#### Response (`200 OK`)
+```json
+{
+  "success": true,
+  "message": "Child account approved successfully",
+  "data": {
+    "userId": 25,
+    "username": "kid.ashwin",
+    "approved": true,
+    "approvedAt": "2026-09-29T17:20:00"
+  },
+  "error": null
+}
+```
+
+---
+
+### 5.7 Update Profile
+- **Method:** `PATCH`
+- **Route:** `/api/users/profile`
+- **Headers:** `Authorization: Bearer <token>`
+
+#### Request Body
+```json
+{
+  "firstName": "Ashwin",
+  "lastName": "Kumar",
+  "displayName": "Ashwin K",
+  "phoneNumber": "+1234567890",
+  "recoveryEmail": "recovery@example.com",
+  "bio": "Software Architect",
+  "occupation": "Developer",
+  "homeAddress": "42 Tech St",
+  "workAddress": "100 Innovation Blvd"
+}
+```

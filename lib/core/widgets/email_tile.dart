@@ -388,6 +388,26 @@ class _EmailTileState extends ConsumerState<EmailTile> {
       );
     }
 
+    final bool isDesktopOS = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.macOS ||
+            defaultTargetPlatform == TargetPlatform.windows);
+
+    if (isDesktopOS) {
+      return _buildDesktopEmailTile(
+        context: context,
+        ref: ref,
+        uiState: uiState,
+        email: email,
+        isDark: isDark,
+        textWeight: textWeight,
+        textColor: textColor,
+        isSelectedForBulk: isSelectedForBulk,
+        tileSenderName: tileSenderName,
+        isDraftItem: isDraftItem,
+        isScheduledItem: isScheduledItem,
+      );
+    }
+
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
@@ -763,6 +783,204 @@ class _EmailTileState extends ConsumerState<EmailTile> {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 5.0, vertical: 4.0),
           child: Icon(icon, size: 18, color: Colors.grey),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopEmailTile({
+    required BuildContext context,
+    required WidgetRef ref,
+    required AppUiState uiState,
+    required EmailModel email,
+    required bool isDark,
+    required FontWeight textWeight,
+    required Color textColor,
+    required bool isSelectedForBulk,
+    required String tileSenderName,
+    required bool isDraftItem,
+    required bool isScheduledItem,
+  }) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: () {
+          if (uiState.selectedEmailIds.isNotEmpty) {
+            ref.read(appUiProvider.notifier).toggleEmailSelection(email.id);
+          } else {
+            widget.onTap();
+          }
+        },
+        child: Container(
+          height: 44,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: widget.isSelected || isSelectedForBulk
+                ? (isDark ? const Color(0xFF1E293B) : const Color(0xFFEAF2FF))
+                : (_isHovered
+                    ? (isDark
+                        ? const Color(0xFF1E293B)
+                        : const Color(0xFFF8FAFC))
+                    : Colors.transparent),
+          ),
+          child: Row(
+            children: [
+              // 1. Checkbox
+              GestureDetector(
+                onTap: () {
+                  ref
+                      .read(appUiProvider.notifier)
+                      .toggleEmailSelection(email.id);
+                },
+                child: Icon(
+                  isSelectedForBulk
+                      ? Icons.check_box_rounded
+                      : Icons.check_box_outline_blank_rounded,
+                  size: 18,
+                  color: isSelectedForBulk
+                      ? const Color(0xFF195BAC)
+                      : (isDark ? Colors.white38 : Colors.grey.shade400),
+                ),
+              ),
+              const SizedBox(width: 14),
+
+              // 2. Star
+              GestureDetector(
+                onTap: () {
+                  ref
+                      .read(emailProvider.notifier)
+                      .toggleStar(email.id, 'Inbox');
+                },
+                child: Icon(
+                  email.isStarred
+                      ? Icons.star_rounded
+                      : Icons.star_border_rounded,
+                  color: email.isStarred
+                      ? const Color(0xFFF59E0B)
+                      : (isDark ? Colors.white38 : Colors.grey.shade400),
+                  size: 19,
+                ),
+              ),
+              const SizedBox(width: 16),
+
+              // 3. Sender Name
+              SizedBox(
+                width: 150,
+                child: Text(
+                  tileSenderName,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: textWeight,
+                    color: textColor,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 16),
+
+              // 4. Subject + Body snippet
+              Expanded(
+                child: RichText(
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  text: TextSpan(
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: isDark ? Colors.white : BNXColors.lightTextPrimary,
+                    ),
+                    children: [
+                      TextSpan(
+                        text: email.subject,
+                        style: TextStyle(
+                          fontWeight: textWeight,
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                      TextSpan(
+                        text: ' — ${email.body}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.normal,
+                          color: isDark
+                              ? BNXColors.darkTextSecondary
+                              : BNXColors.lightTextSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // 5. Attachment icon (if any)
+              if (email.hasAttachment) ...[
+                const SizedBox(width: 8),
+                Icon(
+                  Icons.attach_file_rounded,
+                  size: 16,
+                  color: isDark ? Colors.white38 : Colors.grey.shade500,
+                ),
+              ],
+
+              const SizedBox(width: 16),
+
+              // 6. Right side: Date or Quick Actions on Hover
+              SizedBox(
+                width: 110,
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: _isHovered
+                      ? Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _buildQuickAction(
+                              icon: Icons.archive_outlined,
+                              tooltip: 'Archive',
+                              onTap: () {
+                                ref.read(emailProvider.notifier).archiveEmail(
+                                      email.id,
+                                      uiState.activeFolder,
+                                    );
+                              },
+                            ),
+                            _buildQuickAction(
+                              icon: Icons.delete_outline_rounded,
+                              tooltip: 'Delete',
+                              onTap: () {
+                                ref.read(emailProvider.notifier).deleteEmail(
+                                      email.id,
+                                      uiState.activeFolder,
+                                    );
+                              },
+                            ),
+                            _buildQuickAction(
+                              icon: Icons.access_time_rounded,
+                              tooltip: 'Snooze',
+                              onTap: () {
+                                ref.read(emailProvider.notifier).snoozeEmail(
+                                      email.id,
+                                      DateTime.now().add(const Duration(hours: 4)),
+                                      uiState.activeFolder,
+                                    );
+                              },
+                            ),
+                          ],
+                        )
+                      : Text(
+                          _formatDate(email.date),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: textWeight,
+                            color: isDark
+                                ? BNXColors.darkTextSecondary
+                                : Colors.grey.shade600,
+                          ),
+                        ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
