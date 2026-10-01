@@ -83,16 +83,15 @@ class StorageQuota {
   int get availableBytes => math.max(0, storageLimit - storageUsed);
   String get availableFormatted => formatBytes(availableBytes);
 
-  double get fraction => storageLimit > 0
-      ? (storageUsed / storageLimit).clamp(0.0, 1.0)
-      : 0.0;
+  double get fraction => (storagePercentage / 100.0).clamp(0.0, 1.0);
+  double get progress => fraction;
 
   String get percentageFormatted {
     if (storagePercentage <= 0) return '0%';
     if (storagePercentage < 0.01) {
-      return '${storagePercentage.toStringAsFixed(5).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '')}%';
+      return '${storagePercentage.toStringAsFixed(4).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '')}%';
     }
-    return '${storagePercentage.toStringAsFixed(1)}%';
+    return '${storagePercentage.toStringAsFixed(2)}%';
   }
 
   String get status {
@@ -135,8 +134,29 @@ class StorageDebug {
 
 /// Repository for handling real-time storage quota APIs.
 class StorageRepository {
+  static Future<StorageQuota>? _inFlightRequest;
+
+  /// Resets in-flight request guard (used on account switch).
+  static void resetInFlight() {
+    _inFlightRequest = null;
+  }
+
   /// Fetches real-time mailbox quota from GET /api/mail/storage-quota
+  /// Deduplicates concurrent requests so only one HTTP request is active at a time.
   static Future<StorageQuota> fetchStorageQuota() async {
+    if (_inFlightRequest != null) {
+      StorageDebug.log('[STORAGE] Duplicate request prevented');
+      return _inFlightRequest!;
+    }
+    _inFlightRequest = _performFetch();
+    try {
+      return await _inFlightRequest!;
+    } finally {
+      _inFlightRequest = null;
+    }
+  }
+
+  static Future<StorageQuota> _performFetch() async {
     StorageDebug.log('[STORAGE] Fetching storage quota...');
     try {
       final res = await ApiClient.get('/api/mail/storage-quota');
@@ -151,10 +171,11 @@ class StorageRepository {
       }
 
       final quota = StorageQuota.fromJson(data);
+      StorageDebug.log('[STORAGE] Quota loaded');
       StorageDebug.log('[STORAGE] Email: ${quota.email}');
       StorageDebug.log('[STORAGE] Used: ${quota.storageUsed} bytes');
       StorageDebug.log('[STORAGE] Limit: ${quota.storageLimit} bytes');
-      StorageDebug.log('[STORAGE] Percentage: ${quota.storagePercentage}');
+      StorageDebug.log('[STORAGE] Percentage: ${quota.storagePercentage}%');
       return quota;
     } catch (e) {
       StorageDebug.log('[STORAGE ERROR] Failed to fetch storage quota: $e');

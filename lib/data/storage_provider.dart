@@ -21,7 +21,7 @@ class StorageQuotaNotifier extends StateNotifier<AsyncValue<StorageQuota>> {
 
   Future<void> fetchQuota() async {
     if (_isFetching) {
-      StorageDebug.log('[STORAGE NOTIFIER] fetchQuota already in progress, skipping concurrent call');
+      StorageDebug.log('[STORAGE] Duplicate request prevented');
       return;
     }
     _isFetching = true;
@@ -30,16 +30,12 @@ class StorageQuotaNotifier extends StateNotifier<AsyncValue<StorageQuota>> {
     } else {
       state = const AsyncValue.loading();
     }
-    StorageDebug.log('[STORAGE NOTIFIER] fetchQuota started, mounted=$mounted, hasListeners=$hasListeners');
     try {
       final quota = await StorageRepository.fetchStorageQuota();
-      StorageDebug.log('[STORAGE NOTIFIER] fetchQuota success: ${quota.email}, used: ${quota.usedFormatted}, limit: ${quota.limitFormatted}, mounted=$mounted');
       if (mounted) {
         state = AsyncValue.data(quota);
-        StorageDebug.log('[STORAGE NOTIFIER] state updated to AsyncValue.data, hasListeners=$hasListeners');
       }
     } catch (e, st) {
-      StorageDebug.log('[STORAGE NOTIFIER] fetchQuota error: $e, mounted=$mounted');
       if (mounted) {
         state = AsyncValue.error(e, st);
       }
@@ -49,8 +45,20 @@ class StorageQuotaNotifier extends StateNotifier<AsyncValue<StorageQuota>> {
   }
 
   Future<void> refresh() async {
-    StorageDebug.log('[STORAGE NOTIFIER] refresh requested');
-    _isFetching = false; // Allow manual refresh to proceed
+    if (_isFetching) {
+      StorageDebug.log('[STORAGE] Duplicate request prevented');
+      return;
+    }
+    await fetchQuota();
+  }
+
+  /// Called when the active email account changes.
+  /// Immediately clears old account quota state so stale values are never shown for the new account.
+  Future<void> onAccountSwitched() async {
+    StorageDebug.log('[STORAGE] Account switch detected, resetting quota');
+    state = const AsyncValue.loading();
+    _isFetching = false;
+    StorageRepository.resetInFlight();
     await fetchQuota();
   }
 }
@@ -59,12 +67,12 @@ final storageQuotaProvider =
     StateNotifierProvider<StorageQuotaNotifier, AsyncValue<StorageQuota>>((ref) {
   final notifier = StorageQuotaNotifier();
 
-  // Automatically refresh quota when the active account's email changes
+  // Automatically reset and refresh quota when the active account's email changes
   ref.listen<String>(
     activeAccountProvider.select((a) => a.email),
     (previous, next) {
       if (previous != null && previous != next && next.isNotEmpty) {
-        notifier.refresh();
+        notifier.onAccountSwitched();
       }
     },
   );

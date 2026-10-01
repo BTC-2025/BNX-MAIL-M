@@ -887,7 +887,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
                           _buildPillTile(
                             icon: Icons.pie_chart_outline_rounded,
                             title: 'Storage',
-                            isSelected: uiState.activeFolder == 'Storage',
+                            isSelected: currentRoute == '/storage',
                             collapsed: isCollapsed,
                             onTap: () => navigateToFolder('Storage', '/storage'),
                           ),
@@ -947,7 +947,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
                 icon: Icons.cloud_outlined,
                 iconColor: const Color(0xFF195BAC),
                 title: 'Storage',
-                isSelected: uiState.activeFolder == 'Storage',
+                isSelected: currentRoute == '/storage',
                 collapsed: isCollapsed,
                 onTap: () => navigateToFolder('Storage', '/storage'),
               ),
@@ -1555,9 +1555,6 @@ class _SidebarState extends ConsumerState<Sidebar> {
 
   void navigateToFolder(String folderName, String routePath) {
     if (folderName == 'Storage') {
-      ref.read(storageQuotaProvider.notifier).refresh();
-      ref.read(appUiProvider.notifier).selectFolder('Storage');
-      ref.read(appUiProvider.notifier).selectEmail(null);
       final scaffold = Scaffold.maybeOf(context);
       if (scaffold != null && scaffold.isDrawerOpen) Navigator.pop(context);
       if (GoRouterState.of(context).uri.toString() != '/storage') {

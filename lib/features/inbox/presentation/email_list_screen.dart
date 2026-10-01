@@ -12,7 +12,6 @@ import '../../../models/label_model.dart';
 import '../../../models/account_model.dart';
 import '../../../data/account_provider.dart';
 import '../../../data/all_inboxes_provider.dart';
-import '../../../data/storage_provider.dart';
 import 'templates_view.dart';
 
 class EmailListScreen extends ConsumerStatefulWidget {
@@ -112,11 +111,7 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         final initialFolder = ref.read(appUiProvider).activeFolder;
-        if (initialFolder == 'Storage') {
-          ref.read(storageQuotaProvider.notifier).refresh();
-        } else {
-          ref.read(emailProvider.notifier).loadFolder(initialFolder);
-        }
+        ref.read(emailProvider.notifier).loadFolder(initialFolder);
       }
     });
   }
@@ -186,10 +181,6 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
       if (previous != next) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!context.mounted) return;
-          if (next == 'Storage') {
-            ref.read(storageQuotaProvider.notifier).refresh();
-            return;
-          }
           if (next == 'All Inboxes' || next == 'All inboxes') {
             ref.read(allInboxesProvider.notifier).loadAllInboxes();
           } else if ([
@@ -1066,11 +1057,7 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
             color: isDark ? Colors.white70 : Colors.black87,
             tooltip: 'Refresh',
             onPressed: () {
-              if (uiState.activeFolder == 'Storage') {
-                ref.read(storageQuotaProvider.notifier).refresh();
-              } else {
-                ref.read(emailProvider.notifier).loadFolder(uiState.activeFolder);
-              }
+              ref.read(emailProvider.notifier).loadFolder(uiState.activeFolder);
             },
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),

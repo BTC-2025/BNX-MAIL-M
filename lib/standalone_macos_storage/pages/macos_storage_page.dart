@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../data/storage_provider.dart';
 import '../../data/account_provider.dart';
+import '../../data/repositories/storage_repository.dart';
 /// Optional provider for tracking whether Beta apps menu is open in standalone mode.
 final macosStorageBetaAppsVisibleProvider = StateProvider<bool>((ref) => false);
 
@@ -74,6 +75,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
   @override
   void initState() {
     super.initState();
+    StorageDebug.log('[STORAGE UI] Storage screen opened');
     _recycleItems = _createDefaultRecycleItems();
   }
 

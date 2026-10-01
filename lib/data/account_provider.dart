@@ -139,7 +139,7 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
       ref.read(colabInvitationsProvider.notifier).switchAccountContext(cleanId);
       ref.read(casboxMessagesProvider.notifier).switchAccountContext(cleanId);
       ref.read(customLabelsProvider.notifier).switchAccountContext(cleanId);
-      ref.read(storageQuotaProvider.notifier).refresh();
+      ref.read(storageQuotaProvider.notifier).onAccountSwitched();
 
       // Reset active folder to 'Inbox' so app lands on Mail section
       ref.read(appUiProvider.notifier).selectFolder('Inbox');
