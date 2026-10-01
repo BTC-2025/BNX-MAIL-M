@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -77,8 +78,12 @@ class ProfileButton extends ConsumerWidget {
           if (value == 'account') {
             context.push('/manage-account');
           } else if (value == 'profile') {
-            ref.read(appUiProvider.notifier).selectFolder('Profile');
-            context.go('/profile');
+            if (defaultTargetPlatform == TargetPlatform.macOS) {
+              context.push('/manage-account');
+            } else {
+              ref.read(appUiProvider.notifier).selectFolder('Profile');
+              context.go('/profile');
+            }
           } else if (value == 'settings') {
             ref.read(appUiProvider.notifier).selectFolder('Settings');
             context.go('/settings');
@@ -132,16 +137,17 @@ class ProfileButton extends ConsumerWidget {
               ],
             ),
           ),
-          const PopupMenuItem<String>(
-            value: 'profile',
-            child: Row(
-              children: [
-                Icon(Icons.person_pin_outlined, size: 20),
-                SizedBox(width: 12),
-                Text('My Profile'),
-              ],
+          if (defaultTargetPlatform != TargetPlatform.macOS)
+            const PopupMenuItem<String>(
+              value: 'profile',
+              child: Row(
+                children: [
+                  Icon(Icons.person_pin_outlined, size: 20),
+                  SizedBox(width: 12),
+                  Text('My Profile'),
+                ],
+              ),
             ),
-          ),
           const PopupMenuItem<String>(
             value: 'settings',
             child: Row(

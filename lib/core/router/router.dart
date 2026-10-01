@@ -83,6 +83,12 @@ final goRouter = GoRouter(
         ),
         GoRoute(
           path: '/profile',
+          redirect: (context, state) {
+            if (defaultTargetPlatform == TargetPlatform.macOS) {
+              return '/manage-account';
+            }
+            return null;
+          },
           builder: (context, state) {
             return const ProfileScreen();
           },

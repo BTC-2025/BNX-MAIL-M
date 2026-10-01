@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart' show CupertinoSwitch;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -529,42 +530,44 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ── Top Header Row: Back to Inbox & Title ──────────────────
-                Row(
-                  children: [
-                    InkWell(
-                      onTap: () {
-                        context.go('/profile');
-                      },
-                      borderRadius: BorderRadius.circular(8),
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(
-                          vertical: 4.0,
-                          horizontal: 2.0,
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.arrow_back,
-                              color: Color(0xFF195BAC),
-                              size: 16,
-                            ),
-                            SizedBox(width: 6),
-                            Text(
-                              'Back',
-                              style: TextStyle(
+                // ── Top Header Row: Back to Profile (non-macOS only) & Title ──────────────────
+                if (defaultTargetPlatform != TargetPlatform.macOS) ...[
+                  Row(
+                    children: [
+                      InkWell(
+                        onTap: () {
+                          context.go('/profile');
+                        },
+                        borderRadius: BorderRadius.circular(8),
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(
+                            vertical: 4.0,
+                            horizontal: 2.0,
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.arrow_back,
                                 color: Color(0xFF195BAC),
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
+                                size: 16,
                               ),
-                            ),
-                          ],
+                              SizedBox(width: 6),
+                              Text(
+                                'Back',
+                                style: TextStyle(
+                                  color: Color(0xFF195BAC),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                ],
                 Text(
                   'Settings',
                   style: TextStyle(
