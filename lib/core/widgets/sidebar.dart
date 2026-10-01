@@ -24,7 +24,7 @@ class Sidebar extends ConsumerStatefulWidget {
 }
 
 class _SidebarState extends ConsumerState<Sidebar> {
-  bool _isMoreExpanded = true;
+  bool _isMoreExpanded = false;
 
   Set<String> get _activeToolNames => ref.watch(appUiProvider).activeToolNames;
 
@@ -788,7 +788,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
         bottom: false,
         child: Column(
           children: [
-            const SizedBox(height: 12),
+            const SizedBox(height: 6),
             Expanded(
               child: ListView(
                 padding: EdgeInsets.zero,
@@ -968,46 +968,39 @@ class _SidebarState extends ConsumerState<Sidebar> {
                           ),
                         ],
                         if (!isCollapsed) ...[
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 6),
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(20, 8, 16, 4),
+                            padding: const EdgeInsets.fromLTRB(20, 4, 16, 2),
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Text(
+                                Text(
                                   'LABELS',
                                   style: TextStyle(
                                     fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF2563EB),
+                                    fontWeight: FontWeight.w700,
+                                    color: isDark
+                                        ? Colors.white60
+                                        : const Color(0xFF8DA4C4),
                                     letterSpacing: 1.1,
                                   ),
                                 ),
                                 GestureDetector(
                                   onTap: () => _showCreateLabelDialog(context),
-                                  child: const Icon(
+                                  child: Icon(
                                     Icons.add,
-                                    size: 18,
-                                    color: Color(0xFF2563EB),
+                                    size: 17,
+                                    color: isDark
+                                        ? Colors.white70
+                                        : const Color(0xFF195BAC),
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                          if (customLabels.isEmpty)
-                            _buildDesktopLabelTile(
-                              const LabelModel(
-                                id: 'innewacc',
-                                name: 'Innewacc',
-                                color: Color(0xFFE11D48),
-                              ),
-                              uiState,
-                              isDark,
-                            )
-                          else
-                            ...customLabels.map(
-                              (l) => _buildDesktopLabelTile(l, uiState, isDark),
-                            ),
+                          ...customLabels.map(
+                            (l) => _buildDesktopLabelTile(l, uiState, isDark),
+                          ),
                         ],
                       ],
               ),
@@ -1030,7 +1023,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
               icon: Icons.settings_outlined,
               iconColor: const Color(0xFF195BAC),
               title: 'Settings',
-              isSelected: uiState.activeFolder == 'Settings',
+              isSelected: uiState.activeFolder == 'Settings' || currentRoute == '/settings',
               collapsed: isCollapsed,
               onTap: () => navigateToFolder('Settings', '/settings'),
             ),
@@ -1038,11 +1031,11 @@ class _SidebarState extends ConsumerState<Sidebar> {
               icon: Icons.help_outline_rounded,
               iconColor: const Color(0xFF195BAC),
               title: 'Support & Help',
-              isSelected: uiState.activeFolder == 'Help',
+              isSelected: uiState.activeFolder == 'Help' || currentRoute == '/help',
               collapsed: isCollapsed,
               onTap: () => navigateToFolder('Help', '/help'),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 6),
           ],
         ),
       ),
@@ -1310,10 +1303,16 @@ class _SidebarState extends ConsumerState<Sidebar> {
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     const Color activeColor = Color(0xFF195BAC);
+    // Use tighter sizing on macOS to match the reference UI
+    final bool isMacOS =
+        !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS;
+    final double tileHeight = isMacOS ? 34.0 : 40.0;
+    final double iconSize = isMacOS ? 18.0 : 20.0;
+    final double iconGap = isMacOS ? 12.0 : 16.0;
+    final double fontSize = isMacOS ? 13.0 : 14.0;
+    final double verticalPadding = isMacOS ? 1.0 : 2.0;
 
     // ── Collapsed (icon-only) variant ───────────────────────────────────────
-    // Used when the desktop sidebar is in its 80px-wide collapsed state.
-    // The full pill layout (icon+spacer+text) is 94px and would overflow by 14.
     if (collapsed) {
       return Tooltip(
         message: title,
@@ -1322,7 +1321,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
           onTap: onTap,
           borderRadius: BorderRadius.circular(16),
           child: Container(
-            height: 48,
+            height: tileHeight + 14,
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: isSelected
@@ -1346,24 +1345,18 @@ class _SidebarState extends ConsumerState<Sidebar> {
 
     // ── Expanded variant (default) ───────────────────────────────────────────
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      padding: EdgeInsets.symmetric(horizontal: 12, vertical: verticalPadding),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(24),
         child: Container(
-          height: 40,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          height: tileHeight,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
           decoration: BoxDecoration(
             color: isSelected
-                ? (isDark ? const Color(0xFF1E293B) : const Color(0xFFD6E8FF))
+                ? (isDark ? const Color(0xFF1E293B) : const Color(0xFFD6E8FD))
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(20),
-            border: isSelected
-                ? Border.all(
-                    color: const Color(0xFF195BAC).withValues(alpha: 0.2),
-                    width: 1,
-                  )
-                : null,
           ),
           child: Row(
             children: [
@@ -1374,15 +1367,16 @@ class _SidebarState extends ConsumerState<Sidebar> {
                     (isSelected
                         ? activeColor
                         : (isDark ? Colors.white70 : const Color(0xFF195BAC))),
-                size: 20,
+                size: iconSize,
               ),
-              const SizedBox(width: 16),
+              SizedBox(width: iconGap),
               Expanded(
                 child: Text(
                   title,
                   style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                    fontSize: fontSize,
+                    fontWeight:
+                        isSelected ? FontWeight.bold : FontWeight.w500,
                     color: isSelected
                         ? activeColor
                         : (isDark ? Colors.white : const Color(0xFF195BAC)),
@@ -2475,8 +2469,8 @@ class SidebarStorageCardWidget extends ConsumerWidget {
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
         child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
             color: isDark ? BNXColors.darkSurface : Colors.white,
             borderRadius: BorderRadius.circular(16),

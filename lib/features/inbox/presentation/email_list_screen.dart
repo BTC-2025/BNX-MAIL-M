@@ -950,6 +950,32 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
   }
 
   Widget _buildEmptyState(String folder, bool isDark) {
+    final bool isDesktop =
+        !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.macOS ||
+            defaultTargetPlatform == TargetPlatform.windows);
+    if (isDesktop) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text(
+              '📬',
+              style: TextStyle(fontSize: 44),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Your folder is empty',
+              style: TextStyle(
+                color: isDark ? Colors.white70 : const Color(0xFF64748B),
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -1051,10 +1077,6 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
     bool isDark,
     List<EmailModel> currentEmails,
   ) {
-    final bool allSelected =
-        currentEmails.isNotEmpty &&
-        currentEmails.every((e) => uiState.selectedEmailIds.contains(e.id));
-
     return Container(
       height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1075,7 +1097,7 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
               size: 18,
               color: _isCustomizeTabsOpen
                   ? const Color(0xFF195BAC)
-                  : (isDark ? Colors.white70 : Colors.black87),
+                  : (isDark ? Colors.white70 : const Color(0xFF475569)),
             ),
             tooltip: 'Customize tabs',
             onPressed: () {
@@ -1086,10 +1108,10 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
           IconButton(
             icon: const Icon(Icons.refresh_rounded, size: 20),
-            color: isDark ? Colors.white70 : Colors.black87,
+            color: isDark ? Colors.white70 : const Color(0xFF475569),
             tooltip: 'Refresh',
             onPressed: () {
               ref.read(emailProvider.notifier).loadFolder(uiState.activeFolder);
@@ -1097,31 +1119,7 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
           ),
-          const SizedBox(width: 8),
-          IconButton(
-            icon: Icon(
-              allSelected
-                  ? Icons.check_box_rounded
-                  : Icons.check_box_outline_blank_rounded,
-              size: 19,
-              color: allSelected
-                  ? const Color(0xFF195BAC)
-                  : (isDark ? Colors.white54 : Colors.black54),
-            ),
-            tooltip: 'Select all',
-            onPressed: () {
-              if (allSelected) {
-                ref.read(appUiProvider.notifier).clearSelection();
-              } else {
-                ref
-                    .read(appUiProvider.notifier)
-                    .selectAllEmails(currentEmails.map((e) => e.id).toList());
-              }
-            },
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 14),
           // Enabled tabs list (All, Important, Promotions, Social, etc.)
           ..._allAvailableTabs
               .where((t) => _enabledTabs.contains(t['key']))
@@ -1129,8 +1127,10 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
                 final String key = tab['key'];
                 final String label = tab['label'];
                 final IconData icon = tab['icon'];
-                final Color color = tab['color'];
                 final bool isSelected = _selectedDesktopTab == key;
+                final Color tabColor = isSelected
+                    ? const Color(0xFF195BAC)
+                    : (isDark ? Colors.white70 : const Color(0xFF475569));
 
                 return InkWell(
                   onTap: () {
@@ -1154,7 +1154,7 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
                           color: isSelected
                               ? const Color(0xFF195BAC)
                               : Colors.transparent,
-                          width: 3,
+                          width: 2.5,
                         ),
                       ),
                     ),
@@ -1162,24 +1162,20 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         if (key == 'All') ...[
-                          const Icon(
+                          Icon(
                             Icons.check_box_outlined,
                             size: 16,
-                            color: Color(0xFF195BAC),
+                            color: tabColor,
                           ),
                           const SizedBox(width: 6),
                         ] else ...[
-                          Icon(icon, size: 16, color: color),
+                          Icon(icon, size: 16, color: tabColor),
                           const SizedBox(width: 6),
                         ],
                         Text(
                           label,
                           style: TextStyle(
-                            color: isSelected
-                                ? const Color(0xFF195BAC)
-                                : (isDark
-                                      ? Colors.white70
-                                      : const Color(0xFF475569)),
+                            color: tabColor,
                             fontWeight: isSelected
                                 ? FontWeight.bold
                                 : FontWeight.w500,

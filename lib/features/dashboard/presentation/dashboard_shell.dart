@@ -73,9 +73,11 @@ class DashboardShell extends ConsumerWidget {
                     : BNXConstants.sidebarExpandedWidth));
 
     final bool showRightRail = !isMobile;
-    final bool isRightRailVisible = isDesktopOS
-        ? ref.watch(desktopRightRailVisibleProvider)
-        : showRightRail;
+    final bool isRightRailVisible = (currentRoute == '/help' || currentRoute == '/settings')
+        ? false
+        : (isDesktopOS
+            ? ref.watch(desktopRightRailVisibleProvider)
+            : showRightRail);
     final bool showRightPanel =
         uiState.activeRightUtility != 'none' && !isMobile && screenWidth > 950;
 
@@ -262,19 +264,22 @@ class DashboardShell extends ConsumerWidget {
                                 children: [
                                   Expanded(
                                     child: Container(
-                                      margin: const EdgeInsets.all(8),
+                                      margin: EdgeInsets.zero,
                                       decoration: BoxDecoration(
                                         color: isDark
                                             ? BNXColors.darkSurface
                                             : Colors.white,
-                                        borderRadius: BorderRadius.circular(16),
+                                        borderRadius: const BorderRadius.only(
+                                          topLeft: Radius.circular(20),
+                                          bottomLeft: Radius.circular(20),
+                                        ),
                                         boxShadow: [
                                           BoxShadow(
                                             color: Colors.black.withValues(
-                                              alpha: isDark ? 0.2 : 0.04,
+                                              alpha: isDark ? 0.2 : 0.03,
                                             ),
-                                            blurRadius: 10,
-                                            offset: const Offset(0, 2),
+                                            blurRadius: 6,
+                                            offset: const Offset(-2, 0),
                                           ),
                                         ],
                                       ),
@@ -466,19 +471,21 @@ class DashboardShell extends ConsumerWidget {
       child: Row(
         children: [
           // 1. Logo + Brand
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
+          Container(
+            width: 34,
+            height: 34,
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(9),
+            ),
             child: Image.asset(
-              'assets/logo.jpg',
-              width: 32,
-              height: 32,
-              fit: BoxFit.cover,
+              'assets/bnx_mail_logo.png',
+              fit: BoxFit.contain,
               errorBuilder: (c, e, s) => Container(
-                width: 32,
-                height: 32,
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(9),
                 ),
                 child: const Icon(
                   Icons.mail_rounded,
@@ -698,13 +705,7 @@ class DashboardShell extends ConsumerWidget {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(width: 5),
-                  const Icon(
-                    Icons.check_circle_rounded,
-                    color: Colors.white,
-                    size: 14,
-                  ),
-                  const SizedBox(width: 2),
+                  const SizedBox(width: 4),
                   const Icon(
                     Icons.keyboard_arrow_down_rounded,
                     color: Colors.white70,

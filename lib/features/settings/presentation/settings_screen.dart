@@ -9,6 +9,8 @@ import '../../../core/network/token_service.dart';
 import '../../../data/app_state_provider.dart';
 import '../../../data/account_provider.dart';
 import '../../../data/repositories/user_repository.dart';
+import '../../../data/settings_provider.dart';
+import '../../../models/two_factor_model.dart';
 
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -196,239 +198,240 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    _loadBackendData();
+    // Schedule settings load after the widget tree has fully built.
+    // This prevents the "Tried to modify a provider while the widget tree
+    // was building" exception that occurs when providers are mutated
+    // synchronously during initState/build.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _loadBackendData();
+    });
+  }
+
+  static const Map<String, String> _codeToLangName = {
+    'en': 'English',
+    'ta': 'Tamil',
+    'hi': 'Hindi',
+    'te': 'Telugu',
+    'ml': 'Malayalam',
+    'kn': 'Kannada',
+  };
+
+  static const Map<String, String> _langNameToCode = {
+    'English': 'en',
+    'Tamil': 'ta',
+    'Hindi': 'hi',
+    'Telugu': 'te',
+    'Malayalam': 'ml',
+    'Kannada': 'kn',
+    'Spanish': 'es',
+    'French': 'fr',
+    'German': 'de',
+  };
+
+  String _getLangDisplayName(String? code) {
+    if (code == null) return 'English';
+    return _codeToLangName[code.toLowerCase()] ?? 'English';
+  }
+
+  int _parseUndoDelay(String delayStr) {
+    final match = RegExp(r'\d+').firstMatch(delayStr);
+    if (match != null) {
+      return int.tryParse(match.group(0)!) ?? 0;
+    }
+    return 0;
+  }
+
+  String _formatUndoDelay(int? delay) {
+    if (delay == null || delay <= 0) return 'Disabled (Send instantly)';
+    if (delay == 5) return '5 seconds';
+    if (delay == 10) return '10 seconds';
+    if (delay == 20) return '20 seconds';
+    if (delay == 30) return '30 seconds';
+    return '$delay seconds';
+  }
+
+  String _formatDensity(String? d) {
+    if (d == null) return 'Default';
+    final lower = d.toLowerCase();
+    if (lower == 'spacious') return 'Spacious';
+    if (lower == 'compact') return 'Compact';
+    return 'Default';
+  }
+
+  String _toBackendDensity(String d) {
+    return d.toUpperCase();
+  }
+
+  String _formatReadingPane(String? mode) {
+    if (mode == null) return 'No Split (Full List)';
+    final lower = mode.toLowerCase();
+    if (lower.contains('right')) return 'Right Split (Vertical)';
+    if (lower.contains('bottom')) return 'Bottom Split (Horizontal)';
+    return 'No Split (Full List)';
+  }
+
+  String _toBackendReadingPane(String mode) {
+    final lower = mode.toLowerCase();
+    if (lower.contains('right')) return 'RIGHT';
+    if (lower.contains('bottom')) return 'BOTTOM';
+    return 'OFF';
+  }
+
+  void _syncFromSettingsState(SettingsState state) {
+    // Only sync when state has actually loaded data for the current account.
+    // Null values from the backend remain null — never substitute hardcoded defaults.
+    final s = state.settings;
+    if (s != null) {
+      _inboxMailAlerts = s.inboxNotifications;
+      _sentConfirmationAlerts = s.sentNotifications;
+      _starredEmailsAlerts = s.starredNotifications;
+      _snoozedReminders = s.snoozedNotifications;
+      _playAlertSound = s.soundEnabled;
+      _enableHapticVibration = s.vibrationEnabled;
+      _muteNotificationsSchedule = s.quietHoursEnabled;
+
+      _undoSendDelay = _formatUndoDelay(s.undoSendDelay);
+      _density = _formatDensity(s.density);
+      if (s.accentColor != null && s.accentColor!.isNotEmpty) {
+        _accentColor = s.accentColor!;
+      }
+      if (s.themeMode != null) {
+        if (s.themeMode!.toUpperCase() == 'DARK') {
+          _visualTheme = 'Dark';
+        } else if (s.themeMode!.toUpperCase() == 'LIGHT') {
+          _visualTheme = 'Classic';
+        }
+      }
+      _readingPaneMode = _formatReadingPane(s.readingPaneMode);
+      _enable2FA = s.twoFactorEnabled;
+      _enableBiometrics = s.biometricsEnabled;
+
+      // Sync profile fields only if backend provides non-null values
+      if (s.jobTitle != null && s.jobTitle!.isNotEmpty) {
+        _jobTitleController.text = s.jobTitle!;
+      }
+      if (s.location != null && s.location!.isNotEmpty) {
+        _locationController.text = s.location!;
+      }
+      if (s.phoneNumber != null && s.phoneNumber!.isNotEmpty) {
+        _phoneContactController.text = s.phoneNumber!;
+      }
+    }
+
+    // Nullable fields: use backend value if present, otherwise keep current widget value
+    if (state.currentLanguage != null) {
+      _displayLanguage = _getLangDisplayName(state.currentLanguage);
+    }
+    if (state.spellingCheckEnabled != null) {
+      _enableSpellingCheck = state.spellingCheckEnabled!;
+    }
+    if (state.grammarCheckEnabled != null) {
+      _enableGrammarCheck = state.grammarCheckEnabled!;
+    }
+    if (state.autoCorrectEnabled != null) {
+      _enableAutoCorrect = state.autoCorrectEnabled!;
+    }
+    if (state.smartComposeEnabled != null) {
+      _enableWritingSuggestions = state.smartComposeEnabled!;
+    }
+    if (state.fontFamily != null) {
+      _fontFamily = state.fontFamily!;
+    }
+    if (state.textStyleFontSize != null) {
+      _fontSize = state.textStyleFontSize!;
+    }
+    if (state.wallpaper != null) {
+      _selectedWallpaperUrl = state.wallpaper!;
+      if (_selectedWallpaperUrl.isNotEmpty) {
+        _customWallpaperController.text = _selectedWallpaperUrl;
+      }
+    }
+
+    if (state.signatures.isNotEmpty) {
+      _signatureItems.clear();
+      for (final sig in state.signatures) {
+        _signatureItems.add({
+          'id': sig.id,
+          'name': sig.name,
+          'content': sig.content,
+          'isDefault': sig.isDefault,
+        });
+      }
+      if (_selectedSignatureIndex >= _signatureItems.length) {
+        _selectedSignatureIndex = 0;
+      }
+      _signatureContentController.text =
+          _signatureItems[_selectedSignatureIndex]['content']?.toString() ?? '';
+    } else if (state.isLoaded) {
+      // Backend confirmed empty signature list for this account
+      _signatureItems.clear();
+      _selectedSignatureIndex = 0;
+      _signatureContentController.clear();
+    }
   }
 
   Future<void> _loadBackendData() async {
+    if (!mounted) return;
+    setState(() => _isLoading = true);
     try {
-      // 1. Fetch user profile from API
+      // 1. Trigger settings load in the provider.
+      // This is safe here because we are called from addPostFrameCallback,
+      // after the widget tree has been fully built.
+      await ref.read(settingsProvider.notifier).loadAllSettings(force: true);
+
+      // 2. Sync the now-loaded state into local widget fields
+      if (mounted) {
+        final s = ref.read(settingsProvider);
+        setState(() => _syncFromSettingsState(s));
+      }
+
+      // 3. Fetch user profile from API
       final user = await UserRepository.getProfile();
-      if (user != null) {
-        _recoveryEmailController.text = user.recoveryEmail ?? user.email;
-        if (user.jobTitle != null && user.jobTitle!.isNotEmpty) {
-          _jobTitleController.text = user.jobTitle!;
-        }
-        if (user.location != null && user.location!.isNotEmpty) {
-          _locationController.text = user.location!;
-        }
-        if (user.phone != null && user.phone!.isNotEmpty) {
-          _phoneContactController.text = user.phone!;
-        }
-        if (user.backupPhone != null && user.backupPhone!.isNotEmpty) {
-          _backupPhoneController.text = user.backupPhone!;
-        }
+      if (mounted && user != null) {
+        setState(() {
+          if (user.recoveryEmail != null && user.recoveryEmail!.isNotEmpty) {
+            _recoveryEmailController.text = user.recoveryEmail!;
+          } else if (user.email.isNotEmpty) {
+            _recoveryEmailController.text = user.email;
+          }
+          if (user.jobTitle != null && user.jobTitle!.isNotEmpty) {
+            _jobTitleController.text = user.jobTitle!;
+          }
+          if (user.location != null && user.location!.isNotEmpty) {
+            _locationController.text = user.location!;
+          }
+          if (user.phone != null && user.phone!.isNotEmpty) {
+            _phoneContactController.text = user.phone!;
+          }
+          if (user.backupPhone != null && user.backupPhone!.isNotEmpty) {
+            _backupPhoneController.text = user.backupPhone!;
+          }
+        });
       }
 
-      // 2. Fetch user settings from API
-      final settings = await UserRepository.getSettings();
-      if (settings != null) {
-        if (settings.containsKey('inboxMailAlerts')) {
-          _inboxMailAlerts = settings['inboxMailAlerts'] == true;
-        } else if (settings.containsKey('inboxNotifications')) {
-          _inboxMailAlerts = settings['inboxNotifications'] == true;
-        }
-        if (settings.containsKey('sentConfirmationAlerts')) {
-          _sentConfirmationAlerts = settings['sentConfirmationAlerts'] == true;
-        } else if (settings.containsKey('sentNotifications')) {
-          _sentConfirmationAlerts = settings['sentNotifications'] == true;
-        }
-        if (settings.containsKey('starredEmailsAlerts')) {
-          _starredEmailsAlerts = settings['starredEmailsAlerts'] == true;
-        } else if (settings.containsKey('starredNotifications')) {
-          _starredEmailsAlerts = settings['starredNotifications'] == true;
-        }
-        if (settings.containsKey('snoozedReminders')) {
-          _snoozedReminders = settings['snoozedReminders'] == true;
-        } else if (settings.containsKey('snoozedNotifications')) {
-          _snoozedReminders = settings['snoozedNotifications'] == true;
-        }
-        if (settings.containsKey('playAlertSound')) {
-          _playAlertSound = settings['playAlertSound'] == true;
-        } else if (settings.containsKey('soundEnabled')) {
-          _playAlertSound = settings['soundEnabled'] == true;
-        }
-        if (settings.containsKey('enableHapticVibration')) {
-          _enableHapticVibration = settings['enableHapticVibration'] == true;
-        } else if (settings.containsKey('vibrationEnabled')) {
-          _enableHapticVibration = settings['vibrationEnabled'] == true;
-        }
-        if (settings.containsKey('muteNotificationsSchedule')) {
-          _muteNotificationsSchedule =
-              settings['muteNotificationsSchedule'] == true;
-        } else if (settings.containsKey('quietHoursEnabled')) {
-          _muteNotificationsSchedule = settings['quietHoursEnabled'] == true;
-        }
-        if (settings['undoSendDelay'] != null) {
-          final val = settings['undoSendDelay'];
-          if (val is int) {
-            if (val == 5) {
-              _undoSendDelay = '5 seconds';
-            } else if (val == 10) {
-              _undoSendDelay = '10 seconds';
-            } else if (val == 20) {
-              _undoSendDelay = '20 seconds';
-            } else if (val == 30) {
-              _undoSendDelay = '30 seconds';
-            } else if (val > 0) {
-              _undoSendDelay = '$val seconds';
-            } else {
-              _undoSendDelay = 'Disabled (Send instantly)';
-            }
-          } else {
-            final str = val.toString().toLowerCase().trim();
-            if (str == '5' || str == '5 seconds' || str == '5s') {
-              _undoSendDelay = '5 seconds';
-            } else if (str == '10' || str == '10 seconds' || str == '10s') {
-              _undoSendDelay = '10 seconds';
-            } else if (str == '20' || str == '20 seconds' || str == '20s') {
-              _undoSendDelay = '20 seconds';
-            } else if (str == '30' || str == '30 seconds' || str == '30s') {
-              _undoSendDelay = '30 seconds';
-            } else {
-              _undoSendDelay = 'Disabled (Send instantly)';
-            }
-          }
-        }
-        if (settings['density'] != null) {
-          _density = settings['density'].toString();
-        }
-        if (settings['emailsPerPage'] != null) {
-          _emailsPerPage =
-              int.tryParse(settings['emailsPerPage'].toString()) ?? 20;
-        }
-        if (settings['accentColor'] != null) {
-          _accentColor = settings['accentColor'].toString();
-        }
-        if (settings['fontSize'] != null) {
-          final fs = double.tryParse(settings['fontSize'].toString());
-          if (fs != null && fs > 0) _fontSizeScale = fs;
-        }
-        if (settings['visualTheme'] != null) {
-          _visualTheme = settings['visualTheme'].toString();
-        }
-        if (settings['wallpaper'] != null) {
-          _selectedWallpaperUrl = settings['wallpaper'].toString();
-          _customWallpaperController.text = _selectedWallpaperUrl;
-        }
-        if (settings['readingPaneMode'] != null) {
-          final rpm = settings['readingPaneMode'].toString();
-          if (rpm.toLowerCase().contains('right')) {
-            _readingPaneMode = 'Right Split (Vertical)';
-          } else if (rpm.toLowerCase().contains('bottom')) {
-            _readingPaneMode = 'Bottom Split (Horizontal)';
-          } else {
-            _readingPaneMode = 'No Split (Full List)';
-          }
-        }
-        if (settings.containsKey('twoFactorAuth')) {
-          _enable2FA = settings['twoFactorAuth'] == true;
-        }
-        if (settings.containsKey('enableBiometrics')) {
-          _enableBiometrics = settings['enableBiometrics'] == true;
-        }
-
-        if (settings['signatures'] is List) {
-          final rawList = settings['signatures'] as List;
-          final loadedSigs = <Map<String, dynamic>>[];
-          for (final item in rawList) {
-            if (item is String && item.trim().isNotEmpty) {
-              loadedSigs.add({
-                'name': 'Signature ${loadedSigs.length + 1}',
-                'content': item.trim(),
-                'isDefault': loadedSigs.isEmpty,
-              });
-            } else if (item is Map) {
-              final content =
-                  item['content'] ?? item['name'] ?? item['signature'];
-              if (content != null && content.toString().trim().isNotEmpty) {
-                loadedSigs.add({
-                  'name': item['name']?.toString() ??
-                      'Signature ${loadedSigs.length + 1}',
-                  'content': content.toString().trim(),
-                  'isDefault':
-                      item['isDefault'] == true || loadedSigs.isEmpty,
-                });
-              }
-            }
-          }
-          if (loadedSigs.isNotEmpty) {
-            _signatureItems.clear();
-            _signatureItems.addAll(loadedSigs);
-            _selectedSignatureIndex = 0;
-            _signatureContentController.text =
-                _signatureItems[0]['content']?.toString() ?? '';
-          }
-        }
-        if (settings['jobTitle'] != null) {
-          _jobTitleController.text = settings['jobTitle'].toString();
-        }
-        if (settings['location'] != null) {
-          _locationController.text = settings['location'].toString();
-        }
-        if (settings['phone'] != null) {
-          _phoneContactController.text = settings['phone'].toString();
-        }
-        if (settings['backupPhone'] != null) {
-          _backupPhoneController.text = settings['backupPhone'].toString();
-        }
-        if (settings['recoveryEmail'] != null &&
-            settings['recoveryEmail'].toString().isNotEmpty) {
-          _recoveryEmailController.text = settings['recoveryEmail'].toString();
-        }
-        if (settings['sidebarLabels'] is Map) {
-          final map = Map<String, dynamic>.from(settings['sidebarLabels']);
-          map.forEach((key, val) {
-            _sidebarLabels[key] = val == true;
-          });
-          ref.read(appUiProvider.notifier).setSidebarLabels(_sidebarLabels);
-        }
-      }
-
-      // 3. Fetch recovery details from GET /api/users/recovery
+      // 4. Fetch recovery details from GET /api/users/recovery
       final recovery = await UserRepository.getRecovery();
-      if (recovery != null) {
-        if (recovery['recoveryEmail'] != null &&
-            recovery['recoveryEmail'].toString().isNotEmpty) {
-          _recoveryEmailController.text = recovery['recoveryEmail'].toString();
-        }
-        if (recovery['phoneNumber'] != null &&
-            recovery['phoneNumber'].toString().isNotEmpty) {
-          _backupPhoneController.text = recovery['phoneNumber'].toString();
-        }
-      }
-
-      // 4. Fetch signatures from GET /api/signatures
-      final sigs = await UserRepository.getSignatures();
-      if (sigs.isNotEmpty) {
-        final fetchedSigs = <Map<String, dynamic>>[];
-        for (final s in sigs) {
-          final content =
-              s['content']?.toString() ?? s['name']?.toString() ?? '';
-          if (content.isNotEmpty) {
-            fetchedSigs.add({
-              'name': s['name']?.toString() ??
-                  'Signature ${fetchedSigs.length + 1}',
-              'content': content,
-              'isDefault': s['isDefault'] == true || fetchedSigs.isEmpty,
-            });
+      if (mounted && recovery != null) {
+        setState(() {
+          if (recovery['recoveryEmail'] != null &&
+              recovery['recoveryEmail'].toString().isNotEmpty) {
+            _recoveryEmailController.text = recovery['recoveryEmail'].toString();
           }
-        }
-        if (fetchedSigs.isNotEmpty) {
-          _signatureItems.clear();
-          _signatureItems.addAll(fetchedSigs);
-          _selectedSignatureIndex = 0;
-          _signatureContentController.text =
-              _signatureItems[0]['content']?.toString() ?? '';
-        }
+          if (recovery['phoneNumber'] != null &&
+              recovery['phoneNumber'].toString().isNotEmpty) {
+            _backupPhoneController.text = recovery['phoneNumber'].toString();
+          }
+        });
       }
 
-      // 5. Fetch active sessions / activity logs from GET /api/users/activity-logs
+      // 5. Fetch active sessions from GET /api/users/activity-logs
       final sessions = await UserRepository.getSessions();
-      if (sessions.isNotEmpty) {
-        _activeDeviceSessions = sessions;
+      if (mounted && sessions.isNotEmpty) {
+        setState(() => _activeDeviceSessions = sessions);
       }
     } catch (e) {
-      print('[SETTINGS SYNC LOG] Loaded defaults: $e');
+      print('[SETTINGS] _loadBackendData error: $e');
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -491,12 +494,45 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Listen to settings state changes (e.g. after API success) and sync to UI.
+    // ref.listen in build() is the correct Riverpod pattern for ConsumerStatefulWidget.
+    ref.listen<SettingsState>(settingsProvider, (previous, next) {
+      if (!mounted) return;
+      // Only sync if we received new loaded data (prevents double-sync during loading)
+      if (next.isLoaded && previous?.accountEmail != next.accountEmail) {
+        // Account changed — full resync
+        setState(() => _syncFromSettingsState(next));
+      } else if (next.isLoaded && !(previous?.isLoaded ?? false)) {
+        // Transition from loading → loaded
+        setState(() => _syncFromSettingsState(next));
+      } else if (next.isLoaded) {
+        // Incremental update (e.g. after PATCH)
+        setState(() => _syncFromSettingsState(next));
+      }
+    });
+
+    // Listen to active account changes and reload settings for the new account.
+    ref.listen(activeAccountProvider, (previous, next) {
+      final prevEmail = previous?.email.trim().toLowerCase() ?? '';
+      final nextEmail = next.email.trim().toLowerCase();
+      if (prevEmail != nextEmail && nextEmail.isNotEmpty) {
+        print('[SETTINGS] Screen detected account change: $prevEmail → $nextEmail');
+        // Settings provider is already invalidated by AccountsNotifier.switchAccount.
+        // Trigger a fresh load for the new account after the current frame.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _loadBackendData();
+        });
+      }
+    });
+
     final uiState = ref.watch(appUiProvider);
     final isDark = uiState.isDarkMode;
     final activeAccount = ref.watch(activeAccountProvider);
-    final userEmail = (activeAccount.email.isNotEmpty)
+    // Use the actual authenticated account email — no hardcoded fallback
+    final userEmail = activeAccount.email.isNotEmpty
         ? activeAccount.email
-        : 'ravinew2004@bnxmail.com';
+        : '';
 
     final categories = [
       {'title': 'Accounts & Mailboxes', 'icon': Icons.email_outlined},
@@ -719,9 +755,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ? activeAccount.email
         : (userEmail.isNotEmpty ? userEmail : 'ravinew2004@bnxmail.com');
 
-    final username = displayEmail.contains('@')
-        ? displayEmail.split('@').first
-        : 'ravinew2004';
+    final username = activeAccount.name.isNotEmpty
+        ? activeAccount.name
+        : (displayEmail.contains('@')
+            ? displayEmail.split('@').first
+            : 'ravinew2004');
     final initialLetter =
         displayEmail.isNotEmpty ? displayEmail[0].toUpperCase() : 'R';
 
@@ -2168,6 +2206,315 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     });
   }
 
+  // ── Modal Dialog: 2FA Setup & Verification ─────────────────────────────
+  void _show2FASetupDialog(
+      BuildContext context, bool isDark, TwoFactorSetupData data) {
+    final controllers = List.generate(6, (_) => TextEditingController());
+    final focusNodes = List.generate(6, (_) => FocusNode());
+    bool isVerifying = false;
+    String? errorMessage;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return Dialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 24,
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 460),
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.security_rounded,
+                              color: Color(0xFF155EEF),
+                              size: 24,
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              'Set Up 2-Factor Auth',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                                color: isDark
+                                    ? Colors.white
+                                    : const Color(0xFF0F172A),
+                              ),
+                            ),
+                            const Spacer(),
+                            InkWell(
+                              onTap: () => Navigator.pop(dialogCtx),
+                              borderRadius: BorderRadius.circular(20),
+                              child: const Padding(
+                                padding: EdgeInsets.all(4.0),
+                                child: Icon(
+                                  Icons.close_rounded,
+                                  color: Colors.grey,
+                                  size: 22,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        Divider(
+                          height: 24,
+                          color: isDark
+                              ? Colors.white10
+                              : const Color(0xFFF1F5F9),
+                        ),
+                        Text(
+                          'Add your BNX Mail account to an authenticator app (such as Google Authenticator, Authy, or 1Password) using the secret key below:',
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            color: isDark
+                                ? Colors.white70
+                                : const Color(0xFF475569),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+
+                        // Secret Key Box
+                        if (data.secret != null && data.secret!.isNotEmpty) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? const Color(0xFF0F172A)
+                                  : const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: isDark
+                                    ? Colors.white12
+                                    : const Color(0xFFCBD5E1),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: SelectableText(
+                                    data.secret!,
+                                    style: const TextStyle(
+                                      fontFamily: 'monospace',
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 1.2,
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.copy_rounded,
+                                      size: 18, color: Color(0xFF155EEF)),
+                                  tooltip: 'Copy Key',
+                                  onPressed: () {
+                                    Clipboard.setData(
+                                        ClipboardData(text: data.secret!));
+                                    _showSnackBar(
+                                        'Secret key copied to clipboard');
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                        ],
+
+                        Text(
+                          'Enter the 6-digit verification code from your authenticator app:',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: isDark
+                                ? Colors.white70
+                                : const Color(0xFF1E293B),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+
+                        // 6-digit OTP Input Boxes
+                        Center(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: List.generate(6, (i) {
+                                return Container(
+                                  width: 48,
+                                  height: 56,
+                                  margin: EdgeInsets.only(
+                                    right: i < 5 ? 10 : 0,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? const Color(0xFF0F172A)
+                                        : const Color(0xFFF8FAFC),
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: focusNodes[i].hasFocus
+                                          ? const Color(0xFF155EEF)
+                                          : (isDark
+                                              ? Colors.white12
+                                              : const Color(0xFFE2E8F0)),
+                                      width: focusNodes[i].hasFocus ? 2.0 : 1.2,
+                                    ),
+                                  ),
+                                  child: Center(
+                                    child: TextField(
+                                      controller: controllers[i],
+                                      focusNode: focusNodes[i],
+                                      keyboardType: TextInputType.number,
+                                      textAlign: TextAlign.center,
+                                      maxLength: 1,
+                                      style: TextStyle(
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.bold,
+                                        color: isDark
+                                            ? Colors.white
+                                            : const Color(0xFF0F172A),
+                                      ),
+                                      inputFormatters: [
+                                        FilteringTextInputFormatter.digitsOnly,
+                                      ],
+                                      decoration: const InputDecoration(
+                                        counterText: '',
+                                        border: InputBorder.none,
+                                        isDense: true,
+                                        contentPadding: EdgeInsets.zero,
+                                      ),
+                                      onChanged: (val) {
+                                        if (val.isNotEmpty && i < 5) {
+                                          focusNodes[i + 1].requestFocus();
+                                        } else if (val.isEmpty && i > 0) {
+                                          focusNodes[i - 1].requestFocus();
+                                        }
+                                        setDialogState(() {
+                                          errorMessage = null;
+                                        });
+                                      },
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ),
+                          ),
+                        ),
+
+                        if (errorMessage != null) ...[
+                          const SizedBox(height: 12),
+                          Text(
+                            errorMessage!,
+                            style: const TextStyle(
+                              color: Colors.red,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+
+                        const SizedBox(height: 24),
+
+                        // Verify & Enable Button
+                        SizedBox(
+                          width: double.infinity,
+                          height: 48,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF155EEF),
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(24),
+                              ),
+                            ),
+                            onPressed: isVerifying
+                                ? null
+                                : () async {
+                                    final code = controllers
+                                        .map((c) => c.text)
+                                        .join();
+                                    if (code.length < 6) {
+                                      setDialogState(() {
+                                        errorMessage =
+                                            'Please enter the full 6-digit code';
+                                      });
+                                      return;
+                                    }
+                                    setDialogState(() {
+                                      isVerifying = true;
+                                      errorMessage = null;
+                                    });
+
+                                    final res = await ref
+                                        .read(settingsProvider.notifier)
+                                        .verify2FA(code);
+                                    if (res.success) {
+                                      if (dialogCtx.mounted) {
+                                        Navigator.pop(dialogCtx);
+                                      }
+                                      setState(() => _enable2FA = true);
+                                      _showSnackBar(
+                                        'Two-factor authentication verified and enabled!',
+                                      );
+                                    } else {
+                                      setDialogState(() {
+                                        isVerifying = false;
+                                        errorMessage = res.message ??
+                                            'Verification failed. Please check the code.';
+                                      });
+                                    }
+                                  },
+                            child: isVerifying
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Text(
+                                    'Verify & Enable',
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    ).then((_) {
+      for (final c in controllers) {
+        c.dispose();
+      }
+      for (final f in focusNodes) {
+        f.dispose();
+      }
+    });
+  }
+
 
   // ── 2. General & Composing Tab ────────────────────────────────────────────
   Widget _buildGeneralComposingTab(bool isDark) {
@@ -2215,10 +2562,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               child: DropdownButton<String>(
                 value: const [
                   'English',
+                  'Tamil',
+                  'Hindi',
+                  'Telugu',
+                  'Malayalam',
+                  'Kannada',
                   'Spanish',
                   'French',
                   'German',
-                  'Hindi',
                 ].contains(_displayLanguage)
                     ? _displayLanguage
                     : 'English',
@@ -2230,13 +2581,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
                 items: const [
                   DropdownMenuItem(value: 'English', child: Text('English')),
+                  DropdownMenuItem(value: 'Tamil', child: Text('Tamil')),
+                  DropdownMenuItem(value: 'Hindi', child: Text('Hindi')),
+                  DropdownMenuItem(value: 'Telugu', child: Text('Telugu')),
+                  DropdownMenuItem(value: 'Malayalam', child: Text('Malayalam')),
+                  DropdownMenuItem(value: 'Kannada', child: Text('Kannada')),
                   DropdownMenuItem(value: 'Spanish', child: Text('Spanish')),
                   DropdownMenuItem(value: 'French', child: Text('French')),
                   DropdownMenuItem(value: 'German', child: Text('German')),
-                  DropdownMenuItem(value: 'Hindi', child: Text('Hindi')),
                 ],
-                onChanged: (v) {
-                  if (v != null) setState(() => _displayLanguage = v);
+                onChanged: (v) async {
+                  if (v != null) {
+                    setState(() => _displayLanguage = v);
+                    final code = _langNameToCode[v] ?? 'en';
+                    final res = await ref.read(settingsProvider.notifier).updateLanguage(code);
+                    if (res.success) {
+                      _showSnackBar('Language updated to $v');
+                    } else {
+                      _showSnackBar(res.message ?? 'Failed to update language', isError: true);
+                    }
+                  }
                 },
               ),
             ),
@@ -2258,25 +2622,57 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _buildSecurityToggleRow(
             title: 'Enable Spelling Check',
             value: _enableSpellingCheck,
-            onChanged: (v) => setState(() => _enableSpellingCheck = v),
+            onChanged: (v) async {
+              setState(() => _enableSpellingCheck = v);
+              await ref.read(settingsProvider.notifier).updateComposing(
+                spellingCheckEnabled: v,
+                grammarCheckEnabled: _enableGrammarCheck,
+                autoCorrectEnabled: _enableAutoCorrect,
+                smartComposeEnabled: _enableWritingSuggestions,
+              );
+            },
             isDark: isDark,
           ),
           _buildSecurityToggleRow(
             title: 'Enable Grammar Check',
             value: _enableGrammarCheck,
-            onChanged: (v) => setState(() => _enableGrammarCheck = v),
+            onChanged: (v) async {
+              setState(() => _enableGrammarCheck = v);
+              await ref.read(settingsProvider.notifier).updateComposing(
+                spellingCheckEnabled: _enableSpellingCheck,
+                grammarCheckEnabled: v,
+                autoCorrectEnabled: _enableAutoCorrect,
+                smartComposeEnabled: _enableWritingSuggestions,
+              );
+            },
             isDark: isDark,
           ),
           _buildSecurityToggleRow(
             title: 'Enable Auto-correct',
             value: _enableAutoCorrect,
-            onChanged: (v) => setState(() => _enableAutoCorrect = v),
+            onChanged: (v) async {
+              setState(() => _enableAutoCorrect = v);
+              await ref.read(settingsProvider.notifier).updateComposing(
+                spellingCheckEnabled: _enableSpellingCheck,
+                grammarCheckEnabled: _enableGrammarCheck,
+                autoCorrectEnabled: v,
+                smartComposeEnabled: _enableWritingSuggestions,
+              );
+            },
             isDark: isDark,
           ),
           _buildSecurityToggleRow(
             title: 'Enable Writing Suggestions (Smart Compose)',
             value: _enableWritingSuggestions,
-            onChanged: (v) => setState(() => _enableWritingSuggestions = v),
+            onChanged: (v) async {
+              setState(() => _enableWritingSuggestions = v);
+              await ref.read(settingsProvider.notifier).updateComposing(
+                spellingCheckEnabled: _enableSpellingCheck,
+                grammarCheckEnabled: _enableGrammarCheck,
+                autoCorrectEnabled: _enableAutoCorrect,
+                smartComposeEnabled: v,
+              );
+            },
             isDark: isDark,
           ),
           Divider(
@@ -2339,7 +2735,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     )
                     .toList(),
                 onChanged: (v) {
-                  if (v != null) setState(() => _undoSendDelay = v);
+                  if (v != null) {
+                    setState(() => _undoSendDelay = v);
+                    final seconds = _parseUndoDelay(v);
+                    ref
+                        .read(settingsProvider.notifier)
+                        .updateGeneralSettings({'undoSendDelay': seconds});
+                  }
                 },
               ),
             ),
@@ -2427,7 +2829,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               child: Text('Courier New')),
                         ],
                         onChanged: (v) {
-                          if (v != null) setState(() => _fontFamily = v);
+                          if (v != null) {
+                            setState(() => _fontFamily = v);
+                            ref.read(settingsProvider.notifier).updateTextStyle(
+                                  fontFamily: v,
+                                  fontSize: _fontSize,
+                                );
+                          }
                         },
                       ),
                     ),
@@ -2473,7 +2881,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               value: 'Huge', child: Text('Huge')),
                         ],
                         onChanged: (v) {
-                          if (v != null) setState(() => _fontSize = v);
+                          if (v != null) {
+                            setState(() => _fontSize = v);
+                            ref.read(settingsProvider.notifier).updateTextStyle(
+                                  fontFamily: _fontFamily,
+                                  fontSize: v,
+                                );
+                          }
                         },
                       ),
                     ),
@@ -2585,16 +2999,38 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     vertical: 6,
                   ),
                 ),
-                onPressed: () {
-                  setState(() {
-                    _signatureItems.add({
-                      'name': 'New Signature',
-                      'content': '',
-                      'isDefault': _signatureItems.isEmpty,
+                onPressed: () async {
+                  final newName = 'Signature ${_signatureItems.length + 1}';
+                  final res = await ref
+                      .read(settingsProvider.notifier)
+                      .createSignature(
+                        name: newName,
+                        content: '',
+                        isDefault: _signatureItems.isEmpty,
+                      );
+                  if (res.success && res.signature != null) {
+                    setState(() {
+                      _signatureItems.add({
+                        'id': res.signature!.id,
+                        'name': res.signature!.name,
+                        'content': res.signature!.content,
+                        'isDefault': res.signature!.isDefault,
+                      });
+                      _selectedSignatureIndex = _signatureItems.length - 1;
+                      _signatureContentController.text = '';
                     });
-                    _selectedSignatureIndex = _signatureItems.length - 1;
-                    _signatureContentController.text = '';
-                  });
+                    _showSnackBar('New signature created');
+                  } else {
+                    setState(() {
+                      _signatureItems.add({
+                        'name': newName,
+                        'content': '',
+                        'isDefault': _signatureItems.isEmpty,
+                      });
+                      _selectedSignatureIndex = _signatureItems.length - 1;
+                      _signatureContentController.text = '';
+                    });
+                  }
                 },
                 child: const Text(
                   '+ Add Signature',
@@ -2737,27 +3173,111 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         ),
                         Row(
                           children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFDCFCE7),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Text(
-                                'Default ✓',
-                                style: TextStyle(
-                                  color: Color(0xFF15803D),
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 11.5,
+                            InkWell(
+                              onTap: () async {
+                                if (_selectedSignatureIndex < 0 ||
+                                    _selectedSignatureIndex >=
+                                        _signatureItems.length) {
+                                  return;
+                                }
+                                final sig =
+                                    _signatureItems[_selectedSignatureIndex];
+                                final id = sig['id']?.toString();
+                                if (id != null && id.isNotEmpty) {
+                                  final res = await ref
+                                      .read(settingsProvider.notifier)
+                                      .setDefaultSignature(id);
+                                  if (res.success) {
+                                    setState(() {
+                                      for (var s in _signatureItems) {
+                                        s['isDefault'] = (s['id'] == id);
+                                      }
+                                    });
+                                    _showSnackBar('Default signature updated');
+                                  } else {
+                                    _showSnackBar(res.message ??
+                                        'Failed to set default signature');
+                                  }
+                                } else {
+                                  setState(() {
+                                    for (int i = 0;
+                                        i < _signatureItems.length;
+                                        i++) {
+                                      _signatureItems[i]['isDefault'] =
+                                          (i == _selectedSignatureIndex);
+                                    }
+                                  });
+                                }
+                              },
+                              borderRadius: BorderRadius.circular(12),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: (_selectedSignatureIndex >= 0 &&
+                                          _selectedSignatureIndex <
+                                              _signatureItems.length &&
+                                          _signatureItems[
+                                                  _selectedSignatureIndex]
+                                              ['isDefault'] ==
+                                              true)
+                                      ? const Color(0xFFDCFCE7)
+                                      : (isDark
+                                          ? Colors.white12
+                                          : const Color(0xFFF1F5F9)),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  (_selectedSignatureIndex >= 0 &&
+                                          _selectedSignatureIndex <
+                                              _signatureItems.length &&
+                                          _signatureItems[
+                                                  _selectedSignatureIndex]
+                                              ['isDefault'] ==
+                                              true)
+                                      ? 'Default ✓'
+                                      : 'Set Default',
+                                  style: TextStyle(
+                                    color: (_selectedSignatureIndex >= 0 &&
+                                            _selectedSignatureIndex <
+                                                _signatureItems.length &&
+                                            _signatureItems[
+                                                    _selectedSignatureIndex]
+                                                ['isDefault'] ==
+                                                true)
+                                        ? const Color(0xFF15803D)
+                                        : (isDark
+                                            ? Colors.white70
+                                            : const Color(0xFF475569)),
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 11.5,
+                                  ),
                                 ),
                               ),
                             ),
                             const SizedBox(width: 10),
                             InkWell(
-                              onTap: () {
+                              onTap: () async {
+                                if (_selectedSignatureIndex < 0 ||
+                                    _selectedSignatureIndex >=
+                                        _signatureItems.length) {
+                                  return;
+                                }
+                                final sig =
+                                    _signatureItems[_selectedSignatureIndex];
+                                final id = sig['id']?.toString();
+                                if (id != null && id.isNotEmpty) {
+                                  final res = await ref
+                                      .read(settingsProvider.notifier)
+                                      .deleteSignature(id);
+                                  if (!res.success) {
+                                    _showSnackBar(res.message ??
+                                        'Failed to delete signature');
+                                    return;
+                                  }
+                                }
                                 setState(() {
                                   _signatureItems.removeAt(
                                     _selectedSignatureIndex,
@@ -2772,8 +3292,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                         _signatureItems[_selectedSignatureIndex]
                                                 ['content'] ??
                                             '';
+                                  } else {
+                                    _signatureContentController.text = '';
                                   }
                                 });
+                                _showSnackBar('Signature deleted');
                               },
                               borderRadius: BorderRadius.circular(20),
                               child: Padding(
@@ -2947,21 +3470,52 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ),
             onPressed: () async {
-              try {
-                int delaySeconds = 0;
-                final match = RegExp(r'\d+').firstMatch(_undoSendDelay);
-                if (match != null) {
-                  delaySeconds = int.tryParse(match.group(0)!) ?? 0;
+              final seconds = _parseUndoDelay(_undoSendDelay);
+              await ref
+                  .read(settingsProvider.notifier)
+                  .updateGeneralSettings({'undoSendDelay': seconds});
+
+              if (_selectedSignatureIndex >= 0 &&
+                  _selectedSignatureIndex < _signatureItems.length) {
+                final currentSig = _signatureItems[_selectedSignatureIndex];
+                final sigId = currentSig['id']?.toString();
+                final sigContent = _signatureContentController.text;
+                final sigName = currentSig['name']?.toString() ?? 'Default';
+                final sigIsDefault = currentSig['isDefault'] == true;
+
+                if (sigId != null && sigId.isNotEmpty) {
+                  await ref.read(settingsProvider.notifier).updateSignature(
+                        id: sigId,
+                        name: sigName,
+                        content: sigContent,
+                        isDefault: sigIsDefault,
+                      );
+                } else if (sigContent.isNotEmpty || sigName.isNotEmpty) {
+                  final created = await ref
+                      .read(settingsProvider.notifier)
+                      .createSignature(
+                        name: sigName,
+                        content: sigContent,
+                        isDefault: sigIsDefault,
+                      );
+                  if (created.signature != null) {
+                    currentSig['id'] = created.signature!.id;
+                  }
                 }
-                final sigsToSave = _signatureItems
-                    .map((s) => s['content']?.toString() ?? '')
-                    .where((s) => s.isNotEmpty)
-                    .toList();
-                await UserRepository.updateSettings({
-                  'undoSendDelay': delaySeconds,
-                  'signatures': sigsToSave,
-                });
-              } catch (_) {}
+              }
+
+              await ref.read(settingsProvider.notifier).updateTextStyle(
+                    fontFamily: _fontFamily,
+                    fontSize: _fontSize,
+                  );
+
+              await ref.read(settingsProvider.notifier).updateComposing(
+                    spellingCheckEnabled: _enableSpellingCheck,
+                    grammarCheckEnabled: _enableGrammarCheck,
+                    autoCorrectEnabled: _enableAutoCorrect,
+                    smartComposeEnabled: _enableWritingSuggestions,
+                  );
+
               _showSnackBar('Preferences saved successfully!');
             },
             child: const Text(
@@ -3162,26 +3716,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ),
             onPressed: () async {
-              try {
-                await UserRepository.updateSettings({
-                  'inboxMailAlerts': _inboxMailAlerts,
-                  'inboxNotifications': _inboxMailAlerts,
-                  'sentConfirmationAlerts': _sentConfirmationAlerts,
-                  'sentNotifications': _sentConfirmationAlerts,
-                  'starredEmailsAlerts': _starredEmailsAlerts,
-                  'starredNotifications': _starredEmailsAlerts,
-                  'snoozedReminders': _snoozedReminders,
-                  'snoozedNotifications': _snoozedReminders,
-                  'playAlertSound': _playAlertSound,
-                  'soundEnabled': _playAlertSound,
-                  'enableHapticVibration': _enableHapticVibration,
-                  'vibrationEnabled': _enableHapticVibration,
-                  'muteNotificationsSchedule': _muteNotificationsSchedule,
-                  'quietHoursEnabled': _muteNotificationsSchedule,
-                });
+              final res = await ref
+                  .read(settingsProvider.notifier)
+                  .updateGeneralSettings({
+                'inboxNotifications': _inboxMailAlerts,
+                'inboxMailAlerts': _inboxMailAlerts,
+                'sentNotifications': _sentConfirmationAlerts,
+                'sentConfirmationAlerts': _sentConfirmationAlerts,
+                'starredNotifications': _starredEmailsAlerts,
+                'starredEmailsAlerts': _starredEmailsAlerts,
+                'snoozedNotifications': _snoozedReminders,
+                'snoozedReminders': _snoozedReminders,
+                'soundEnabled': _playAlertSound,
+                'playAlertSound': _playAlertSound,
+                'vibrationEnabled': _enableHapticVibration,
+                'enableHapticVibration': _enableHapticVibration,
+                'quietHoursEnabled': _muteNotificationsSchedule,
+                'muteNotificationsSchedule': _muteNotificationsSchedule,
+              });
+              if (res.success) {
                 _showSnackBar('Notification settings saved successfully!');
-              } catch (_) {
-                _showSnackBar('Notification settings saved.');
+              } else {
+                _showSnackBar(
+                  res.message ?? 'Failed to save notification settings',
+                );
               }
             },
             child: const Text(
@@ -3293,7 +3851,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               if (constraints.maxWidth >= 450) {
                 return Row(
                   children: densityOptions.map((d) {
-                    final isSelected = _density.toLowerCase() == d.toLowerCase();
+                    final isSelected =
+                        _density.toLowerCase() == d.toLowerCase();
                     return Expanded(
                       child: Padding(
                         padding: EdgeInsets.only(
@@ -3303,7 +3862,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           label: d,
                           isSelected: isSelected,
                           isDark: isDark,
-                          onTap: () => setState(() => _density = d),
+                          onTap: () {
+                            setState(() => _density = d);
+                            ref
+                                .read(settingsProvider.notifier)
+                                .updateGeneralSettings(
+                                    {'density': _toBackendDensity(d)});
+                          },
                         ),
                       ),
                     );
@@ -3314,14 +3879,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   spacing: 8,
                   runSpacing: 8,
                   children: densityOptions.map((d) {
-                    final isSelected = _density.toLowerCase() == d.toLowerCase();
+                    final isSelected =
+                        _density.toLowerCase() == d.toLowerCase();
                     return SizedBox(
                       width: (constraints.maxWidth - 16) / 3,
                       child: _buildPillButton(
                         label: d,
                         isSelected: isSelected,
                         isDark: isDark,
-                        onTap: () => setState(() => _density = d),
+                        onTap: () {
+                          setState(() => _density = d);
+                          ref
+                              .read(settingsProvider.notifier)
+                              .updateGeneralSettings(
+                                  {'density': _toBackendDensity(d)});
+                        },
                       ),
                     );
                   }).toList(),
@@ -3411,7 +3983,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               final isSelected = _accentColor.toLowerCase() == hex.toLowerCase();
               final color = Color(int.parse(hex.replaceFirst('#', '0xFF')));
               return GestureDetector(
-                onTap: () => setState(() => _accentColor = hex),
+                onTap: () {
+                  setState(() => _accentColor = hex);
+                  ref
+                      .read(settingsProvider.notifier)
+                      .updateGeneralSettings({'accentColor': hex});
+                },
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   width: isSelected ? 36 : 28,
@@ -3550,6 +4127,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         : null,
                     onTap: () {
                       setState(() => _visualTheme = name);
+                      final isDarkMode = name.toUpperCase() == 'DARK';
+                      ref
+                          .read(settingsProvider.notifier)
+                          .updateGeneralSettings({
+                        'themeMode': isDarkMode ? 'DARK' : 'LIGHT',
+                        'visualTheme': name,
+                      });
                       if (name == 'Dark' && !isDark) {
                         ref.read(appUiProvider.notifier).toggleDarkMode();
                       } else if (name == 'Classic' && isDark) {
@@ -3659,6 +4243,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       _selectedWallpaperUrl = url;
                       _customWallpaperController.text = url;
                     });
+                    ref.read(settingsProvider.notifier).updateWallpaper(url);
                   },
                   child: Container(
                     margin: const EdgeInsets.only(right: 14),
@@ -3800,6 +4385,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   final text = _customWallpaperController.text.trim();
                   if (text.isNotEmpty) {
                     setState(() => _selectedWallpaperUrl = text);
+                    ref.read(settingsProvider.notifier).updateWallpaper(text);
                   }
                 },
                 child: const Text(
@@ -3861,6 +4447,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     _selectedWallpaperUrl = '';
                     _customWallpaperController.clear();
                   });
+                  ref.read(settingsProvider.notifier).resetWallpaper();
                 },
               ),
             ],
@@ -3921,7 +4508,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   );
                 }).toList(),
                 onChanged: (v) {
-                  if (v != null) setState(() => _readingPaneMode = v);
+                  if (v != null) {
+                    setState(() => _readingPaneMode = v);
+                    ref.read(settingsProvider.notifier).updateGeneralSettings({
+                      'readingPaneMode': _toBackendReadingPane(v),
+                    });
+                  }
                 },
               ),
             ),
@@ -3951,19 +4543,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ),
             onPressed: () async {
-              try {
-                await UserRepository.updateSettings({
-                  'density': _density,
-                  'emailsPerPage': _emailsPerPage,
-                  'accentColor': _accentColor,
-                  'fontSize': _fontSizeScale,
-                  'visualTheme': _visualTheme,
-                  'wallpaper': _selectedWallpaperUrl,
-                  'readingPaneMode': _readingPaneMode,
-                });
+              final res = await ref
+                  .read(settingsProvider.notifier)
+                  .updateGeneralSettings({
+                'density': _toBackendDensity(_density),
+                'emailsPerPage': _emailsPerPage,
+                'accentColor': _accentColor,
+                'fontSize': _fontSizeScale,
+                'visualTheme': _visualTheme,
+                'themeMode':
+                    _visualTheme.toUpperCase() == 'DARK' ? 'DARK' : 'LIGHT',
+                'readingPaneMode': _toBackendReadingPane(_readingPaneMode),
+                'wallpaper': _selectedWallpaperUrl,
+              });
+              if (_selectedWallpaperUrl.isNotEmpty) {
+                await ref
+                    .read(settingsProvider.notifier)
+                    .updateWallpaper(_selectedWallpaperUrl);
+              } else {
+                await ref.read(settingsProvider.notifier).resetWallpaper();
+              }
+              if (res.success) {
                 _showSnackBar('Layout settings saved successfully!');
-              } catch (_) {
-                _showSnackBar('Layout settings saved.');
+              } else {
+                _showSnackBar(res.message ?? 'Failed to save layout settings');
               }
             },
             child: const Text(
@@ -4143,7 +4746,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               Switch(
                 value: _enable2FA,
-                onChanged: (v) => setState(() => _enable2FA = v),
+                onChanged: (v) async {
+                  if (v) {
+                    if (_enable2FA) return;
+                    _showSnackBar('Initializing 2FA setup...');
+                    final res =
+                        await ref.read(settingsProvider.notifier).setup2FA();
+                    if (res.success && res.data != null) {
+                      if (mounted) {
+                        _show2FASetupDialog(context, isDark, res.data!);
+                      }
+                    } else {
+                      _showSnackBar(res.message ??
+                          'Failed to initialize 2FA. Please try again.');
+                    }
+                  } else {
+                    _showSnackBar(
+                      'Disabling Two-Factor Authentication is currently not supported by the backend.',
+                    );
+                  }
+                },
                 activeThumbColor: const Color(0xFF155EEF),
                 activeTrackColor:
                     const Color(0xFF155EEF).withValues(alpha: 0.35),
@@ -4166,7 +4788,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               Switch(
                 value: _enableBiometrics,
-                onChanged: (v) => setState(() => _enableBiometrics = v),
+                onChanged: (v) {
+                  setState(() => _enableBiometrics = v);
+                  ref.read(settingsProvider.notifier).updateGeneralSettings({
+                    'biometricsEnabled': v,
+                  });
+                },
                 activeThumbColor: const Color(0xFF155EEF),
                 activeTrackColor:
                     const Color(0xFF155EEF).withValues(alpha: 0.35),
@@ -4194,13 +4821,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   'location': _locationController.text,
                   'phone': _phoneContactController.text,
                 });
-                await UserRepository.updateSettings({
-                  'twoFactorAuth': _enable2FA,
-                  'enableBiometrics': _enableBiometrics,
-                });
+              } catch (_) {}
+
+              final res = await ref
+                  .read(settingsProvider.notifier)
+                  .updateGeneralSettings({
+                'jobTitle': _jobTitleController.text,
+                'location': _locationController.text,
+                'phoneNumber': _phoneContactController.text,
+                'biometricsEnabled': _enableBiometrics,
+              });
+
+              if (res.success) {
                 _showSnackBar('Security preferences saved successfully!');
-              } catch (_) {
-                _showSnackBar('Security preferences saved.');
+              } else {
+                _showSnackBar(
+                  res.message ?? 'Failed to save security preferences',
+                );
               }
             },
             child: const Text(
