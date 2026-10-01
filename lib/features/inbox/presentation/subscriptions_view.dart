@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../data/app_state_provider.dart';
 import '../../../data/email_provider.dart';
+import '../../../data/subscription_provider.dart';
+import '../../../models/email_model.dart';
+import '../../../models/blocked_contact_model.dart';
 
 /// Model representing a newsletter or mailing list sender subscription.
 class SubscriptionSender {
@@ -57,130 +60,6 @@ class _SubscriptionsViewState extends ConsumerState<SubscriptionsView>
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   late AnimationController _refreshAnimController;
-  late List<SubscriptionSender> _senders;
-
-  static const List<SubscriptionSender> _defaultSenders = [
-    SubscriptionSender(
-      id: 'sub_1',
-      name: 'Ravi Kumar',
-      email: 'connectwithravi2004@gmail.com',
-      emailCount: 30,
-      isSubscribed: true,
-      avatarColor: Color(0xFF1E60B8),
-    ),
-    SubscriptionSender(
-      id: 'sub_2',
-      name: 'chandran123',
-      email: 'chandran123@bnxmail.com',
-      emailCount: 10,
-      isSubscribed: true,
-      avatarColor: Color(0xFF1E60B8),
-    ),
-    SubscriptionSender(
-      id: 'sub_3',
-      name: 'ICAI - Trace a Member',
-      email: 'info@traceamember.icai.org',
-      emailCount: 1,
-      isSubscribed: true,
-      avatarColor: Color(0xFF1E60B8),
-    ),
-    SubscriptionSender(
-      id: 'sub_4',
-      name: 'Persona',
-      email: 'no-reply@withpersona.com',
-      emailCount: 7,
-      isSubscribed: true,
-      avatarColor: Color(0xFF1E60B8),
-    ),
-    SubscriptionSender(
-      id: 'sub_5',
-      name: 'Arthur Tan',
-      email: 'arthur.tan@withpersona.com',
-      emailCount: 1,
-      isSubscribed: true,
-      avatarColor: Color(0xFF1E60B8),
-    ),
-    SubscriptionSender(
-      id: 'sub_6',
-      name: 'Team Signzy',
-      email: 'support@signzy.com,hubspot_inbox.com',
-      emailCount: 4,
-      isSubscribed: true,
-      avatarColor: Color(0xFF1E60B8),
-    ),
-    SubscriptionSender(
-      id: 'sub_7',
-      name: 'GitHub',
-      email: 'notifications@github.com',
-      emailCount: 12,
-      isSubscribed: true,
-      avatarColor: Color(0xFF1E60B8),
-    ),
-    SubscriptionSender(
-      id: 'sub_8',
-      name: 'LinkedIn',
-      email: 'updates@linkedin.com',
-      emailCount: 15,
-      isSubscribed: true,
-      avatarColor: Color(0xFF1E60B8),
-    ),
-    SubscriptionSender(
-      id: 'sub_9',
-      name: 'Google Alerts',
-      email: 'googlealerts-noreply@google.com',
-      emailCount: 8,
-      isSubscribed: true,
-      avatarColor: Color(0xFF1E60B8),
-    ),
-    SubscriptionSender(
-      id: 'sub_10',
-      name: 'Medium Daily Digest',
-      email: 'noreply@medium.com',
-      emailCount: 5,
-      isSubscribed: true,
-      avatarColor: Color(0xFF1E60B8),
-    ),
-    SubscriptionSender(
-      id: 'sub_11',
-      name: 'Twitter / X',
-      email: 'info@x.com',
-      emailCount: 14,
-      isSubscribed: true,
-      avatarColor: Color(0xFF1E60B8),
-    ),
-    SubscriptionSender(
-      id: 'sub_12',
-      name: 'Substack Reads',
-      email: 'digest@substack.com',
-      emailCount: 6,
-      isSubscribed: true,
-      avatarColor: Color(0xFF1E60B8),
-    ),
-    SubscriptionSender(
-      id: 'sub_13',
-      name: 'Figma Updates',
-      email: 'news@figma.com',
-      emailCount: 3,
-      isSubscribed: true,
-      avatarColor: Color(0xFF1E60B8),
-    ),
-    SubscriptionSender(
-      id: 'sub_14',
-      name: 'Notion',
-      email: 'team@notion.so',
-      emailCount: 9,
-      isSubscribed: true,
-      avatarColor: Color(0xFF1E60B8),
-    ),
-    SubscriptionSender(
-      id: 'sub_15',
-      name: 'Stripe',
-      email: 'notices@stripe.com',
-      emailCount: 2,
-      isSubscribed: true,
-      avatarColor: Color(0xFF1E60B8),
-    ),
-  ];
 
   @override
   void initState() {
@@ -189,11 +68,16 @@ class _SubscriptionsViewState extends ConsumerState<SubscriptionsView>
       vsync: this,
       duration: const Duration(milliseconds: 600),
     );
-    _senders = List.from(_defaultSenders);
     _searchController.addListener(() {
       setState(() {
         _searchQuery = _searchController.text.trim().toLowerCase();
       });
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(subscriptionProvider.notifier).loadBlockedContacts();
+      }
     });
   }
 
@@ -206,90 +90,130 @@ class _SubscriptionsViewState extends ConsumerState<SubscriptionsView>
 
   void _triggerRefresh() {
     _refreshAnimController.forward(from: 0.0);
-    // Reload senders from emails in emailProvider if available, preserving any unsubscribed states
-    final emails = ref.read(emailProvider).emails;
-    if (emails.isNotEmpty) {
-      final senderEmailCount = <String, int>{};
-      final senderNameMap = <String, String>{};
-      for (final e in emails) {
-        final emailKey = e.senderEmail.toLowerCase().trim();
-        if (emailKey.isEmpty) continue;
-        senderEmailCount[emailKey] = (senderEmailCount[emailKey] ?? 0) + 1;
-        if (!senderNameMap.containsKey(emailKey) && e.senderName.isNotEmpty) {
-          senderNameMap[emailKey] = e.senderName;
-        }
-      }
+    ref.read(subscriptionProvider.notifier).loadBlockedContacts(force: true);
+  }
 
-      // Check existing unsubscribed set
-      final unsubscribedEmails = _senders
-          .where((s) => !s.isSubscribed)
-          .map((s) => s.email.toLowerCase())
-          .toSet();
+  Future<void> _toggleSubscription(SubscriptionSender sender) async {
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final isUnsubscribing = sender.isSubscribed;
 
-      final updatedList = <SubscriptionSender>[];
-      for (final s in _defaultSenders) {
-        final sEmail = s.email.toLowerCase();
-        final actualCount = senderEmailCount[sEmail] ?? s.emailCount;
-        updatedList.add(
-          s.copyWith(
-            emailCount: actualCount,
-            isSubscribed: !unsubscribedEmails.contains(sEmail),
+    scaffoldMessenger.hideCurrentSnackBar();
+
+    final result = isUnsubscribing
+        ? await ref
+            .read(subscriptionProvider.notifier)
+            .unsubscribe(sender.email)
+        : await ref
+            .read(subscriptionProvider.notifier)
+            .subscribe(sender.email);
+
+    if (!mounted) return;
+
+    if (result.success) {
+      final actionText =
+          isUnsubscribing ? 'Unsubscribed from' : 'Resubscribed to';
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text('$actionText ${sender.name}'),
+          action: SnackBarAction(
+            label: 'Undo',
+            textColor: Colors.amberAccent,
+            onPressed: () {
+              _toggleSubscription(
+                sender.copyWith(isSubscribed: !isUnsubscribing),
+              );
+            },
           ),
+          duration: const Duration(seconds: 3),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } else {
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            result.message ??
+                'Failed to ${isUnsubscribing ? 'unsubscribe from' : 'resubscribe to'} ${sender.name}',
+          ),
+          backgroundColor: Colors.redAccent,
+          duration: const Duration(seconds: 4),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  List<SubscriptionSender> _deriveAllSenders(
+    List<EmailModel> emails,
+    Set<String> blockedEmails,
+    List<BlockedContact> blockedContacts,
+  ) {
+    final Map<String, ({String name, String email, int inboxCount})> senderMap =
+        {};
+
+    for (final e in emails) {
+      final senderEmail = e.senderEmail.trim();
+      final emailKey = senderEmail.toLowerCase();
+      if (emailKey.isEmpty) continue;
+
+      final bool isInbox = e.memberOfFolders.contains('Inbox') ||
+          (!e.isTrash && !e.isDraft && !e.isSpam && !e.isArchive && !e.isSent);
+
+      final current = senderMap[emailKey];
+      if (current == null) {
+        final senderName = e.senderName.trim();
+        final displayName =
+            senderName.isNotEmpty ? senderName : emailKey.split('@').first;
+        senderMap[emailKey] = (
+          name: displayName,
+          email: senderEmail,
+          inboxCount: isInbox ? 1 : 0,
+        );
+      } else {
+        final existingName = current.name;
+        final senderName = e.senderName.trim();
+        final resolvedName =
+            existingName.isNotEmpty ? existingName : senderName;
+        senderMap[emailKey] = (
+          name: resolvedName.isNotEmpty ? resolvedName : current.email,
+          email: current.email,
+          inboxCount: current.inboxCount + (isInbox ? 1 : 0),
         );
       }
-      setState(() {
-        _senders = updatedList;
-      });
     }
 
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Subscriptions updated'),
-        duration: Duration(seconds: 1),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    // Also include any blocked contacts from GET /api/blocked-contacts not in loaded emails
+    for (final b in blockedContacts) {
+      final contactEmail = b.email.trim();
+      final emailKey = contactEmail.toLowerCase();
+      if (emailKey.isEmpty) continue;
+
+      if (!senderMap.containsKey(emailKey)) {
+        senderMap[emailKey] = (
+          name: emailKey.split('@').first,
+          email: contactEmail,
+          inboxCount: 0,
+        );
+      }
+    }
+
+    return senderMap.values.map((s) {
+      final isSubscribed = !blockedEmails.contains(s.email.toLowerCase().trim());
+      return SubscriptionSender(
+        id: s.email.toLowerCase().trim(),
+        name: s.name,
+        email: s.email,
+        emailCount: s.inboxCount,
+        isSubscribed: isSubscribed,
+        avatarColor: const Color(0xFF1E60B8),
+      );
+    }).toList();
   }
 
-  void _toggleSubscription(SubscriptionSender sender) {
-    final nextState = !sender.isSubscribed;
-    setState(() {
-      _senders = _senders.map((s) {
-        if (s.id == sender.id) {
-          return s.copyWith(isSubscribed: nextState);
-        }
-        return s;
-      }).toList();
-    });
-
-    final actionText = nextState ? 'Resubscribed to' : 'Unsubscribed from';
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$actionText ${sender.name}'),
-        action: SnackBarAction(
-          label: 'Undo',
-          textColor: Colors.amberAccent,
-          onPressed: () {
-            setState(() {
-              _senders = _senders.map((s) {
-                if (s.id == sender.id) {
-                  return s.copyWith(isSubscribed: !nextState);
-                }
-                return s;
-              }).toList();
-            });
-          },
-        ),
-        duration: const Duration(seconds: 3),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
-  List<SubscriptionSender> _getFilteredSenders() {
-    List<SubscriptionSender> list = _senders;
+  List<SubscriptionSender> _getFilteredSenders(
+    List<SubscriptionSender> allSenders,
+  ) {
+    List<SubscriptionSender> list = allSenders;
 
     if (_activeTab == 'Subscribed') {
       list = list.where((s) => s.isSubscribed).toList();
@@ -311,7 +235,17 @@ class _SubscriptionsViewState extends ConsumerState<SubscriptionsView>
   Widget build(BuildContext context) {
     final uiState = ref.watch(appUiProvider);
     final isDark = uiState.isDarkMode;
-    final filteredSenders = _getFilteredSenders();
+
+    final emailState = ref.watch(emailProvider);
+    final subscriptionState = ref.watch(subscriptionProvider);
+    final blockedEmails = subscriptionState.blockedEmailsSet;
+
+    final allSenders = _deriveAllSenders(
+      emailState.emails,
+      blockedEmails,
+      subscriptionState.blockedContacts,
+    );
+    final filteredSenders = _getFilteredSenders(allSenders);
     final int currentTabBadgeCount = filteredSenders.length;
 
     return Container(
@@ -439,30 +373,42 @@ class _SubscriptionsViewState extends ConsumerState<SubscriptionsView>
 
               const SizedBox(height: 4),
 
-              // ── 3. SENDERS LIST OR EMPTY STATE ──────────────────────────────
+              // ── 3. SENDERS LIST, LOADING, ERROR, OR EMPTY STATE ─────────────
               Expanded(
-                child: filteredSenders.isEmpty
-                    ? _buildEmptyState(isDark)
-                    : ListView.builder(
-                        padding: EdgeInsets.fromLTRB(
-                          horizontalPadding,
-                          4,
-                          horizontalPadding,
-                          32,
+                child: subscriptionState.isLoading && allSenders.isEmpty
+                    ? Center(
+                        child: CircularProgressIndicator(
+                          color: const Color(0xFF195BAC),
                         ),
-                        physics: const AlwaysScrollableScrollPhysics(
-                          parent: BouncingScrollPhysics(),
-                        ),
-                        itemCount: filteredSenders.length,
-                        itemBuilder: (context, index) {
-                          final sender = filteredSenders[index];
-                          return _buildSenderCard(
-                            sender: sender,
-                            isDark: isDark,
-                            screenWidth: screenWidth,
-                          );
-                        },
-                      ),
+                      )
+                    : subscriptionState.error != null && allSenders.isEmpty
+                        ? _buildErrorState(isDark, subscriptionState.error!)
+                        : filteredSenders.isEmpty
+                            ? _buildEmptyState(isDark)
+                            : ListView.builder(
+                                padding: EdgeInsets.fromLTRB(
+                                  horizontalPadding,
+                                  4,
+                                  horizontalPadding,
+                                  32,
+                                ),
+                                physics: const AlwaysScrollableScrollPhysics(
+                                  parent: BouncingScrollPhysics(),
+                                ),
+                                itemCount: filteredSenders.length,
+                                itemBuilder: (context, index) {
+                                  final sender = filteredSenders[index];
+                                  final isPending = subscriptionState
+                                      .pendingEmails
+                                      .contains(sender.email.toLowerCase().trim());
+                                  return _buildSenderCard(
+                                    sender: sender,
+                                    isDark: isDark,
+                                    screenWidth: screenWidth,
+                                    isPending: isPending,
+                                  );
+                                },
+                              ),
               ),
             ],
           );
@@ -627,6 +573,7 @@ class _SubscriptionsViewState extends ConsumerState<SubscriptionsView>
     required SubscriptionSender sender,
     required bool isDark,
     required double screenWidth,
+    required bool isPending,
   }) {
     final bool isCompact = screenWidth < 580;
     final String initial = sender.name.isNotEmpty
@@ -741,10 +688,10 @@ class _SubscriptionsViewState extends ConsumerState<SubscriptionsView>
         ),
         // Action Button: Unsubscribe / Resubscribe
         MouseRegion(
-          cursor: SystemMouseCursors.click,
+          cursor: isPending ? SystemMouseCursors.basic : SystemMouseCursors.click,
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: () => _toggleSubscription(sender),
+            onTap: isPending ? null : () => _toggleSubscription(sender),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
               decoration: BoxDecoration(
@@ -757,16 +704,27 @@ class _SubscriptionsViewState extends ConsumerState<SubscriptionsView>
                   width: 1,
                 ),
               ),
-              child: Text(
-                sender.isSubscribed ? 'Unsubscribe' : 'Resubscribe',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: sender.isSubscribed
-                      ? const Color(0xFFEF4444)
-                      : const Color(0xFF10B981),
-                ),
-              ),
+              child: isPending
+                  ? SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: sender.isSubscribed
+                            ? const Color(0xFFEF4444)
+                            : const Color(0xFF10B981),
+                      ),
+                    )
+                  : Text(
+                      sender.isSubscribed ? 'Unsubscribe' : 'Resubscribe',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: sender.isSubscribed
+                            ? const Color(0xFFEF4444)
+                            : const Color(0xFF10B981),
+                      ),
+                    ),
             ),
           ),
         ),
@@ -818,6 +776,58 @@ class _SubscriptionsViewState extends ConsumerState<SubscriptionsView>
                 actionsWidget,
               ],
             ),
+    );
+  }
+
+  // ── ERROR STATE ─────────────────────────────────────────────────────────────
+
+  Widget _buildErrorState(bool isDark, String error) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.error_outline_rounded,
+              size: 48,
+              color: isDark ? Colors.white38 : const Color(0xFF94A3B8),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'Failed to load subscriptions',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white70 : const Color(0xFF64748B),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              error,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                color: isDark ? Colors.white38 : const Color(0xFF94A3B8),
+              ),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: _triggerRefresh,
+              icon: const Icon(Icons.refresh_rounded, size: 16),
+              label: const Text('Retry'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF195BAC),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

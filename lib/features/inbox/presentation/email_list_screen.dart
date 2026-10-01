@@ -112,7 +112,11 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         final initialFolder = ref.read(appUiProvider).activeFolder;
-        ref.read(emailProvider.notifier).loadFolder(initialFolder);
+        if (initialFolder != 'Subscriptions' &&
+            initialFolder != 'Templates' &&
+            initialFolder != 'Storage') {
+          ref.read(emailProvider.notifier).loadFolder(initialFolder);
+        }
       }
     });
   }
