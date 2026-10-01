@@ -27,7 +27,9 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
   }
 
   Future<void> loadMailboxes() async {
-    final loggedInEmail = (await TokenService.getUserEmail() ?? '').trim().toLowerCase();
+    final loggedInEmail = (await TokenService.getUserEmail() ?? '')
+        .trim()
+        .toLowerCase();
     final savedRegistry = await TokenService.getSavedAccountsFromRegistry();
     final userProfile = await UserRepository.getProfile();
 
@@ -40,24 +42,36 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
       final regName = reg['name']?.toString() ?? regEmail.split('@').first;
       final savedAvatar = await TokenService.getUserAvatar(regEmail);
 
-      final isCurrentActive = (loggedInEmail.isNotEmpty && regEmail == loggedInEmail);
+      final isCurrentActive =
+          (loggedInEmail.isNotEmpty && regEmail == loggedInEmail);
 
       final avatar = (savedAvatar != null && savedAvatar.isNotEmpty)
           ? savedAvatar
-          : ((isCurrentActive && userProfile != null && userProfile.avatarUrl != null && userProfile.avatarUrl!.isNotEmpty)
-              ? userProfile.avatarUrl
-              : (regEmail.isNotEmpty ? '/api/users/profile-picture/$regEmail' : null));
+          : ((isCurrentActive &&
+                    userProfile != null &&
+                    userProfile.avatarUrl != null &&
+                    userProfile.avatarUrl!.isNotEmpty)
+                ? userProfile.avatarUrl
+                : (regEmail.isNotEmpty
+                      ? '/api/users/profile-picture/$regEmail'
+                      : null));
 
-      mergedList.add(AccountModel(
-        id: regEmail,
-        name: (isCurrentActive && userProfile != null && userProfile.name.isNotEmpty)
-            ? userProfile.name
-            : regName,
-        email: regEmail,
-        avatarColor: const Color(0xFF195BAC),
-        isActive: isCurrentActive || (mergedList.isEmpty && loggedInEmail.isEmpty),
-        avatarUrl: avatar,
-      ));
+      mergedList.add(
+        AccountModel(
+          id: regEmail,
+          name:
+              (isCurrentActive &&
+                  userProfile != null &&
+                  userProfile.name.isNotEmpty)
+              ? userProfile.name
+              : regName,
+          email: regEmail,
+          avatarColor: const Color(0xFF195BAC),
+          isActive:
+              isCurrentActive || (mergedList.isEmpty && loggedInEmail.isEmpty),
+          avatarUrl: avatar,
+        ),
+      );
     }
 
     // 2. Fetch backend mailboxes if available and merge
@@ -66,16 +80,24 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
       if (list.isNotEmpty) {
         for (final acc in list) {
           final accEmail = acc.email.trim().toLowerCase();
-          if (accEmail.isNotEmpty && !mergedList.any((a) => a.email.trim().toLowerCase() == accEmail)) {
+          if (accEmail.isNotEmpty &&
+              !mergedList.any(
+                (a) => a.email.trim().toLowerCase() == accEmail,
+              )) {
             final savedAvatar = await TokenService.getUserAvatar(accEmail);
             final avatar = (savedAvatar != null && savedAvatar.isNotEmpty)
                 ? savedAvatar
-                : (acc.avatarUrl ?? (accEmail.isNotEmpty ? '/api/users/profile-picture/$accEmail' : null));
-            mergedList.add(acc.copyWith(
-              id: accEmail,
-              isActive: accEmail == loggedInEmail,
-              avatarUrl: avatar,
-            ));
+                : (acc.avatarUrl ??
+                      (accEmail.isNotEmpty
+                          ? '/api/users/profile-picture/$accEmail'
+                          : null));
+            mergedList.add(
+              acc.copyWith(
+                id: accEmail,
+                isActive: accEmail == loggedInEmail,
+                avatarUrl: avatar,
+              ),
+            );
           }
         }
       }
@@ -87,15 +109,20 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
       final savedAvatar = await TokenService.getUserAvatar(loggedInEmail);
       final avatar = (savedAvatar != null && savedAvatar.isNotEmpty)
           ? savedAvatar
-          : (userProfile?.avatarUrl ?? '/api/users/profile-picture/$loggedInEmail');
-      mergedList.add(AccountModel(
-        id: loggedInEmail,
-        name: (userProfile != null && userProfile.name.isNotEmpty) ? userProfile.name : name,
-        email: loggedInEmail,
-        avatarColor: const Color(0xFF195BAC),
-        isActive: true,
-        avatarUrl: avatar,
-      ));
+          : (userProfile?.avatarUrl ??
+                '/api/users/profile-picture/$loggedInEmail');
+      mergedList.add(
+        AccountModel(
+          id: loggedInEmail,
+          name: (userProfile != null && userProfile.name.isNotEmpty)
+              ? userProfile.name
+              : name,
+          email: loggedInEmail,
+          avatarColor: const Color(0xFF195BAC),
+          isActive: true,
+          avatarUrl: avatar,
+        ),
+      );
     }
 
     if (mergedList.isNotEmpty) {
@@ -172,7 +199,9 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
     final remainingAccounts = state.where((acc) {
       final accEmail = acc.email.trim().toLowerCase();
       final accId = acc.id.trim().toLowerCase();
-      return accEmail != cleanTarget && accId != cleanTarget && acc.id != 'loading';
+      return accEmail != cleanTarget &&
+          accId != cleanTarget &&
+          acc.id != 'loading';
     }).toList();
 
     // 2. Perform backend/local logout for the target account
@@ -181,7 +210,9 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
     if (remainingAccounts.isNotEmpty) {
       // 3A. Another account exists! Update state and switch to the next account automatically
       final nextAccount = remainingAccounts.first;
-      print('[ACCOUNT SIGN OUT] Switching automatically to next account: ${nextAccount.email}');
+      print(
+        '[ACCOUNT SIGN OUT] Switching automatically to next account: ${nextAccount.email}',
+      );
 
       // Remove target from account state list
       state = remainingAccounts;
@@ -192,7 +223,9 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Signed out of $cleanTarget. Switched to ${nextAccount.email}'),
+            content: Text(
+              'Signed out of $cleanTarget. Switched to ${nextAccount.email}',
+            ),
             backgroundColor: Colors.orangeAccent,
             duration: const Duration(seconds: 3),
           ),
@@ -200,7 +233,9 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
       }
     } else {
       // 3B. No other accounts exist! Clear all providers and navigate to login screen
-      print('[ACCOUNT SIGN OUT] No remaining accounts. Redirecting to login screen.');
+      print(
+        '[ACCOUNT SIGN OUT] No remaining accounts. Redirecting to login screen.',
+      );
       ref.read(emailProvider.notifier).clear();
       ref.read(accountsProvider.notifier).clear();
       ref.read(authProvider.notifier).logout();
@@ -252,7 +287,10 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
       return acc;
     }).toList();
 
-    final active = state.firstWhere((a) => a.id == id, orElse: () => activeAccount);
+    final active = state.firstWhere(
+      (a) => a.id == id,
+      orElse: () => activeAccount,
+    );
     if (name != null && active.email.isNotEmpty) {
       await TokenService.saveUserInfo(email: active.email, name: name);
     }
@@ -297,13 +335,19 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
       return acc;
     }).toList();
 
-    final active = state.firstWhere((a) => a.id == id, orElse: () => activeAccount);
+    final active = state.firstWhere(
+      (a) => a.id == id,
+      orElse: () => activeAccount,
+    );
     if (active.email.isNotEmpty) {
       await TokenService.saveUserAvatar(active.email, avatarUrl);
     }
 
     try {
-      final remoteUrl = await UserRepository.uploadAvatar(active.email, avatarUrl);
+      final remoteUrl = await UserRepository.uploadAvatar(
+        active.email,
+        avatarUrl,
+      );
       if (remoteUrl != null && remoteUrl.isNotEmpty) {
         state = state.map((acc) {
           if (acc.id == id) {

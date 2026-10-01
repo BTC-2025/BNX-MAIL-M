@@ -13,6 +13,7 @@ import '../../../models/account_model.dart';
 import '../../../data/account_provider.dart';
 import '../../../data/all_inboxes_provider.dart';
 import 'templates_view.dart';
+import 'subscriptions_view.dart';
 
 class EmailListScreen extends ConsumerStatefulWidget {
   const EmailListScreen({super.key});
@@ -169,7 +170,8 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
     final emails = ref.watch(emailListProvider);
     final activeAccount = ref.watch(activeAccountProvider);
     final isDark = uiState.isDarkMode;
-    final bool isDesktopOS = !kIsWeb &&
+    final bool isDesktopOS =
+        !kIsWeb &&
         (defaultTargetPlatform == TargetPlatform.macOS ||
             defaultTargetPlatform == TargetPlatform.windows);
 
@@ -190,6 +192,8 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
             'Primary',
           ].contains(next)) {
             ref.read(emailProvider.notifier).fetchCategory(next.toLowerCase());
+          } else if (next == 'Subscriptions' || next == 'Templates') {
+            // Frontend views do not trigger mailbox folder loads
           } else {
             ref.read(emailProvider.notifier).loadFolder(next);
           }
@@ -526,14 +530,14 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
     // Desktop pagination: 20 emails per page
     const int pageSize = 20;
     final int totalEmailCount = filtered.length;
-    final int totalPages =
-        totalEmailCount == 0 ? 1 : ((totalEmailCount + pageSize - 1) ~/ pageSize);
+    final int totalPages = totalEmailCount == 0
+        ? 1
+        : ((totalEmailCount + pageSize - 1) ~/ pageSize);
     final int safePage = _desktopCurrentPage.clamp(1, totalPages);
     if (_desktopCurrentPage != safePage) {
       _desktopCurrentPage = safePage;
     }
-    final int startIndex =
-        totalEmailCount == 0 ? 0 : (safePage - 1) * pageSize;
+    final int startIndex = totalEmailCount == 0 ? 0 : (safePage - 1) * pageSize;
     final int endIndex = (startIndex + pageSize > totalEmailCount)
         ? totalEmailCount
         : (startIndex + pageSize);
@@ -542,8 +546,8 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
 
     final List<EmailModel> desktopPagedList = isDesktopOS
         ? (filtered.isEmpty
-            ? <EmailModel>[]
-            : filtered.sublist(startIndex, endIndex))
+              ? <EmailModel>[]
+              : filtered.sublist(startIndex, endIndex))
         : filtered;
 
     print(
@@ -555,19 +559,16 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
 
     if (uiState.activeFolder == 'Templates' && uiState.activeLabel == null) {
       mainBody = const TemplatesView();
+    } else if (uiState.activeFolder == 'Subscriptions' &&
+        uiState.activeLabel == null) {
+      mainBody = const SubscriptionsView();
     } else {
       // Otherwise render the Email List
       mainBody = Column(
         children: [
           // --- INBOX TAB / ACTION BAR ---
           if (isDesktopOS)
-            _buildDesktopEmailHeaderBar(
-              context,
-              ref,
-              uiState,
-              isDark,
-              filtered,
-            )
+            _buildDesktopEmailHeaderBar(context, ref, uiState, isDark, filtered)
           else if ((uiState.activeFolder == 'Inbox' ||
                   uiState.activeFolder == 'Primary') &&
               uiState.activeLabel == null &&
@@ -582,8 +583,9 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
                 indicatorWeight: 3,
                 indicatorSize: TabBarIndicatorSize.tab,
                 labelColor: const Color(0xFF195bac),
-                unselectedLabelColor:
-                    isDark ? Colors.white54 : Colors.grey.shade500,
+                unselectedLabelColor: isDark
+                    ? Colors.white54
+                    : Colors.grey.shade500,
                 labelStyle: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.bold,
@@ -592,8 +594,9 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
                 ),
-                dividerColor:
-                    isDark ? BNXColors.darkBorder : BNXColors.lightBorder,
+                dividerColor: isDark
+                    ? BNXColors.darkBorder
+                    : BNXColors.lightBorder,
                 padding: EdgeInsets.zero,
                 labelPadding: EdgeInsets.zero,
                 tabs: const [
@@ -625,250 +628,275 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
           Expanded(
             child: isDesktopOS
                 ? (filtered.isEmpty
-                    ? _buildEmptyState(
-                        (uiState.activeFolder == 'Inbox' ||
-                                    uiState.activeFolder == 'Primary') &&
-                                uiState.activeLabel == null
-                            ? _tabs[currentTabIndex]
-                            : uiState.activeFolder,
-                        isDark,
-                      )
-                    : ListView.separated(
-                        controller: _desktopScrollController,
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        itemCount: desktopPagedList.length,
-                        separatorBuilder: (context, idx) => Divider(
-                          height: 1,
-                          thickness: 0.6,
-                          color: isDark
-                              ? BNXColors.darkBorder
-                              : const Color(0xFFF1F5F9),
-                        ),
-                        itemBuilder: (context, idx) {
-                          final email = desktopPagedList[idx];
-                          return EmailTile(
-                            email: email,
-                            isSelected:
-                                uiState.selectedEmailIds.contains(email.id),
-                            onTap: () {
-                              if (uiState.isSelectionMode) {
-                                ref
-                                    .read(appUiProvider.notifier)
-                                    .toggleEmailSelection(email.id);
-                              } else if (email.isDraft ||
-                                  email.memberOfFolders.contains('Draft') ||
-                                  uiState.activeFolder == 'Draft') {
-                                if (!email.isRead) {
+                      ? _buildEmptyState(
+                          (uiState.activeFolder == 'Inbox' ||
+                                      uiState.activeFolder == 'Primary') &&
+                                  uiState.activeLabel == null
+                              ? _tabs[currentTabIndex]
+                              : uiState.activeFolder,
+                          isDark,
+                        )
+                      : ListView.separated(
+                          controller: _desktopScrollController,
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          itemCount: desktopPagedList.length,
+                          separatorBuilder: (context, idx) => Divider(
+                            height: 1,
+                            thickness: 0.6,
+                            color: isDark
+                                ? BNXColors.darkBorder
+                                : const Color(0xFFF1F5F9),
+                          ),
+                          itemBuilder: (context, idx) {
+                            final email = desktopPagedList[idx];
+                            return EmailTile(
+                              email: email,
+                              isSelected: uiState.selectedEmailIds.contains(
+                                email.id,
+                              ),
+                              onTap: () {
+                                if (uiState.isSelectionMode) {
                                   ref
-                                      .read(emailProvider.notifier)
-                                      .toggleRead(
-                                        email.id,
-                                        'Draft',
-                                        forceValue: true,
-                                      );
+                                      .read(appUiProvider.notifier)
+                                      .toggleEmailSelection(email.id);
+                                } else if (email.isDraft ||
+                                    email.memberOfFolders.contains('Draft') ||
+                                    uiState.activeFolder == 'Draft') {
+                                  if (!email.isRead) {
+                                    ref
+                                        .read(emailProvider.notifier)
+                                        .toggleRead(
+                                          email.id,
+                                          'Draft',
+                                          forceValue: true,
+                                        );
+                                  }
+                                  context.push('/draft/${email.id}');
+                                } else {
+                                  if (!email.isRead &&
+                                      uiState.activeFolder != 'All Inboxes' &&
+                                      uiState.activeFolder != 'All inboxes') {
+                                    ref
+                                        .read(emailProvider.notifier)
+                                        .toggleRead(
+                                          email.id,
+                                          uiState.activeFolder,
+                                          forceValue: true,
+                                        );
+                                  }
+                                  context.push('/email/${email.id}');
                                 }
-                                context.push('/draft/${email.id}');
-                              } else {
-                                if (!email.isRead &&
-                                    uiState.activeFolder != 'All Inboxes' &&
-                                    uiState.activeFolder != 'All inboxes') {
-                                  ref
-                                      .read(emailProvider.notifier)
-                                      .toggleRead(
-                                        email.id,
-                                        uiState.activeFolder,
-                                        forceValue: true,
-                                      );
-                                }
-                                context.push('/email/${email.id}');
-                              }
-                            },
-                          );
-                        },
-                      ))
+                              },
+                            );
+                          },
+                        ))
                 : AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              switchInCurve: Curves.easeOutCubic,
-              switchOutCurve: Curves.easeInCubic,
-              child: KeyedSubtree(
-                key: ValueKey(
-                  '${uiState.activeFolder}_${uiState.activeLabel}_$currentTabIndex',
-                ),
-                child: () {
-                  final isFolderLoading =
-                      (uiState.activeFolder == 'All Inboxes' ||
-                              uiState.activeFolder == 'All inboxes')
-                          ? ref.watch(allInboxesProvider).isLoading
-                          : ref.watch(emailProvider).isLoading;
-
-                  if (filtered.isEmpty && isFolderLoading) {
-                    return _buildLoadingState(isDark);
-                  }
-
-                  if (filtered.isEmpty) {
-                    return _buildEmptyState(
-                      (uiState.activeFolder == 'Inbox' ||
-                                  uiState.activeFolder == 'Primary') &&
-                              uiState.activeLabel == null
-                          ? _tabs[currentTabIndex]
-                          : uiState.activeFolder,
-                      isDark,
-                    );
-                  }
-
-                  return RefreshIndicator(
-                    onRefresh: () async {
-                      if (uiState.activeFolder == 'All Inboxes' ||
-                          uiState.activeFolder == 'All inboxes') {
-                        await ref
-                            .read(allInboxesProvider.notifier)
-                            .loadAllInboxes(forceRefresh: true);
-                      } else {
-                        await ref.read(emailProvider.notifier).initialLoad();
-                      }
-                    },
-                    child: NotificationListener<UserScrollNotification>(
-                      onNotification: (notification) {
-                        if (notification.direction == ScrollDirection.reverse) {
-                          if (ref.read(fabExtensionProvider)) {
-                            ref.read(fabExtensionProvider.notifier).state =
-                                false;
-                          }
-                        } else if (notification.direction ==
-                            ScrollDirection.forward) {
-                          if (!ref.read(fabExtensionProvider)) {
-                            ref.read(fabExtensionProvider.notifier).state =
-                                true;
-                          }
-                        }
-                        return true;
-                      },
-                      child: ListView.builder(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 8,
-                        ),
-                        itemCount: filtered.length + 1,
-                        itemBuilder: (context, idx) {
-                          if (idx == filtered.length) {
-                            return const SizedBox(height: 80); // Space for FAB
-                          }
-                          final email = filtered[idx];
-                          final isFirst = idx == 0;
-                          final isLast = idx == filtered.length - 1;
-
-                          final borderColor = isDark
-                              ? Colors.white.withValues(alpha: 0.1)
-                              : Colors.grey.shade300;
-
-                          return Container(
-                            decoration: BoxDecoration(
-                              color: isDark
-                                  ? const Color(0xFF1E293B)
-                                  : Colors.white,
-                              borderRadius: BorderRadius.vertical(
-                                top: isFirst
-                                    ? const Radius.circular(16)
-                                    : Radius.zero,
-                                bottom: isLast
-                                    ? const Radius.circular(16)
-                                    : Radius.zero,
-                              ),
-                              border: Border(
-                                top: isFirst
-                                    ? BorderSide(color: borderColor)
-                                    : BorderSide.none,
-                                bottom: isLast
-                                    ? BorderSide(color: borderColor)
-                                    : BorderSide.none,
-                                left: BorderSide(color: borderColor),
-                                right: BorderSide(color: borderColor),
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(
-                                    alpha: isDark ? 0.1 : 0.02,
-                                  ),
-                                  blurRadius: 4,
-                                  offset: const Offset(0, 1),
-                                ),
-                              ],
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.vertical(
-                                top: isFirst
-                                    ? const Radius.circular(16)
-                                    : Radius.zero,
-                                bottom: isLast
-                                    ? const Radius.circular(16)
-                                    : Radius.zero,
-                              ),
-                              child: Column(
-                                key: ValueKey('email_item_${email.id}_$idx'),
-                                children: [
-                                  EmailTile(
-                                    email: email,
-                                    isSelected: uiState.selectedEmailIds
-                                        .contains(email.id),
-                                    onTap: () {
-                                      if (uiState.isSelectionMode) {
-                                        ref
-                                            .read(appUiProvider.notifier)
-                                            .toggleEmailSelection(email.id);
-                                      } else if (email.isDraft ||
-                                          email.memberOfFolders.contains(
-                                            'Draft',
-                                          ) ||
-                                          uiState.activeFolder == 'Draft') {
-                                        if (!email.isRead) {
-                                          ref
-                                              .read(emailProvider.notifier)
-                                              .toggleRead(
-                                                email.id,
-                                                'Draft',
-                                                forceValue: true,
-                                              );
-                                        }
-                                        context.push('/draft/${email.id}');
-                                      } else {
-                                        if (!email.isRead &&
-                                            uiState.activeFolder !=
-                                                'All Inboxes' &&
-                                            uiState.activeFolder !=
-                                                'All inboxes') {
-                                          ref
-                                              .read(emailProvider.notifier)
-                                              .toggleRead(
-                                                email.id,
-                                                uiState.activeFolder,
-                                                forceValue: true,
-                                              );
-                                        }
-                                        context.push('/email/${email.id}');
-                                      }
-                                    },
-                                  ),
-                                  if (!isLast)
-                                    Divider(
-                                      height: 1,
-                                      thickness: 0.8,
-                                      color: isDark
-                                          ? Colors.white.withValues(alpha: 0.08)
-                                          : Colors.grey.shade200,
-                                      indent: 0,
-                                      endIndent: 0,
-                                    ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
+                    duration: const Duration(milliseconds: 200),
+                    switchInCurve: Curves.easeOutCubic,
+                    switchOutCurve: Curves.easeInCubic,
+                    child: KeyedSubtree(
+                      key: ValueKey(
+                        '${uiState.activeFolder}_${uiState.activeLabel}_$currentTabIndex',
                       ),
+                      child: () {
+                        final isFolderLoading =
+                            (uiState.activeFolder == 'All Inboxes' ||
+                                uiState.activeFolder == 'All inboxes')
+                            ? ref.watch(allInboxesProvider).isLoading
+                            : ref.watch(emailProvider).isLoading;
+
+                        if (filtered.isEmpty && isFolderLoading) {
+                          return _buildLoadingState(isDark);
+                        }
+
+                        if (filtered.isEmpty) {
+                          return _buildEmptyState(
+                            (uiState.activeFolder == 'Inbox' ||
+                                        uiState.activeFolder == 'Primary') &&
+                                    uiState.activeLabel == null
+                                ? _tabs[currentTabIndex]
+                                : uiState.activeFolder,
+                            isDark,
+                          );
+                        }
+
+                        return RefreshIndicator(
+                          onRefresh: () async {
+                            if (uiState.activeFolder == 'All Inboxes' ||
+                                uiState.activeFolder == 'All inboxes') {
+                              await ref
+                                  .read(allInboxesProvider.notifier)
+                                  .loadAllInboxes(forceRefresh: true);
+                            } else {
+                              await ref
+                                  .read(emailProvider.notifier)
+                                  .initialLoad();
+                            }
+                          },
+                          child: NotificationListener<UserScrollNotification>(
+                            onNotification: (notification) {
+                              if (notification.direction ==
+                                  ScrollDirection.reverse) {
+                                if (ref.read(fabExtensionProvider)) {
+                                  ref
+                                          .read(fabExtensionProvider.notifier)
+                                          .state =
+                                      false;
+                                }
+                              } else if (notification.direction ==
+                                  ScrollDirection.forward) {
+                                if (!ref.read(fabExtensionProvider)) {
+                                  ref
+                                          .read(fabExtensionProvider.notifier)
+                                          .state =
+                                      true;
+                                }
+                              }
+                              return true;
+                            },
+                            child: ListView.builder(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 8,
+                              ),
+                              itemCount: filtered.length + 1,
+                              itemBuilder: (context, idx) {
+                                if (idx == filtered.length) {
+                                  return const SizedBox(
+                                    height: 80,
+                                  ); // Space for FAB
+                                }
+                                final email = filtered[idx];
+                                final isFirst = idx == 0;
+                                final isLast = idx == filtered.length - 1;
+
+                                final borderColor = isDark
+                                    ? Colors.white.withValues(alpha: 0.1)
+                                    : Colors.grey.shade300;
+
+                                return Container(
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? const Color(0xFF1E293B)
+                                        : Colors.white,
+                                    borderRadius: BorderRadius.vertical(
+                                      top: isFirst
+                                          ? const Radius.circular(16)
+                                          : Radius.zero,
+                                      bottom: isLast
+                                          ? const Radius.circular(16)
+                                          : Radius.zero,
+                                    ),
+                                    border: Border(
+                                      top: isFirst
+                                          ? BorderSide(color: borderColor)
+                                          : BorderSide.none,
+                                      bottom: isLast
+                                          ? BorderSide(color: borderColor)
+                                          : BorderSide.none,
+                                      left: BorderSide(color: borderColor),
+                                      right: BorderSide(color: borderColor),
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(
+                                          alpha: isDark ? 0.1 : 0.02,
+                                        ),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 1),
+                                      ),
+                                    ],
+                                  ),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.vertical(
+                                      top: isFirst
+                                          ? const Radius.circular(16)
+                                          : Radius.zero,
+                                      bottom: isLast
+                                          ? const Radius.circular(16)
+                                          : Radius.zero,
+                                    ),
+                                    child: Column(
+                                      key: ValueKey(
+                                        'email_item_${email.id}_$idx',
+                                      ),
+                                      children: [
+                                        EmailTile(
+                                          email: email,
+                                          isSelected: uiState.selectedEmailIds
+                                              .contains(email.id),
+                                          onTap: () {
+                                            if (uiState.isSelectionMode) {
+                                              ref
+                                                  .read(appUiProvider.notifier)
+                                                  .toggleEmailSelection(
+                                                    email.id,
+                                                  );
+                                            } else if (email.isDraft ||
+                                                email.memberOfFolders.contains(
+                                                  'Draft',
+                                                ) ||
+                                                uiState.activeFolder ==
+                                                    'Draft') {
+                                              if (!email.isRead) {
+                                                ref
+                                                    .read(
+                                                      emailProvider.notifier,
+                                                    )
+                                                    .toggleRead(
+                                                      email.id,
+                                                      'Draft',
+                                                      forceValue: true,
+                                                    );
+                                              }
+                                              context.push(
+                                                '/draft/${email.id}',
+                                              );
+                                            } else {
+                                              if (!email.isRead &&
+                                                  uiState.activeFolder !=
+                                                      'All Inboxes' &&
+                                                  uiState.activeFolder !=
+                                                      'All inboxes') {
+                                                ref
+                                                    .read(
+                                                      emailProvider.notifier,
+                                                    )
+                                                    .toggleRead(
+                                                      email.id,
+                                                      uiState.activeFolder,
+                                                      forceValue: true,
+                                                    );
+                                              }
+                                              context.push(
+                                                '/email/${email.id}',
+                                              );
+                                            }
+                                          },
+                                        ),
+                                        if (!isLast)
+                                          Divider(
+                                            height: 1,
+                                            thickness: 0.8,
+                                            color: isDark
+                                                ? Colors.white.withValues(
+                                                    alpha: 0.08,
+                                                  )
+                                                : Colors.grey.shade200,
+                                            indent: 0,
+                                            endIndent: 0,
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        );
+                      }(),
                     ),
-                  );
-                }(),
-              ),
-            ),
+                  ),
           ),
           if (isDesktopOS)
             _buildDesktopPaginationBar(
@@ -910,7 +938,9 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
         : mainBody;
 
     return Container(
-      color: isDark ? Colors.transparent : (isDesktopOS ? Colors.white : const Color(0xFFE9F4FF)),
+      color: isDark
+          ? Colors.transparent
+          : (isDesktopOS ? Colors.white : const Color(0xFFE9F4FF)),
       child: finalBody,
     );
   }
@@ -1017,7 +1047,8 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
     bool isDark,
     List<EmailModel> currentEmails,
   ) {
-    final bool allSelected = currentEmails.isNotEmpty &&
+    final bool allSelected =
+        currentEmails.isNotEmpty &&
         currentEmails.every((e) => uiState.selectedEmailIds.contains(e.id));
 
     return Container(
@@ -1091,67 +1122,71 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
           ..._allAvailableTabs
               .where((t) => _enabledTabs.contains(t['key']))
               .map((tab) {
-            final String key = tab['key'];
-            final String label = tab['label'];
-            final IconData icon = tab['icon'];
-            final Color color = tab['color'];
-            final bool isSelected = _selectedDesktopTab == key;
+                final String key = tab['key'];
+                final String label = tab['label'];
+                final IconData icon = tab['icon'];
+                final Color color = tab['color'];
+                final bool isSelected = _selectedDesktopTab == key;
 
-            return InkWell(
-              onTap: () {
-                setState(() {
-                  _selectedDesktopTab = key;
-                });
-                if (key == 'All') {
-                  ref.read(appUiProvider.notifier).selectFolder('Inbox');
-                } else if (key == 'Drafts') {
-                  ref.read(appUiProvider.notifier).selectFolder('Draft');
-                } else {
-                  ref.read(appUiProvider.notifier).selectFolder(key);
-                }
-              },
-              child: Container(
-                height: 48,
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                decoration: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(
-                      color: isSelected
-                          ? const Color(0xFF195BAC)
-                          : Colors.transparent,
-                      width: 3,
+                return InkWell(
+                  onTap: () {
+                    setState(() {
+                      _selectedDesktopTab = key;
+                    });
+                    if (key == 'All') {
+                      ref.read(appUiProvider.notifier).selectFolder('Inbox');
+                    } else if (key == 'Drafts') {
+                      ref.read(appUiProvider.notifier).selectFolder('Draft');
+                    } else {
+                      ref.read(appUiProvider.notifier).selectFolder(key);
+                    }
+                  },
+                  child: Container(
+                    height: 48,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(
+                          color: isSelected
+                              ? const Color(0xFF195BAC)
+                              : Colors.transparent,
+                          width: 3,
+                        ),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (key == 'All') ...[
+                          const Icon(
+                            Icons.check_box_outlined,
+                            size: 16,
+                            color: Color(0xFF195BAC),
+                          ),
+                          const SizedBox(width: 6),
+                        ] else ...[
+                          Icon(icon, size: 16, color: color),
+                          const SizedBox(width: 6),
+                        ],
+                        Text(
+                          label,
+                          style: TextStyle(
+                            color: isSelected
+                                ? const Color(0xFF195BAC)
+                                : (isDark
+                                      ? Colors.white70
+                                      : const Color(0xFF475569)),
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.w500,
+                            fontSize: 13.5,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (key == 'All') ...[
-                      const Icon(
-                        Icons.check_box_outlined,
-                        size: 16,
-                        color: Color(0xFF195BAC),
-                      ),
-                      const SizedBox(width: 6),
-                    ] else ...[
-                      Icon(icon, size: 16, color: color),
-                      const SizedBox(width: 6),
-                    ],
-                    Text(
-                      label,
-                      style: TextStyle(
-                        color: isSelected
-                            ? const Color(0xFF195BAC)
-                            : (isDark ? Colors.white70 : const Color(0xFF475569)),
-                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                        fontSize: 13.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }),
+                );
+              }),
         ],
       ),
     );
@@ -1239,8 +1274,12 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
                           label,
                           style: TextStyle(
                             fontSize: 12.5,
-                            fontWeight: isChecked ? FontWeight.w600 : FontWeight.w500,
-                            color: isDark ? Colors.white : const Color(0xFF1E293B),
+                            fontWeight: isChecked
+                                ? FontWeight.w600
+                                : FontWeight.w500,
+                            color: isDark
+                                ? Colors.white
+                                : const Color(0xFF1E293B),
                           ),
                         ),
                       ),

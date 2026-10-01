@@ -23,7 +23,9 @@ import '../../../core/widgets/virtual_keyboard.dart';
 
 final isEditingPinsProvider = StateProvider<bool>((ref) => false);
 final isVirtualKeyboardOpenProvider = StateProvider<bool>((ref) => false);
-final globalNotesListProvider = StateProvider<List<Map<String, String>>>((ref) => []);
+final globalNotesListProvider = StateProvider<List<Map<String, String>>>(
+  (ref) => [],
+);
 final weatherDetectedProvider = StateProvider<bool>((ref) => false);
 
 class DashboardShell extends ConsumerWidget {
@@ -39,7 +41,8 @@ class DashboardShell extends ConsumerWidget {
 
     final double screenWidth = MediaQuery.of(context).size.width;
     final bool isMobile = screenWidth < 600;
-    final bool isDesktopOS = !kIsWeb &&
+    final bool isDesktopOS =
+        !kIsWeb &&
         (defaultTargetPlatform == TargetPlatform.macOS ||
             defaultTargetPlatform == TargetPlatform.windows);
     final bool isTablet =
@@ -62,12 +65,12 @@ class DashboardShell extends ConsumerWidget {
     final double activeSidebarWidth = (isMobile || isProfile || isManageAccount)
         ? 0.0
         : (isDesktopOS
-            ? BNXConstants.sidebarExpandedWidth
-            : (uiState.isSidebarCollapsed
-                ? (uiState.activeLeftUtility != null
-                    ? BNXConstants.sidebarCollapsedWidth + 280.0
-                    : BNXConstants.sidebarCollapsedWidth)
-                : BNXConstants.sidebarExpandedWidth));
+              ? BNXConstants.sidebarExpandedWidth
+              : (uiState.isSidebarCollapsed
+                    ? (uiState.activeLeftUtility != null
+                          ? BNXConstants.sidebarCollapsedWidth + 280.0
+                          : BNXConstants.sidebarCollapsedWidth)
+                    : BNXConstants.sidebarExpandedWidth));
 
     final bool showRightRail = !isMobile;
     final bool isRightRailVisible = isDesktopOS
@@ -243,7 +246,9 @@ class DashboardShell extends ConsumerWidget {
                     ),
                     Expanded(
                       child: Container(
-                        color: isDark ? BNXColors.darkBg : const Color(0xFFE9F4FF),
+                        color: isDark
+                            ? BNXColors.darkBg
+                            : const Color(0xFFE9F4FF),
                         child: Row(
                           children: [
                             if (!isProfile && !isManageAccount)
@@ -253,169 +258,173 @@ class DashboardShell extends ConsumerWidget {
                                 child: const Sidebar(),
                               ),
                             Expanded(
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Container(
-                                    margin: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color: isDark
-                                          ? BNXColors.darkSurface
-                                          : Colors.white,
-                                      borderRadius: BorderRadius.circular(16),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black.withValues(
-                                            alpha: isDark ? 0.2 : 0.04,
-                                          ),
-                                          blurRadius: 10,
-                                          offset: const Offset(0, 2),
-                                        ),
-                                      ],
-                                    ),
-                                    clipBehavior: Clip.antiAlias,
-                                    child: child,
-                                  ),
-                                ),
-                                if (showRightPanel)
-                                  _buildExpandableRightPanel(
-                                    context,
-                                    ref,
-                                    uiState,
-                                    isDark,
-                                  ),
-                              ],
-                            ),
-                          ),
-                          if (isRightRailVisible)
-                            _buildRightIconRail(
-                              context,
-                              ref,
-                              uiState,
-                              isDark,
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              )
-              else
-                Row(
-                  children: [
-                    // 1. LEFT SIDEBAR (Hidden on mobile, profile, and manage-account pages)
-                  if (!isMobile && !isProfile && !isManageAccount)
-                    AnimatedContainer(
-                      duration: BNXConstants.animationDurationFast,
-                      width: activeSidebarWidth,
-                      child: const Sidebar(),
-                    ),
-
-                  // Divider between sidebar and center panel
-                  if (!isMobile && !isProfile && !isManageAccount)
-                    VerticalDivider(
-                      width: 1,
-                      color: isDark
-                          ? BNXColors.darkBorder
-                          : BNXColors.lightBorder,
-                    ),
-
-                  // 2. CENTER PANEL CONTAINER (Top Bar + Main Page Child + Right Side Utility Panel)
-                  Expanded(
-                    child: SafeArea(
-                      top: isMobile && currentRoute != '/profile' && currentRoute != '/manage-account',
-                      bottom: false,
-                      child: Column(
-                        children: [
-                          // Top App Bar - Hide in Settings, Profile, Manage Account, Colab, or Help
-                          if (currentRoute != '/profile' &&
-                              currentRoute != '/manage-account' &&
-                              uiState.activeFolder != 'Settings' &&
-                              uiState.activeFolder != 'Chat' &&
-                              uiState.activeFolder != 'Casbox' &&
-                              uiState.activeFolder != 'Help')
-                            const TopSearchBar(),
-
-                          // Main Content Split Area
-                          Expanded(
-                            child: Row(
-                              children: [
-                                // Main Screen Content (GoRouter child: Email List, Colab, or Settings)
-                                Expanded(
-                                  child: ClipRRect(
-                                    borderRadius: isMobile
-                                        ? BorderRadius.zero
-                                        : const BorderRadius.only(
-                                            topLeft: Radius.circular(
-                                              BNXConstants.borderRadiusL,
-                                            ),
-                                          ),
+                              child: Row(
+                                children: [
+                                  Expanded(
                                     child: Container(
+                                      margin: const EdgeInsets.all(8),
                                       decoration: BoxDecoration(
                                         color: isDark
                                             ? BNXColors.darkSurface
                                             : Colors.white,
-                                        borderRadius: isMobile
-                                            ? BorderRadius.zero
-                                            : const BorderRadius.only(
-                                                topLeft: Radius.circular(
-                                                  BNXConstants.borderRadiusL,
-                                                ),
-                                              ),
-                                        boxShadow: isMobile
-                                            ? null
-                                            : BNXConstants.softShadow,
-                                      ),
-                                      child: AnimatedSwitcher(
-                                        duration: const Duration(
-                                          milliseconds: 180,
-                                        ),
-                                        switchInCurve: Curves.easeOutCubic,
-                                        switchOutCurve: Curves.easeInCubic,
-                                        transitionBuilder: (
-                                          Widget child,
-                                          Animation<double> animation,
-                                        ) {
-                                          return FadeTransition(
-                                            opacity: CurvedAnimation(
-                                              parent: animation,
-                                              curve: Curves.easeInOut,
+                                        borderRadius: BorderRadius.circular(16),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withValues(
+                                              alpha: isDark ? 0.2 : 0.04,
                                             ),
-                                            child: child,
-                                          );
-                                        },
-                                        child: child,
+                                            blurRadius: 10,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      clipBehavior: Clip.antiAlias,
+                                      child: child,
+                                    ),
+                                  ),
+                                  if (showRightPanel)
+                                    _buildExpandableRightPanel(
+                                      context,
+                                      ref,
+                                      uiState,
+                                      isDark,
+                                    ),
+                                ],
+                              ),
+                            ),
+                            if (isRightRailVisible)
+                              _buildRightIconRail(
+                                context,
+                                ref,
+                                uiState,
+                                isDark,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              else
+                Row(
+                  children: [
+                    // 1. LEFT SIDEBAR (Hidden on mobile, profile, and manage-account pages)
+                    if (!isMobile && !isProfile && !isManageAccount)
+                      AnimatedContainer(
+                        duration: BNXConstants.animationDurationFast,
+                        width: activeSidebarWidth,
+                        child: const Sidebar(),
+                      ),
+
+                    // Divider between sidebar and center panel
+                    if (!isMobile && !isProfile && !isManageAccount)
+                      VerticalDivider(
+                        width: 1,
+                        color: isDark
+                            ? BNXColors.darkBorder
+                            : BNXColors.lightBorder,
+                      ),
+
+                    // 2. CENTER PANEL CONTAINER (Top Bar + Main Page Child + Right Side Utility Panel)
+                    Expanded(
+                      child: SafeArea(
+                        top:
+                            isMobile &&
+                            currentRoute != '/profile' &&
+                            currentRoute != '/manage-account',
+                        bottom: false,
+                        child: Column(
+                          children: [
+                            // Top App Bar - Hide in Settings, Profile, Manage Account, Colab, or Help
+                            if (currentRoute != '/profile' &&
+                                currentRoute != '/manage-account' &&
+                                uiState.activeFolder != 'Settings' &&
+                                uiState.activeFolder != 'Chat' &&
+                                uiState.activeFolder != 'Casbox' &&
+                                uiState.activeFolder != 'Help')
+                              const TopSearchBar(),
+
+                            // Main Content Split Area
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  // Main Screen Content (GoRouter child: Email List, Colab, or Settings)
+                                  Expanded(
+                                    child: ClipRRect(
+                                      borderRadius: isMobile
+                                          ? BorderRadius.zero
+                                          : const BorderRadius.only(
+                                              topLeft: Radius.circular(
+                                                BNXConstants.borderRadiusL,
+                                              ),
+                                            ),
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          color: isDark
+                                              ? BNXColors.darkSurface
+                                              : Colors.white,
+                                          borderRadius: isMobile
+                                              ? BorderRadius.zero
+                                              : const BorderRadius.only(
+                                                  topLeft: Radius.circular(
+                                                    BNXConstants.borderRadiusL,
+                                                  ),
+                                                ),
+                                          boxShadow: isMobile
+                                              ? null
+                                              : BNXConstants.softShadow,
+                                        ),
+                                        child: AnimatedSwitcher(
+                                          duration: const Duration(
+                                            milliseconds: 180,
+                                          ),
+                                          switchInCurve: Curves.easeOutCubic,
+                                          switchOutCurve: Curves.easeInCubic,
+                                          transitionBuilder:
+                                              (
+                                                Widget child,
+                                                Animation<double> animation,
+                                              ) {
+                                                return FadeTransition(
+                                                  opacity: CurvedAnimation(
+                                                    parent: animation,
+                                                    curve: Curves.easeInOut,
+                                                  ),
+                                                  child: child,
+                                                );
+                                              },
+                                          child: child,
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ),
 
-                                // Expandable Right Utility Panel (e.g. Calendar)
-                                if (showRightPanel)
-                                  _buildExpandableRightPanel(
-                                    context,
-                                    ref,
-                                    uiState,
-                                    isDark,
-                                  ),
+                                  // Expandable Right Utility Panel (e.g. Calendar)
+                                  if (showRightPanel)
+                                    _buildExpandableRightPanel(
+                                      context,
+                                      ref,
+                                      uiState,
+                                      isDark,
+                                    ),
 
-                                // Far Right Rail (Mini icons)
-                                if (showRightRail)
-                                  _buildRightIconRail(
-                                    context,
-                                    ref,
-                                    uiState,
-                                    isDark,
-                                  ),
-                              ],
+                                  // Far Right Rail (Mini icons)
+                                  if (showRightRail)
+                                    _buildRightIconRail(
+                                      context,
+                                      ref,
+                                      uiState,
+                                      isDark,
+                                    ),
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
 
               // 3. FLOATING COMPOSE DIALOG (Overlays bottom right)
               const ComposeDialog(),
@@ -427,7 +436,8 @@ class DashboardShell extends ConsumerWidget {
                   bottom: 20,
                   child: VirtualKeyboardWidget(
                     onClose: () {
-                      ref.read(isVirtualKeyboardOpenProvider.notifier).state = false;
+                      ref.read(isVirtualKeyboardOpenProvider.notifier).state =
+                          false;
                     },
                   ),
                 ),
@@ -501,8 +511,10 @@ class DashboardShell extends ConsumerWidget {
               },
               borderRadius: BorderRadius.circular(20),
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 7,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(20),
@@ -561,7 +573,9 @@ class DashboardShell extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(16),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 5),
+                      horizontal: 20,
+                      vertical: 5,
+                    ),
                     decoration: BoxDecoration(
                       color: !isColab ? Colors.white : Colors.transparent,
                       borderRadius: BorderRadius.circular(16),
@@ -569,10 +583,12 @@ class DashboardShell extends ConsumerWidget {
                     child: Text(
                       'Mail',
                       style: TextStyle(
-                        color:
-                            !isColab ? const Color(0xFF195BAC) : Colors.white,
-                        fontWeight:
-                            !isColab ? FontWeight.bold : FontWeight.w500,
+                        color: !isColab
+                            ? const Color(0xFF195BAC)
+                            : Colors.white,
+                        fontWeight: !isColab
+                            ? FontWeight.bold
+                            : FontWeight.w500,
                         fontSize: 13,
                       ),
                     ),
@@ -589,7 +605,9 @@ class DashboardShell extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(16),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 5),
+                      horizontal: 20,
+                      vertical: 5,
+                    ),
                     decoration: BoxDecoration(
                       color: isColab ? Colors.white : Colors.transparent,
                       borderRadius: BorderRadius.circular(16),
@@ -597,8 +615,7 @@ class DashboardShell extends ConsumerWidget {
                     child: Text(
                       'Chat',
                       style: TextStyle(
-                        color:
-                            isColab ? const Color(0xFF195BAC) : Colors.white,
+                        color: isColab ? const Color(0xFF195BAC) : Colors.white,
                         fontWeight: isColab ? FontWeight.bold : FontWeight.w500,
                         fontSize: 13,
                       ),
@@ -622,16 +639,18 @@ class DashboardShell extends ConsumerWidget {
             ),
             child: Row(
               children: [
-                const Icon(Icons.search_rounded,
-                    color: Colors.white70, size: 16),
+                const Icon(
+                  Icons.search_rounded,
+                  color: Colors.white70,
+                  size: 16,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: TextField(
                     style: const TextStyle(color: Colors.white, fontSize: 13),
                     decoration: const InputDecoration(
                       hintText: 'Search mail...',
-                      hintStyle:
-                          TextStyle(color: Colors.white60, fontSize: 13),
+                      hintStyle: TextStyle(color: Colors.white60, fontSize: 13),
                       border: InputBorder.none,
                       isDense: true,
                       contentPadding: EdgeInsets.symmetric(vertical: 6),
@@ -648,7 +667,8 @@ class DashboardShell extends ConsumerWidget {
 
           // 5. User Profile (Highlighted Account Tab)
           InkWell(
-            onTap: () => _showAccountMenuPopup(context, ref, activeAccount, isDark),
+            onTap: () =>
+                _showAccountMenuPopup(context, ref, activeAccount, isDark),
             borderRadius: BorderRadius.circular(20),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -694,7 +714,7 @@ class DashboardShell extends ConsumerWidget {
               ),
             ),
           ),
-          
+
           // Vertical divider between account and bit tool button
           Container(
             height: 20,
@@ -752,18 +772,20 @@ class DashboardShell extends ConsumerWidget {
 
     Widget panelContent;
     final bool isBeta = uiState.activeRightUtility == 'Beta';
-    final String panelTitle = (uiState.activeRightUtility == 'Keep' ||
+    final String panelTitle =
+        (uiState.activeRightUtility == 'Keep' ||
             uiState.activeRightUtility == 'Notes')
         ? 'Notes'
         : (uiState.activeRightUtility == 'Calculator'
-            ? 'BNX Calculator'
-            : (uiState.activeRightUtility == 'Weather' ||
+              ? 'BNX Calculator'
+              : (uiState.activeRightUtility == 'Weather' ||
                     uiState.activeRightUtility == 'Cloud')
-                ? 'Weather'
-                : (isBeta ? 'BETA' : uiState.activeRightUtility));
+              ? 'Weather'
+              : (isBeta ? 'BETA' : uiState.activeRightUtility));
 
-    final double panelWidth =
-        uiState.activeRightUtility == 'Calculator' ? 340 : (isBeta ? 330 : 300);
+    final double panelWidth = uiState.activeRightUtility == 'Calculator'
+        ? 340
+        : (isBeta ? 330 : 300);
 
     switch (uiState.activeRightUtility) {
       case 'Beta':
@@ -825,7 +847,9 @@ class DashboardShell extends ConsumerWidget {
                   style: TextStyle(
                     fontWeight: isBeta ? FontWeight.w900 : FontWeight.bold,
                     fontSize: isBeta ? 22 : 15,
-                    color: isBeta ? const Color(0xFF195BAC) : (isDark ? Colors.white : Colors.black87),
+                    color: isBeta
+                        ? const Color(0xFF195BAC)
+                        : (isDark ? Colors.white : Colors.black87),
                     letterSpacing: isBeta ? -0.5 : 0,
                   ),
                 ),
@@ -834,11 +858,16 @@ class DashboardShell extends ConsumerWidget {
                   children: [
                     if (isBeta) ...[
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 3,
+                        ),
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: isDark ? Colors.white24 : const Color(0xFFCBD5E1),
+                            color: isDark
+                                ? Colors.white24
+                                : const Color(0xFFCBD5E1),
                           ),
                         ),
                         child: Text(
@@ -846,7 +875,9 @@ class DashboardShell extends ConsumerWidget {
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
-                            color: isDark ? Colors.white70 : const Color(0xFF475569),
+                            color: isDark
+                                ? Colors.white70
+                                : const Color(0xFF475569),
                           ),
                         ),
                       ),
@@ -863,7 +894,9 @@ class DashboardShell extends ConsumerWidget {
                         padding: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: isDark ? Colors.white12 : const Color(0xFFF1F5F9),
+                          color: isDark
+                              ? Colors.white12
+                              : const Color(0xFFF1F5F9),
                         ),
                         child: Icon(
                           Icons.close,
@@ -1212,7 +1245,8 @@ class DashboardShell extends ConsumerWidget {
                   )
                 : null,
             alignment: Alignment.center,
-            child: customIcon ??
+            child:
+                customIcon ??
                 (imageAsset != null
                     ? Image.asset(
                         imageAsset,
@@ -1288,7 +1322,10 @@ class DashboardShell extends ConsumerWidget {
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: const Color(0xFFFEF3C7),
-                        border: Border.all(color: const Color(0xFFFDE68A), width: 1.2),
+                        border: Border.all(
+                          color: const Color(0xFFFDE68A),
+                          width: 1.2,
+                        ),
                       ),
                       alignment: Alignment.center,
                       child: const Icon(
@@ -1314,14 +1351,18 @@ class DashboardShell extends ConsumerWidget {
                       Icon(
                         Icons.description_outlined,
                         size: 68,
-                        color: isDark ? Colors.white24 : const Color(0xFFCBD5E1),
+                        color: isDark
+                            ? Colors.white24
+                            : const Color(0xFFCBD5E1),
                       ),
                       const SizedBox(height: 12),
                       Text(
                         'No notes found',
                         style: TextStyle(
                           fontSize: 14,
-                          color: isDark ? Colors.white54 : const Color(0xFF94A3B8),
+                          color: isDark
+                              ? Colors.white54
+                              : const Color(0xFF94A3B8),
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -1329,7 +1370,10 @@ class DashboardShell extends ConsumerWidget {
                   ),
                 )
               : ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
                   itemCount: notes.length,
                   itemBuilder: (context, index) {
                     final note = notes[index];
@@ -1337,7 +1381,9 @@ class DashboardShell extends ConsumerWidget {
                       margin: const EdgeInsets.only(bottom: 10),
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFFFFBEB),
+                        color: isDark
+                            ? const Color(0xFF1E293B)
+                            : const Color(0xFFFFFBEB),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: const Color(0xFFFDE68A),
@@ -1355,16 +1401,29 @@ class DashboardShell extends ConsumerWidget {
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 13.5,
-                                    color: isDark ? Colors.white : const Color(0xFF1E293B),
+                                    color: isDark
+                                        ? Colors.white
+                                        : const Color(0xFF1E293B),
                                   ),
                                 ),
                               ),
                               GestureDetector(
                                 onTap: () {
-                                  final updated = List<Map<String, String>>.from(notes)..removeAt(index);
-                                  ref.read(globalNotesListProvider.notifier).state = updated;
+                                  final updated =
+                                      List<Map<String, String>>.from(notes)
+                                        ..removeAt(index);
+                                  ref
+                                          .read(
+                                            globalNotesListProvider.notifier,
+                                          )
+                                          .state =
+                                      updated;
                                 },
-                                child: const Icon(Icons.close, size: 14, color: Colors.grey),
+                                child: const Icon(
+                                  Icons.close,
+                                  size: 14,
+                                  color: Colors.grey,
+                                ),
                               ),
                             ],
                           ),
@@ -1374,7 +1433,9 @@ class DashboardShell extends ConsumerWidget {
                               note['body'] ?? '',
                               style: TextStyle(
                                 fontSize: 12,
-                                color: isDark ? Colors.white70 : const Color(0xFF475569),
+                                color: isDark
+                                    ? Colors.white70
+                                    : const Color(0xFF475569),
                               ),
                             ),
                           ],
@@ -1397,7 +1458,10 @@ class DashboardShell extends ConsumerWidget {
       builder: (ctx) => AlertDialog(
         backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('New Global Note', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        title: const Text(
+          'New Global Note',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1524,7 +1588,10 @@ class DashboardShell extends ConsumerWidget {
                         borderRadius: BorderRadius.circular(20),
                       ),
                     ),
-                    child: const Text('Change Location', style: TextStyle(fontSize: 12)),
+                    child: const Text(
+                      'Change Location',
+                      style: TextStyle(fontSize: 12),
+                    ),
                   ),
                 ],
               )
@@ -1574,7 +1641,9 @@ class DashboardShell extends ConsumerWidget {
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 13,
-                        color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                        color: isDark
+                            ? Colors.white60
+                            : const Color(0xFF64748B),
                         height: 1.4,
                       ),
                     ),
@@ -1603,7 +1672,10 @@ class DashboardShell extends ConsumerWidget {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(24),
                       ),
-                      padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 26,
+                        vertical: 12,
+                      ),
                     ),
                   ),
                 ],
@@ -1647,7 +1719,9 @@ class DashboardShell extends ConsumerWidget {
               margin: const EdgeInsets.symmetric(vertical: 4),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: bgColor ?? (isDark ? const Color(0xFF1E293B) : Colors.white),
+                color:
+                    bgColor ??
+                    (isDark ? const Color(0xFF1E293B) : Colors.white),
                 border: Border.all(
                   color: isSelected ? const Color(0xFF195BAC) : borderColor,
                   width: isSelected ? 2.0 : 1.2,
@@ -1684,7 +1758,9 @@ class DashboardShell extends ConsumerWidget {
                 border: Border.all(
                   color: isActive
                       ? const Color(0xFF195BAC)
-                      : (isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
+                      : (isDark
+                            ? const Color(0xFF334155)
+                            : const Color(0xFFCBD5E1)),
                   width: isActive ? 1.8 : 1.2,
                 ),
               ),
@@ -1731,14 +1807,19 @@ class DashboardShell extends ConsumerWidget {
                       },
                       borderRadius: BorderRadius.circular(6),
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 6,
+                        ),
                         child: Text(
                           'EDIT\nPINS',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 9.5,
                             fontWeight: FontWeight.w800,
-                            color: isDark ? Colors.white70 : const Color(0xFF1E293B),
+                            color: isDark
+                                ? Colors.white70
+                                : const Color(0xFF1E293B),
                             letterSpacing: 0.5,
                             height: 1.15,
                           ),
@@ -1752,14 +1833,18 @@ class DashboardShell extends ConsumerWidget {
                       name: 'Calendar',
                       tooltip: 'Calendar',
                       borderColor: const Color(0xFFFDE68A),
-                      bgColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFFFFBEB),
+                      bgColor: isDark
+                          ? const Color(0xFF1E293B)
+                          : const Color(0xFFFFFBEB),
                       iconWidget: const Icon(
                         Icons.calendar_today_outlined,
                         color: Color(0xFFF59E0B),
                         size: 18,
                       ),
                       onTap: () {
-                        ref.read(appUiProvider.notifier).setActiveRightUtility('Calendar');
+                        ref
+                            .read(appUiProvider.notifier)
+                            .setActiveRightUtility('Calendar');
                       },
                     ),
 
@@ -1768,14 +1853,18 @@ class DashboardShell extends ConsumerWidget {
                       name: 'Calculator',
                       tooltip: 'BNX Calculator',
                       borderColor: const Color(0xFFA7F3D0),
-                      bgColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFECFDF5),
+                      bgColor: isDark
+                          ? const Color(0xFF1E293B)
+                          : const Color(0xFFECFDF5),
                       iconWidget: const Icon(
                         Icons.calculate_outlined,
                         color: Color(0xFF10B981),
                         size: 19,
                       ),
                       onTap: () {
-                        ref.read(appUiProvider.notifier).setActiveRightUtility('Calculator');
+                        ref
+                            .read(appUiProvider.notifier)
+                            .setActiveRightUtility('Calculator');
                       },
                     ),
 
@@ -1784,14 +1873,18 @@ class DashboardShell extends ConsumerWidget {
                       name: 'Contacts',
                       tooltip: 'Contacts & Teams',
                       borderColor: const Color(0xFFBFDBFE),
-                      bgColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFEFF6FF),
+                      bgColor: isDark
+                          ? const Color(0xFF1E293B)
+                          : const Color(0xFFEFF6FF),
                       iconWidget: const Icon(
                         Icons.people_alt_outlined,
                         color: Color(0xFF3B82F6),
                         size: 19,
                       ),
                       onTap: () {
-                        ref.read(appUiProvider.notifier).setActiveRightUtility('Contacts');
+                        ref
+                            .read(appUiProvider.notifier)
+                            .setActiveRightUtility('Contacts');
                       },
                     ),
 
@@ -1800,14 +1893,18 @@ class DashboardShell extends ConsumerWidget {
                       name: 'Notes',
                       tooltip: 'Notes',
                       borderColor: const Color(0xFFFDE68A),
-                      bgColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFFFFBEB),
+                      bgColor: isDark
+                          ? const Color(0xFF1E293B)
+                          : const Color(0xFFFFFBEB),
                       iconWidget: const Icon(
                         Icons.note_alt_outlined,
                         color: Color(0xFFF59E0B),
                         size: 19,
                       ),
                       onTap: () {
-                        ref.read(appUiProvider.notifier).setActiveRightUtility('Notes');
+                        ref
+                            .read(appUiProvider.notifier)
+                            .setActiveRightUtility('Notes');
                       },
                     ),
 
@@ -1817,7 +1914,9 @@ class DashboardShell extends ConsumerWidget {
                       tooltip: 'Virtual Keyboard',
                       isActive: isVirtualKeyboardOpen,
                       borderColor: const Color(0xFFC7D2FE),
-                      bgColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFEEF2FF),
+                      bgColor: isDark
+                          ? const Color(0xFF1E293B)
+                          : const Color(0xFFEEF2FF),
                       iconWidget: const Icon(
                         Icons.keyboard_alt_outlined,
                         color: Color(0xFF6366F1),
@@ -1834,14 +1933,18 @@ class DashboardShell extends ConsumerWidget {
                       name: 'Weather',
                       tooltip: 'Weather',
                       borderColor: const Color(0xFFBAE6FD),
-                      bgColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFF0F9FF),
+                      bgColor: isDark
+                          ? const Color(0xFF1E293B)
+                          : const Color(0xFFF0F9FF),
                       iconWidget: const Icon(
                         Icons.wb_sunny_outlined,
                         color: Color(0xFF0EA5E9),
                         size: 19,
                       ),
                       onTap: () {
-                        ref.read(appUiProvider.notifier).setActiveRightUtility('Weather');
+                        ref
+                            .read(appUiProvider.notifier)
+                            .setActiveRightUtility('Weather');
                       },
                     ),
 
@@ -1853,7 +1956,8 @@ class DashboardShell extends ConsumerWidget {
                         cursor: SystemMouseCursors.click,
                         child: GestureDetector(
                           onTap: () {
-                            ref.read(isEditingPinsProvider.notifier).state = false;
+                            ref.read(isEditingPinsProvider.notifier).state =
+                                false;
                           },
                           child: Container(
                             width: 38,
@@ -1880,7 +1984,9 @@ class DashboardShell extends ConsumerWidget {
                       name: 'Beta',
                       tooltip: 'Beta Ecosystem',
                       borderColor: const Color(0xFF93C5FD),
-                      bgColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFEFF6FF),
+                      bgColor: isDark
+                          ? const Color(0xFF1E293B)
+                          : const Color(0xFFEFF6FF),
                       iconWidget: const Text(
                         'B',
                         style: TextStyle(
@@ -1893,7 +1999,9 @@ class DashboardShell extends ConsumerWidget {
                         ),
                       ),
                       onTap: () {
-                        ref.read(appUiProvider.notifier).setActiveRightUtility('Beta');
+                        ref
+                            .read(appUiProvider.notifier)
+                            .setActiveRightUtility('Beta');
                       },
                     ),
 
@@ -1902,14 +2010,18 @@ class DashboardShell extends ConsumerWidget {
                       name: 'Calendar',
                       tooltip: 'Calendar',
                       borderColor: const Color(0xFFFDE68A),
-                      bgColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFFFFBEB),
+                      bgColor: isDark
+                          ? const Color(0xFF1E293B)
+                          : const Color(0xFFFFFBEB),
                       iconWidget: const Icon(
                         Icons.calendar_today_outlined,
                         color: Color(0xFFF59E0B),
                         size: 18,
                       ),
                       onTap: () {
-                        ref.read(appUiProvider.notifier).setActiveRightUtility('Calendar');
+                        ref
+                            .read(appUiProvider.notifier)
+                            .setActiveRightUtility('Calendar');
                       },
                     ),
 
@@ -1918,14 +2030,18 @@ class DashboardShell extends ConsumerWidget {
                       name: 'Calculator',
                       tooltip: 'BNX Calculator',
                       borderColor: const Color(0xFFA7F3D0),
-                      bgColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFECFDF5),
+                      bgColor: isDark
+                          ? const Color(0xFF1E293B)
+                          : const Color(0xFFECFDF5),
                       iconWidget: const Icon(
                         Icons.calculate_outlined,
                         color: Color(0xFF10B981),
                         size: 19,
                       ),
                       onTap: () {
-                        ref.read(appUiProvider.notifier).setActiveRightUtility('Calculator');
+                        ref
+                            .read(appUiProvider.notifier)
+                            .setActiveRightUtility('Calculator');
                       },
                     ),
 
@@ -1934,14 +2050,18 @@ class DashboardShell extends ConsumerWidget {
                       name: 'Contacts',
                       tooltip: 'Contacts & Teams',
                       borderColor: const Color(0xFFBFDBFE),
-                      bgColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFEFF6FF),
+                      bgColor: isDark
+                          ? const Color(0xFF1E293B)
+                          : const Color(0xFFEFF6FF),
                       iconWidget: const Icon(
                         Icons.people_alt_outlined,
                         color: Color(0xFF3B82F6),
                         size: 19,
                       ),
                       onTap: () {
-                        ref.read(appUiProvider.notifier).setActiveRightUtility('Contacts');
+                        ref
+                            .read(appUiProvider.notifier)
+                            .setActiveRightUtility('Contacts');
                       },
                     ),
 
@@ -1950,14 +2070,18 @@ class DashboardShell extends ConsumerWidget {
                       name: 'Notes',
                       tooltip: 'Notes',
                       borderColor: const Color(0xFFFDE68A),
-                      bgColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFFFFBEB),
+                      bgColor: isDark
+                          ? const Color(0xFF1E293B)
+                          : const Color(0xFFFFFBEB),
                       iconWidget: const Icon(
                         Icons.note_alt_outlined,
                         color: Color(0xFFF59E0B),
                         size: 19,
                       ),
                       onTap: () {
-                        ref.read(appUiProvider.notifier).setActiveRightUtility('Notes');
+                        ref
+                            .read(appUiProvider.notifier)
+                            .setActiveRightUtility('Notes');
                       },
                     ),
 
@@ -1967,7 +2091,9 @@ class DashboardShell extends ConsumerWidget {
                       tooltip: 'Virtual Keyboard',
                       isActive: isVirtualKeyboardOpen,
                       borderColor: const Color(0xFFC7D2FE),
-                      bgColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFEEF2FF),
+                      bgColor: isDark
+                          ? const Color(0xFF1E293B)
+                          : const Color(0xFFEEF2FF),
                       iconWidget: const Icon(
                         Icons.keyboard_alt_outlined,
                         color: Color(0xFF6366F1),
@@ -1984,14 +2110,18 @@ class DashboardShell extends ConsumerWidget {
                       name: 'Weather',
                       tooltip: 'Weather',
                       borderColor: const Color(0xFFBAE6FD),
-                      bgColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFF0F9FF),
+                      bgColor: isDark
+                          ? const Color(0xFF1E293B)
+                          : const Color(0xFFF0F9FF),
                       iconWidget: const Icon(
                         Icons.wb_sunny_outlined,
                         color: Color(0xFF0EA5E9),
                         size: 19,
                       ),
                       onTap: () {
-                        ref.read(appUiProvider.notifier).setActiveRightUtility('Weather');
+                        ref
+                            .read(appUiProvider.notifier)
+                            .setActiveRightUtility('Weather');
                       },
                     ),
 
@@ -2003,7 +2133,8 @@ class DashboardShell extends ConsumerWidget {
                         cursor: SystemMouseCursors.click,
                         child: GestureDetector(
                           onTap: () {
-                            ref.read(isEditingPinsProvider.notifier).state = true;
+                            ref.read(isEditingPinsProvider.notifier).state =
+                                true;
                           },
                           child: Container(
                             width: 38,
@@ -2011,16 +2142,22 @@ class DashboardShell extends ConsumerWidget {
                             margin: const EdgeInsets.symmetric(vertical: 4),
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                              color: isDark
+                                  ? const Color(0xFF1E293B)
+                                  : Colors.white,
                               border: Border.all(
-                                color: isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1),
+                                color: isDark
+                                    ? const Color(0xFF475569)
+                                    : const Color(0xFFCBD5E1),
                                 width: 1.4,
                               ),
                             ),
                             alignment: Alignment.center,
                             child: Icon(
                               Icons.add,
-                              color: isDark ? Colors.white70 : const Color(0xFF64748B),
+                              color: isDark
+                                  ? Colors.white70
+                                  : const Color(0xFF64748B),
                               size: 20,
                             ),
                           ),
@@ -2209,7 +2346,6 @@ class DashboardShell extends ConsumerWidget {
           .toList(),
     );
   }
-
 
   Widget _buildContactsPanel(bool isDark) {
     return ListView(

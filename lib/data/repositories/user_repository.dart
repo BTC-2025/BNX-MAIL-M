@@ -21,7 +21,9 @@ class UserRepository {
         try {
           res = await ApiClient.get('/api/user/profile');
           data = res['data'] as Map<String, dynamic>? ?? res;
-          print('[PROFILE SETTINGS LOG] Fallback GET /api/user/profile returned: $data');
+          print(
+            '[PROFILE SETTINGS LOG] Fallback GET /api/user/profile returned: $data',
+          );
         } catch (_) {}
       }
 
@@ -93,7 +95,8 @@ class UserRepository {
       if (uploadFilePath != null) {
         final res = await ApiClient.uploadProfilePicture(uploadFilePath);
         final remoteData = res['data'] as Map<String, dynamic>? ?? res;
-        final serverAvatarUrl = remoteData['avatarUrl']?.toString() ??
+        final serverAvatarUrl =
+            remoteData['avatarUrl']?.toString() ??
             remoteData['avatar']?.toString() ??
             remoteData['url']?.toString();
         if (serverAvatarUrl != null && serverAvatarUrl.isNotEmpty) {
@@ -115,7 +118,15 @@ class UserRepository {
   static List<dynamic>? _extractList(dynamic json) {
     if (json is List) return json;
     if (json is Map) {
-      final listKeys = ['emails', 'messages', 'items', 'content', 'data', 'list', 'mailboxes'];
+      final listKeys = [
+        'emails',
+        'messages',
+        'items',
+        'content',
+        'data',
+        'list',
+        'mailboxes',
+      ];
       for (final key in listKeys) {
         if (json.containsKey(key)) {
           final val = json[key];
@@ -182,7 +193,7 @@ class UserRepository {
   static Future<void> updateSettings(Map<String, dynamic> settings) async {
     final email = await TokenService.getUserEmail() ?? '';
     final existing = await TokenService.getUserSettings(email) ?? {};
-    
+
     // Prepare cleaned payload: parse String undoSendDelay to int if needed
     final payload = Map<String, dynamic>.from(settings);
     if (payload.containsKey('undoSendDelay')) {
@@ -227,11 +238,11 @@ class UserRepository {
     }
   }
 
-  static Future<void> updateRecovery(String recoveryEmail, String phoneNumber) async {
-    final body = {
-      'recoveryEmail': recoveryEmail,
-      'phoneNumber': phoneNumber,
-    };
+  static Future<void> updateRecovery(
+    String recoveryEmail,
+    String phoneNumber,
+  ) async {
+    final body = {'recoveryEmail': recoveryEmail, 'phoneNumber': phoneNumber};
     try {
       await ApiClient.patch('/api/users/recovery', body: body);
     } catch (_) {
@@ -246,7 +257,12 @@ class UserRepository {
       final res = await ApiClient.get('/api/signatures');
       final list = res['data'] ?? res['signatures'] ?? res;
       if (list is List) {
-        return list.map((e) => e is Map ? Map<String, dynamic>.from(e) : <String, dynamic>{}).toList();
+        return list
+            .map(
+              (e) =>
+                  e is Map ? Map<String, dynamic>.from(e) : <String, dynamic>{},
+            )
+            .toList();
       }
     } catch (_) {}
     return [];
@@ -258,11 +274,10 @@ class UserRepository {
     bool isDefault = true,
   }) async {
     try {
-      await ApiClient.post('/api/signatures', body: {
-        'name': name,
-        'content': content,
-        'isDefault': isDefault,
-      });
+      await ApiClient.post(
+        '/api/signatures',
+        body: {'name': name, 'content': content, 'isDefault': isDefault},
+      );
     } catch (_) {}
   }
 
@@ -273,11 +288,10 @@ class UserRepository {
     bool isDefault = true,
   }) async {
     try {
-      await ApiClient.put('/api/signatures/$id', body: {
-        'name': name,
-        'content': content,
-        'isDefault': isDefault,
-      });
+      await ApiClient.put(
+        '/api/signatures/$id',
+        body: {'name': name, 'content': content, 'isDefault': isDefault},
+      );
     } catch (_) {}
   }
 
@@ -333,12 +347,24 @@ class UserRepository {
       final list = res['data'] ?? res['activityLogs'] ?? res['sessions'] ?? res;
       if (list is List) {
         return list.map((item) {
-          final map = item is Map ? Map<String, dynamic>.from(item) : <String, dynamic>{};
+          final map = item is Map
+              ? Map<String, dynamic>.from(item)
+              : <String, dynamic>{};
           return {
             'id': map['id']?.toString() ?? map['sessionId']?.toString() ?? '',
-            'title': map['device']?.toString() ?? map['client']?.toString() ?? map['action']?.toString() ?? 'Active Device Session',
-            'ip': map['ip']?.toString() ?? map['ipAddress']?.toString() ?? '127.0.0.1',
-            'lastActive': map['lastActive']?.toString() ?? map['timestamp']?.toString() ?? 'Active Now',
+            'title':
+                map['device']?.toString() ??
+                map['client']?.toString() ??
+                map['action']?.toString() ??
+                'Active Device Session',
+            'ip':
+                map['ip']?.toString() ??
+                map['ipAddress']?.toString() ??
+                '127.0.0.1',
+            'lastActive':
+                map['lastActive']?.toString() ??
+                map['timestamp']?.toString() ??
+                'Active Now',
           };
         }).toList();
       }
@@ -348,7 +374,10 @@ class UserRepository {
 
   static Future<void> revokeSession(String sessionId) async {
     try {
-      await ApiClient.post('/api/user/sessions/revoke', body: {'sessionId': sessionId});
+      await ApiClient.post(
+        '/api/user/sessions/revoke',
+        body: {'sessionId': sessionId},
+      );
     } catch (_) {}
   }
 
@@ -360,10 +389,10 @@ class UserRepository {
     final deviceType = Platform.isIOS ? 'ios' : 'android';
     try {
       print('[DEVICE TOKEN API] Registering FCM device token with backend...');
-      await ApiClient.post('/api/users/device-token', body: {
-        'deviceToken': deviceToken.trim(),
-        'deviceType': deviceType,
-      });
+      await ApiClient.post(
+        '/api/users/device-token',
+        body: {'deviceToken': deviceToken.trim(), 'deviceType': deviceType},
+      );
       print('[DEVICE TOKEN API] FCM device token registered successfully');
     } catch (e) {
       print('[DEVICE TOKEN API ERROR] Failed to register device token: $e');
@@ -374,7 +403,9 @@ class UserRepository {
   static Future<void> unregisterDeviceToken(String deviceToken) async {
     if (deviceToken.trim().isEmpty) return;
     try {
-      print('[DEVICE TOKEN API] Unregistering FCM device token from backend...');
+      print(
+        '[DEVICE TOKEN API] Unregistering FCM device token from backend...',
+      );
       final encodedToken = Uri.encodeComponent(deviceToken.trim());
       await ApiClient.delete('/api/users/device-token/$encodedToken');
       print('[DEVICE TOKEN API] FCM device token unregistered successfully');

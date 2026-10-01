@@ -122,11 +122,20 @@ class _SidebarState extends ConsumerState<Sidebar> {
         )
         .length;
     final int allInboxesCount = emails
-        .where((e) => !e.isTrash && !e.memberOfFolders.contains('Trash') && !isSentEmail(e))
+        .where(
+          (e) =>
+              !e.isTrash &&
+              !e.memberOfFolders.contains('Trash') &&
+              !isSentEmail(e),
+        )
         .length;
     final int sentCount = emails.where((e) => isSentEmail(e)).length;
-    final int draftCount =
-        emails.where((e) => (e.isDraft || e.memberOfFolders.contains('Draft')) && !e.isTrash).length;
+    final int draftCount = emails
+        .where(
+          (e) =>
+              (e.isDraft || e.memberOfFolders.contains('Draft')) && !e.isTrash,
+        )
+        .length;
     final int archiveCount = emails
         .where(
           (e) =>
@@ -136,12 +145,18 @@ class _SidebarState extends ConsumerState<Sidebar> {
         )
         .length;
     final int starredCount = emails
-        .where((e) => (e.isStarred || e.memberOfFolders.contains('Starred')) && !e.isTrash)
+        .where(
+          (e) =>
+              (e.isStarred || e.memberOfFolders.contains('Starred')) &&
+              !e.isTrash,
+        )
         .length;
-    final int spamCount =
-        emails.where((e) => e.memberOfFolders.contains('Spam') && !e.isTrash).length;
-    final int trashCount =
-        emails.where((e) => e.memberOfFolders.contains('Trash') || e.isTrash).length;
+    final int spamCount = emails
+        .where((e) => e.memberOfFolders.contains('Spam') && !e.isTrash)
+        .length;
+    final int trashCount = emails
+        .where((e) => e.memberOfFolders.contains('Trash') || e.isTrash)
+        .length;
     final jobKeywords = activeAccount.getKeywords();
     final int jobMailsCount = emails
         .where(
@@ -157,11 +172,14 @@ class _SidebarState extends ConsumerState<Sidebar> {
         .length;
 
     final bool isMobile = MediaQuery.of(context).size.width < 600;
-    final bool isDesktopOS = !kIsWeb &&
+    final bool isDesktopOS =
+        !kIsWeb &&
         (defaultTargetPlatform == TargetPlatform.macOS ||
             defaultTargetPlatform == TargetPlatform.windows);
     // On macOS and Windows desktop, the sidebar is always fully elaborated
-    final bool isCollapsed = isDesktopOS ? false : (!isMobile && uiState.isSidebarCollapsed);
+    final bool isCollapsed = isDesktopOS
+        ? false
+        : (!isMobile && uiState.isSidebarCollapsed);
 
     final labelsVis = uiState.sidebarLabelVisibility;
 
@@ -172,7 +190,8 @@ class _SidebarState extends ConsumerState<Sidebar> {
           title: 'All Inboxes',
           isSelected: uiState.activeFolder == 'All Inboxes',
           badgeText: allInboxesCount > 0 ? '$allInboxesCount' : null,
-          collapsed: isCollapsed, onTap: () => navigateToFolder('All Inboxes', '/'),
+          collapsed: isCollapsed,
+          onTap: () => navigateToFolder('All Inboxes', '/'),
         ),
       if (labelsVis['Inbox'] ?? true)
         _buildPillTile(
@@ -180,32 +199,37 @@ class _SidebarState extends ConsumerState<Sidebar> {
           title: 'Primary',
           isSelected: uiState.activeFolder == 'Inbox',
           badgeText: primaryCount > 0 ? '$primaryCount' : null,
-          collapsed: isCollapsed, onTap: () => navigateToFolder('Inbox', '/'),
+          collapsed: isCollapsed,
+          onTap: () => navigateToFolder('Inbox', '/'),
         ),
       _buildPillTile(
         icon: Icons.local_offer_outlined,
         title: 'Promotions',
         isSelected: uiState.activeFolder == 'Promotions',
-        collapsed: isCollapsed, onTap: () => navigateToFolder('Promotions', '/'),
+        collapsed: isCollapsed,
+        onTap: () => navigateToFolder('Promotions', '/'),
       ),
       _buildPillTile(
         icon: Icons.people_outline_rounded,
         title: 'Social',
         isSelected: uiState.activeFolder == 'Social',
-        collapsed: isCollapsed, onTap: () => navigateToFolder('Social', '/'),
+        collapsed: isCollapsed,
+        onTap: () => navigateToFolder('Social', '/'),
       ),
       _buildPillTile(
         icon: Icons.info_outline_rounded,
         title: 'Updates',
         isSelected: uiState.activeFolder == 'Updates',
-        collapsed: isCollapsed, onTap: () => navigateToFolder('Updates', '/'),
+        collapsed: isCollapsed,
+        onTap: () => navigateToFolder('Updates', '/'),
       ),
       _buildPillTile(
         icon: Icons.work_outline_rounded,
         title: 'Job Mails',
         isSelected: uiState.activeFolder == 'Job Mails',
         badgeText: jobMailsCount > 0 ? '$jobMailsCount' : null,
-        collapsed: isCollapsed, onTap: () => navigateToFolder('Job Mails', '/'),
+        collapsed: isCollapsed,
+        onTap: () => navigateToFolder('Job Mails', '/'),
       ),
       if (labelsVis['Starred'] ?? true)
         _buildPillTile(
@@ -213,7 +237,8 @@ class _SidebarState extends ConsumerState<Sidebar> {
           title: 'Starred',
           isSelected: uiState.activeFolder == 'Starred',
           badgeText: starredCount > 0 ? '$starredCount' : null,
-          collapsed: isCollapsed, onTap: () => navigateToFolder('Starred', '/'),
+          collapsed: isCollapsed,
+          onTap: () => navigateToFolder('Starred', '/'),
         ),
       if (labelsVis['Sent'] ?? true)
         _buildPillTile(
@@ -221,7 +246,8 @@ class _SidebarState extends ConsumerState<Sidebar> {
           title: 'Sent',
           isSelected: uiState.activeFolder == 'Sent',
           badgeText: sentCount > 0 ? '$sentCount' : null,
-          collapsed: isCollapsed, onTap: () => navigateToFolder('Sent', '/'),
+          collapsed: isCollapsed,
+          onTap: () => navigateToFolder('Sent', '/'),
         ),
       if (labelsVis['Draft'] ?? true)
         _buildPillTile(
@@ -229,11 +255,14 @@ class _SidebarState extends ConsumerState<Sidebar> {
           title: 'Drafts',
           isSelected: uiState.activeFolder == 'Draft',
           badgeText: draftCount > 0 ? '$draftCount' : null,
-          collapsed: isCollapsed, onTap: () => navigateToFolder('Draft', '/'),
+          collapsed: isCollapsed,
+          onTap: () => navigateToFolder('Draft', '/'),
         ),
     ];
 
-    final int importantCount = emails.where((e) => e.isStarred && !e.isTrash).length;
+    final int importantCount = emails
+        .where((e) => e.isStarred && !e.isTrash)
+        .length;
     final int purchasesCount = emails
         .where(
           (e) =>
@@ -250,52 +279,60 @@ class _SidebarState extends ConsumerState<Sidebar> {
           icon: Icons.access_time_rounded,
           title: 'Snoozed',
           isSelected: uiState.activeFolder == 'Snoozed',
-          collapsed: isCollapsed, onTap: () => navigateToFolder('Snoozed', '/'),
+          collapsed: isCollapsed,
+          onTap: () => navigateToFolder('Snoozed', '/'),
         ),
       _buildPillTile(
         icon: Icons.label_important_outline_rounded,
         title: 'Important',
         isSelected: uiState.activeFolder == 'Important',
         badgeText: importantCount > 0 ? '$importantCount' : null,
-        collapsed: isCollapsed, onTap: () => navigateToFolder('Important', '/'),
+        collapsed: isCollapsed,
+        onTap: () => navigateToFolder('Important', '/'),
       ),
       _buildPillTile(
         icon: Icons.shopping_bag_outlined,
         title: 'Purchases',
         isSelected: uiState.activeFolder == 'Purchases',
         badgeText: purchasesCount > 0 ? '$purchasesCount' : null,
-        collapsed: isCollapsed, onTap: () => navigateToFolder('Purchases', '/'),
+        collapsed: isCollapsed,
+        onTap: () => navigateToFolder('Purchases', '/'),
       ),
       _buildPillTile(
         icon: Icons.schedule_send_outlined,
         title: 'Scheduled',
         isSelected: uiState.activeFolder == 'Scheduled',
-        collapsed: isCollapsed, onTap: () => navigateToFolder('Scheduled', '/'),
+        collapsed: isCollapsed,
+        onTap: () => navigateToFolder('Scheduled', '/'),
       ),
       _buildPillTile(
         icon: Icons.outbox_outlined,
         title: 'Outbox',
         isSelected: uiState.activeFolder == 'Outbox',
-        collapsed: isCollapsed, onTap: () => navigateToFolder('Outbox', '/'),
+        collapsed: isCollapsed,
+        onTap: () => navigateToFolder('Outbox', '/'),
       ),
       _buildPillTile(
         icon: Icons.archive_outlined,
         title: 'Archive',
         isSelected: uiState.activeFolder == 'Archive',
         badgeText: archiveCount > 0 ? '$archiveCount' : null,
-        collapsed: isCollapsed, onTap: () => navigateToFolder('Archive', '/'),
+        collapsed: isCollapsed,
+        onTap: () => navigateToFolder('Archive', '/'),
       ),
       _buildPillTile(
         icon: Icons.mail_outline_rounded,
         title: 'All Mail',
         isSelected: uiState.activeFolder == 'All Mail',
-        collapsed: isCollapsed, onTap: () => navigateToFolder('All Mail', '/'),
+        collapsed: isCollapsed,
+        onTap: () => navigateToFolder('All Mail', '/'),
       ),
       if (isDesktopOS)
         _buildPillTile(
           icon: Icons.all_inbox_rounded,
           title: 'All inboxes',
-          isSelected: uiState.activeFolder == 'All Inboxes' ||
+          isSelected:
+              uiState.activeFolder == 'All Inboxes' ||
               uiState.activeFolder == 'All inboxes',
           badgeText: allInboxesCount > 0 ? '$allInboxesCount' : null,
           collapsed: isCollapsed,
@@ -306,7 +343,8 @@ class _SidebarState extends ConsumerState<Sidebar> {
         title: 'Spam',
         isSelected: uiState.activeFolder == 'Spam',
         badgeText: spamCount > 0 ? '$spamCount' : null,
-        collapsed: isCollapsed, onTap: () => navigateToFolder('Spam', '/'),
+        collapsed: isCollapsed,
+        onTap: () => navigateToFolder('Spam', '/'),
       ),
       if (labelsVis['Trash'] ?? true)
         _buildPillTile(
@@ -314,19 +352,36 @@ class _SidebarState extends ConsumerState<Sidebar> {
           title: 'Trash',
           isSelected: uiState.activeFolder == 'Trash',
           badgeText: trashCount > 0 ? '$trashCount' : null,
-          collapsed: isCollapsed, onTap: () => navigateToFolder('Trash', '/'),
+          collapsed: isCollapsed,
+          onTap: () => navigateToFolder('Trash', '/'),
         ),
       _buildPillTile(
         icon: Icons.bar_chart_outlined,
         title: 'Analytics',
         isSelected: uiState.activeFolder == 'Analytics',
-        collapsed: isCollapsed, onTap: () => navigateToFolder('Analytics', '/analytics'),
+        collapsed: isCollapsed,
+        onTap: () => navigateToFolder('Analytics', '/analytics'),
       ),
       _buildPillTile(
         icon: Icons.assignment_outlined,
         title: 'Templates',
         isSelected: uiState.activeFolder == 'Templates',
-        collapsed: isCollapsed, onTap: () => navigateToFolder('Templates', '/'),
+        collapsed: isCollapsed,
+        onTap: () => navigateToFolder('Templates', '/'),
+      ),
+      _buildPillTile(
+        icon: Icons.notifications_none_rounded,
+        title: 'Subscriptions',
+        isSelected: uiState.activeFolder == 'Subscriptions',
+        collapsed: isCollapsed,
+        onTap: () => navigateToFolder('Subscriptions', '/home'),
+      ),
+      _buildPillTile(
+        icon: Icons.cloud_upload_outlined,
+        title: 'Mail Backup',
+        isSelected: uiState.activeFolder == 'Mail Backup',
+        collapsed: isCollapsed,
+        onTap: () => navigateToFolder('Mail Backup', '/backup'),
       ),
     ];
 
@@ -430,14 +485,16 @@ class _SidebarState extends ConsumerState<Sidebar> {
                         icon: Icons.chat_bubble_outline_rounded,
                         title: 'Casbox',
                         isSelected: uiState.activeFolder == 'Casbox',
-                        collapsed: isCollapsed, onTap: () => navigateToFolder('Casbox', '/colab'),
+                        collapsed: isCollapsed,
+                        onTap: () => navigateToFolder('Casbox', '/colab'),
                       ),
                       // "Colab" section button
                       _buildPillTile(
                         icon: Icons.people_alt_outlined,
                         title: 'Colab',
                         isSelected: uiState.activeFolder == 'Chat',
-                        collapsed: isCollapsed, onTap: () => navigateToFolder('Chat', '/colab'),
+                        collapsed: isCollapsed,
+                        onTap: () => navigateToFolder('Chat', '/colab'),
                       ),
                       const SizedBox(height: 16),
                       // Bottom sections: Settings and Help & Support
@@ -445,13 +502,15 @@ class _SidebarState extends ConsumerState<Sidebar> {
                         icon: Icons.settings_outlined,
                         title: 'Settings',
                         isSelected: uiState.activeFolder == 'Settings',
-                        collapsed: isCollapsed, onTap: () => navigateToFolder('Settings', '/settings'),
+                        collapsed: isCollapsed,
+                        onTap: () => navigateToFolder('Settings', '/settings'),
                       ),
                       _buildPillTile(
                         icon: Icons.help_outline_rounded,
                         title: 'Help & Support',
                         isSelected: uiState.activeFolder == 'Help',
-                        collapsed: isCollapsed, onTap: () => navigateToFolder('Help', '/help'),
+                        collapsed: isCollapsed,
+                        onTap: () => navigateToFolder('Help', '/help'),
                       ),
                       const SizedBox(height: 16),
                     ],
@@ -566,7 +625,11 @@ class _SidebarState extends ConsumerState<Sidebar> {
               // --- MAIN LIST CONTENT ---
               const SizedBox(height: 8),
               _buildSlidingTabPanel(isDark, isCollapsed: isCollapsed),
-              _buildPremiumComposeButton(isDark, uiState, isCollapsed: isCollapsed),
+              _buildPremiumComposeButton(
+                isDark,
+                uiState,
+                isCollapsed: isCollapsed,
+              ),
               const SizedBox(height: 8),
               ...importantFolderTiles,
               if (!_isMoreExpanded)
@@ -609,7 +672,9 @@ class _SidebarState extends ConsumerState<Sidebar> {
                             size: 18,
                             color: isDark ? Colors.white60 : Colors.black54,
                           ),
-                          color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                          color: isDark
+                              ? const Color(0xFF1E293B)
+                              : Colors.white,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
@@ -710,7 +775,8 @@ class _SidebarState extends ConsumerState<Sidebar> {
     int allInboxesCount = 0,
   }) {
     final currentRoute = GoRouterState.of(context).uri.toString();
-    final isColab = currentRoute == '/colab' ||
+    final isColab =
+        currentRoute == '/colab' ||
         uiState.activeFolder == 'Chat' ||
         uiState.activeFolder == 'Casbox' ||
         uiState.activeFolder == 'Colab';
@@ -732,7 +798,8 @@ class _SidebarState extends ConsumerState<Sidebar> {
                         _buildPillTile(
                           icon: Icons.chat_bubble_outline_rounded,
                           title: 'Casbox',
-                          isSelected: uiState.activeFolder == 'Casbox' ||
+                          isSelected:
+                              uiState.activeFolder == 'Casbox' ||
                               (uiState.activeFolder != 'Chat' &&
                                   uiState.activeFolder != 'Colab'),
                           collapsed: isCollapsed,
@@ -741,7 +808,8 @@ class _SidebarState extends ConsumerState<Sidebar> {
                         _buildPillTile(
                           icon: Icons.people_alt_outlined,
                           title: 'Colab',
-                          isSelected: uiState.activeFolder == 'Chat' ||
+                          isSelected:
+                              uiState.activeFolder == 'Chat' ||
                               uiState.activeFolder == 'Colab',
                           collapsed: isCollapsed,
                           onTap: () => navigateToFolder('Chat', '/colab'),
@@ -751,7 +819,8 @@ class _SidebarState extends ConsumerState<Sidebar> {
                         _buildPillTile(
                           icon: Icons.inbox_rounded,
                           title: 'Inbox',
-                          isSelected: uiState.activeFolder == 'Inbox' &&
+                          isSelected:
+                              uiState.activeFolder == 'Inbox' &&
                               uiState.activeLabel == null,
                           collapsed: isCollapsed,
                           onTap: () => navigateToFolder('Inbox', '/home'),
@@ -759,7 +828,8 @@ class _SidebarState extends ConsumerState<Sidebar> {
                         _buildPillTile(
                           icon: Icons.star_border_rounded,
                           title: 'Starred',
-                          isSelected: uiState.activeFolder == 'Starred' &&
+                          isSelected:
+                              uiState.activeFolder == 'Starred' &&
                               uiState.activeLabel == null,
                           collapsed: isCollapsed,
                           onTap: () => navigateToFolder('Starred', '/home'),
@@ -767,7 +837,8 @@ class _SidebarState extends ConsumerState<Sidebar> {
                         _buildPillTile(
                           icon: Icons.access_time_rounded,
                           title: 'Snoozed',
-                          isSelected: uiState.activeFolder == 'Snoozed' &&
+                          isSelected:
+                              uiState.activeFolder == 'Snoozed' &&
                               uiState.activeLabel == null,
                           collapsed: isCollapsed,
                           onTap: () => navigateToFolder('Snoozed', '/home'),
@@ -775,7 +846,8 @@ class _SidebarState extends ConsumerState<Sidebar> {
                         _buildPillTile(
                           icon: Icons.send_outlined,
                           title: 'Sent',
-                          isSelected: uiState.activeFolder == 'Sent' &&
+                          isSelected:
+                              uiState.activeFolder == 'Sent' &&
                               uiState.activeLabel == null,
                           collapsed: isCollapsed,
                           onTap: () => navigateToFolder('Sent', '/home'),
@@ -783,7 +855,8 @@ class _SidebarState extends ConsumerState<Sidebar> {
                         _buildPillTile(
                           icon: Icons.description_outlined,
                           title: 'Draft',
-                          isSelected: uiState.activeFolder == 'Draft' &&
+                          isSelected:
+                              uiState.activeFolder == 'Draft' &&
                               uiState.activeLabel == null,
                           collapsed: isCollapsed,
                           onTap: () => navigateToFolder('Draft', '/home'),
@@ -791,7 +864,8 @@ class _SidebarState extends ConsumerState<Sidebar> {
                         _buildPillTile(
                           icon: Icons.delete_outline_rounded,
                           title: 'Trash',
-                          isSelected: uiState.activeFolder == 'Trash' &&
+                          isSelected:
+                              uiState.activeFolder == 'Trash' &&
                               uiState.activeLabel == null,
                           collapsed: isCollapsed,
                           onTap: () => navigateToFolder('Trash', '/home'),
@@ -810,7 +884,8 @@ class _SidebarState extends ConsumerState<Sidebar> {
                             title: 'Less',
                             isSelected: false,
                             collapsed: isCollapsed,
-                            onTap: () => setState(() => _isMoreExpanded = false),
+                            onTap: () =>
+                                setState(() => _isMoreExpanded = false),
                           ),
                           _buildPillTile(
                             icon: Icons.schedule_rounded,
@@ -836,11 +911,15 @@ class _SidebarState extends ConsumerState<Sidebar> {
                           _buildPillTile(
                             icon: Icons.all_inbox_rounded,
                             title: 'All inboxes',
-                            isSelected: uiState.activeFolder == 'All Inboxes' ||
+                            isSelected:
+                                uiState.activeFolder == 'All Inboxes' ||
                                 uiState.activeFolder == 'All inboxes',
-                            badgeText: allInboxesCount > 0 ? '$allInboxesCount' : null,
+                            badgeText: allInboxesCount > 0
+                                ? '$allInboxesCount'
+                                : null,
                             collapsed: isCollapsed,
-                            onTap: () => navigateToFolder('All Inboxes', '/home'),
+                            onTap: () =>
+                                navigateToFolder('All Inboxes', '/home'),
                           ),
                           _buildPillTile(
                             icon: Icons.archive_outlined,
@@ -868,28 +947,32 @@ class _SidebarState extends ConsumerState<Sidebar> {
                             title: 'Analytics',
                             isSelected: uiState.activeFolder == 'Analytics',
                             collapsed: isCollapsed,
-                            onTap: () => navigateToFolder('Analytics', '/analytics'),
+                            onTap: () =>
+                                navigateToFolder('Analytics', '/analytics'),
                           ),
                           _buildPillTile(
                             icon: Icons.notifications_none_rounded,
                             title: 'Subscriptions',
                             isSelected: uiState.activeFolder == 'Subscriptions',
                             collapsed: isCollapsed,
-                            onTap: () => navigateToFolder('Subscriptions', '/home'),
+                            onTap: () =>
+                                navigateToFolder('Subscriptions', '/home'),
                           ),
                           _buildPillTile(
                             icon: Icons.cloud_upload_outlined,
                             title: 'Mail Backup',
                             isSelected: uiState.activeFolder == 'Mail Backup',
                             collapsed: isCollapsed,
-                            onTap: () => navigateToFolder('Mail Backup', '/backup'),
+                            onTap: () =>
+                                navigateToFolder('Mail Backup', '/backup'),
                           ),
                           _buildPillTile(
                             icon: Icons.pie_chart_outline_rounded,
                             title: 'Storage',
                             isSelected: currentRoute == '/storage',
                             collapsed: isCollapsed,
-                            onTap: () => navigateToFolder('Storage', '/storage'),
+                            onTap: () =>
+                                navigateToFolder('Storage', '/storage'),
                           ),
                         ],
                         if (!isCollapsed) ...[
@@ -974,11 +1057,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
     );
   }
 
-  Widget _buildDesktopLabelTile(
-    LabelModel l,
-    AppUiState uiState,
-    bool isDark,
-  ) {
+  Widget _buildDesktopLabelTile(LabelModel l, AppUiState uiState, bool isDark) {
     final isSelected = uiState.activeLabel == l.name;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
@@ -999,11 +1078,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
           ),
           child: Row(
             children: [
-              Icon(
-                Icons.folder_rounded,
-                size: 16,
-                color: l.color,
-              ),
+              Icon(Icons.folder_rounded, size: 16, color: l.color),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
@@ -1266,7 +1341,8 @@ class _SidebarState extends ConsumerState<Sidebar> {
             child: Icon(
               icon,
               size: 22,
-              color: iconColor ??
+              color:
+                  iconColor ??
                   (isSelected
                       ? activeColor
                       : (isDark ? Colors.white70 : Colors.black54)),
@@ -1301,7 +1377,8 @@ class _SidebarState extends ConsumerState<Sidebar> {
             children: [
               Icon(
                 icon,
-                color: iconColor ??
+                color:
+                    iconColor ??
                     (isSelected
                         ? activeColor
                         : (isDark ? Colors.white70 : const Color(0xFF195BAC))),
@@ -2393,9 +2470,11 @@ class SidebarStorageCardWidget extends ConsumerWidget {
     final String usageText = isLoading
         ? 'Loading storage...'
         : isError
-            ? 'Unavailable — tap to retry'
-            : '${quota!.usedFormatted} of ${quota.limitFormatted} used';
-    final String percentText = (isLoading || isError) ? '--' : quota!.percentageFormatted;
+        ? 'Unavailable — tap to retry'
+        : '${quota!.usedFormatted} of ${quota.limitFormatted} used';
+    final String percentText = (isLoading || isError)
+        ? '--'
+        : quota!.percentageFormatted;
     final double? ringValue = (isLoading || isError) ? null : quota!.fraction;
 
     return MouseRegion(
@@ -2464,8 +2543,9 @@ class SidebarStorageCardWidget extends ConsumerWidget {
                     CircularProgressIndicator(
                       value: ringValue,
                       strokeWidth: 3,
-                      backgroundColor:
-                          isDark ? Colors.white12 : const Color(0xFFE8F0FE),
+                      backgroundColor: isDark
+                          ? Colors.white12
+                          : const Color(0xFFE8F0FE),
                       color: const Color(0xFF195BAC),
                     ),
                     Text(

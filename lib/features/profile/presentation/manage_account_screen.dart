@@ -25,15 +25,12 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
   late AnimationController _animController;
   late Animation<double> _fadeAnim;
 
-
-
   // Subscription State
   String _subPlanName = 'Cliks Business';
   String _subPrice = '\$29/month';
   final String _subRenewalDate = 'Aug 15, 2026';
   String _subPaymentMethod = '•••• 4242 (Visa)';
   int _subTeamSeats = 25;
-
 
   static const _brandBlue = Color(0xFF195BAC);
   static const _brandBlueLight = Color(0xFF3B82F6);
