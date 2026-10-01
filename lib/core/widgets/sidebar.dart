@@ -966,14 +966,6 @@ class _SidebarState extends ConsumerState<Sidebar> {
                             onTap: () =>
                                 navigateToFolder('Mail Backup', '/backup'),
                           ),
-                          _buildPillTile(
-                            icon: Icons.pie_chart_outline_rounded,
-                            title: 'Storage',
-                            isSelected: currentRoute == '/storage',
-                            collapsed: isCollapsed,
-                            onTap: () =>
-                                navigateToFolder('Storage', '/storage'),
-                          ),
                         ],
                         if (!isCollapsed) ...[
                           const SizedBox(height: 12),
