@@ -1,11 +1,14 @@
+import 'dart:async';
+import 'package:flutter/cupertino.dart' show CupertinoSwitch;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/network/token_service.dart';
 import '../../../data/app_state_provider.dart';
 import '../../../data/account_provider.dart';
-import '../../../models/account_model.dart';
 import '../../../data/repositories/user_repository.dart';
+
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -19,8 +22,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _isLoading = false;
 
   // ── General & Composing State ─────────────────────────────────────────────
-  List<String> _signatures = [];
+  String _displayLanguage = 'English';
+  bool _enableSpellingCheck = true;
+  bool _enableGrammarCheck = true;
+  bool _enableAutoCorrect = true;
+  bool _enableWritingSuggestions = true;
+  bool _desktopNotifications = true;
+  bool _conversationView = true;
   String _undoSendDelay = 'Disabled (Send instantly)';
+  String _fontFamily = 'Arial';
+  String _fontSize = 'Normal';
+  final List<Map<String, dynamic>> _signatureItems = [];
+  int _selectedSignatureIndex = 0;
+  final TextEditingController _signatureContentController =
+      TextEditingController();
+
 
   // ── Notifications & Quiet State ───────────────────────────────────────────
   bool _inboxMailAlerts = true;
@@ -54,13 +70,127 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     'Sent': true,
     'Draft': true,
     'Trash': true,
+    'Bulk Mail': true,
+    'Notifications': true,
+    'Archive': true,
   };
 
   // ── Appearance & Layout State ─────────────────────────────────────────────
   String _density = 'Default';
+  int _emailsPerPage = 20;
+  String _accentColor = '#4F46E5';
+  double _fontSizeScale = 1.0;
+  String _visualTheme = 'Classic';
+  String _selectedWallpaperUrl = '';
+  final TextEditingController _customWallpaperController =
+      TextEditingController();
+  String _readingPaneMode = 'No Split (Full List)';
 
   // ── Active Sessions List ──────────────────────────────────────────────────
-  List<Map<String, String>> _activeDeviceSessions = [];
+  List<Map<String, String>> _activeDeviceSessions = [
+    {
+      'id': 'sess_1',
+      'title': 'Unknown Device',
+      'ip': '122.183.50.145 — Web Browser',
+      'lastActive': 'Logged in: 29/09/2026, 14:03:08',
+    },
+    {
+      'id': 'sess_2',
+      'title': 'Unknown Device',
+      'ip': '122.183.50.145 — Web Browser',
+      'lastActive': 'Logged in: 29/09/2026, 14:59:22',
+    },
+    {
+      'id': 'sess_3',
+      'title': 'Unknown Device',
+      'ip': '122.183.50.145 — Web Browser',
+      'lastActive': 'Logged in: 29/09/2026, 15:20:41',
+    },
+    {
+      'id': 'sess_4',
+      'title': 'Unknown Device',
+      'ip': '157.51.116.36 — Web Browser',
+      'lastActive': 'Logged in: 30/09/2026, 12:10:45',
+    },
+    {
+      'id': 'sess_5',
+      'title': 'Unknown Device',
+      'ip': '157.51.116.36 — Web Browser',
+      'lastActive': 'Logged in: 30/09/2026, 12:10:45',
+    },
+    {
+      'id': 'sess_6',
+      'title': 'MacBook',
+      'ip': '157.51.122.9 — Chrome',
+      'lastActive': 'Logged in: 01/10/2026, 12:54:50',
+    },
+  ];
+
+  // ── Connected Applications List ───────────────────────────────────────────
+  final List<Map<String, String>> _connectedApplications = [
+    {
+      'id': 'app_1',
+      'name': 'Beta Website',
+      'scope': '122.183.51.230 — Basic Profile Access',
+      'date': 'Authorized: 15/09/2026, 12:25:43',
+    },
+    {
+      'id': 'app_2',
+      'name': 'Cliks',
+      'scope': '122.183.37.209 — Basic Profile Access',
+      'date': 'Authorized: 19/08/2026, 14:06:27',
+    },
+    {
+      'id': 'app_3',
+      'name': 'Cliks',
+      'scope': '122.183.37.237 — Basic Profile Access',
+      'date': 'Authorized: 14/08/2026, 05:54:05',
+    },
+    {
+      'id': 'app_4',
+      'name': 'Cliks',
+      'scope': '122.183.37.174 — Basic Profile Access',
+      'date': 'Authorized: 07/08/2026, 06:43:46',
+    },
+    {
+      'id': 'app_5',
+      'name': 'Cliks',
+      'scope': '122.183.37.174 — Basic Profile Access',
+      'date': 'Authorized: 06/08/2026, 06:21:17',
+    },
+  ];
+
+  // ── Recent Activity Logs ──────────────────────────────────────────────────
+  final List<Map<String, String>> _recentActivityLogs = [
+    {
+      'ip': '157.51.122.9',
+      'timestamp': '01/10/2026, 08:41:39',
+    },
+    {
+      'ip': '157.51.122.9',
+      'timestamp': '01/10/2026, 08:36:44',
+    },
+    {
+      'ip': '157.51.122.9',
+      'timestamp': '01/10/2026, 08:25:51',
+    },
+    {
+      'ip': '157.51.122.9',
+      'timestamp': '01/10/2026, 07:59:56',
+    },
+  ];
+
+  // ── Accounts & Mailboxes State ─────────────────────────────────────────────
+  bool _enablePasswordRecovery = true;
+  final TextEditingController _recoveryEmailAddressController =
+      TextEditingController(text: 'chandran123@bnxmail.com');
+  final TextEditingController _recoveryPhoneNumberController =
+      TextEditingController(text: '8072962608');
+  bool _sendSecurityAlertsOnLogin = true;
+  bool _requireReauthForSensitive = true;
+  bool _logLoginHistory = false;
+  String _sessionTimeout = '30 minutes';
+  final List<Map<String, String>> _extraLinkedAccounts = [];
 
   @override
   void initState() {
@@ -93,55 +223,100 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       if (settings != null) {
         if (settings.containsKey('inboxMailAlerts')) {
           _inboxMailAlerts = settings['inboxMailAlerts'] == true;
+        } else if (settings.containsKey('inboxNotifications')) {
+          _inboxMailAlerts = settings['inboxNotifications'] == true;
         }
         if (settings.containsKey('sentConfirmationAlerts')) {
           _sentConfirmationAlerts = settings['sentConfirmationAlerts'] == true;
+        } else if (settings.containsKey('sentNotifications')) {
+          _sentConfirmationAlerts = settings['sentNotifications'] == true;
         }
         if (settings.containsKey('starredEmailsAlerts')) {
           _starredEmailsAlerts = settings['starredEmailsAlerts'] == true;
+        } else if (settings.containsKey('starredNotifications')) {
+          _starredEmailsAlerts = settings['starredNotifications'] == true;
         }
         if (settings.containsKey('snoozedReminders')) {
           _snoozedReminders = settings['snoozedReminders'] == true;
+        } else if (settings.containsKey('snoozedNotifications')) {
+          _snoozedReminders = settings['snoozedNotifications'] == true;
         }
         if (settings.containsKey('playAlertSound')) {
           _playAlertSound = settings['playAlertSound'] == true;
+        } else if (settings.containsKey('soundEnabled')) {
+          _playAlertSound = settings['soundEnabled'] == true;
         }
         if (settings.containsKey('enableHapticVibration')) {
           _enableHapticVibration = settings['enableHapticVibration'] == true;
+        } else if (settings.containsKey('vibrationEnabled')) {
+          _enableHapticVibration = settings['vibrationEnabled'] == true;
         }
         if (settings.containsKey('muteNotificationsSchedule')) {
           _muteNotificationsSchedule =
               settings['muteNotificationsSchedule'] == true;
+        } else if (settings.containsKey('quietHoursEnabled')) {
+          _muteNotificationsSchedule = settings['quietHoursEnabled'] == true;
         }
         if (settings['undoSendDelay'] != null) {
           final val = settings['undoSendDelay'];
           if (val is int) {
             if (val == 5) {
-              _undoSendDelay = '5 Seconds';
+              _undoSendDelay = '5 seconds';
             } else if (val == 10) {
-              _undoSendDelay = '10 Seconds';
+              _undoSendDelay = '10 seconds';
             } else if (val == 20) {
-              _undoSendDelay = '20 Seconds';
+              _undoSendDelay = '20 seconds';
             } else if (val == 30) {
-              _undoSendDelay = '30 Seconds';
+              _undoSendDelay = '30 seconds';
             } else if (val > 0) {
-              _undoSendDelay = '$val Seconds';
+              _undoSendDelay = '$val seconds';
             } else {
               _undoSendDelay = 'Disabled (Send instantly)';
             }
           } else {
-            final str = val.toString();
-            if (str == '5' || str == '5 Seconds') {
-              _undoSendDelay = '5 Seconds';
-            } else if (str == '10' || str == '10 Seconds') {
-              _undoSendDelay = '10 Seconds';
-            } else if (str == '20' || str == '20 Seconds') {
-              _undoSendDelay = '20 Seconds';
-            } else if (str == '30' || str == '30 Seconds') {
-              _undoSendDelay = '30 Seconds';
+            final str = val.toString().toLowerCase().trim();
+            if (str == '5' || str == '5 seconds' || str == '5s') {
+              _undoSendDelay = '5 seconds';
+            } else if (str == '10' || str == '10 seconds' || str == '10s') {
+              _undoSendDelay = '10 seconds';
+            } else if (str == '20' || str == '20 seconds' || str == '20s') {
+              _undoSendDelay = '20 seconds';
+            } else if (str == '30' || str == '30 seconds' || str == '30s') {
+              _undoSendDelay = '30 seconds';
             } else {
               _undoSendDelay = 'Disabled (Send instantly)';
             }
+          }
+        }
+        if (settings['density'] != null) {
+          _density = settings['density'].toString();
+        }
+        if (settings['emailsPerPage'] != null) {
+          _emailsPerPage =
+              int.tryParse(settings['emailsPerPage'].toString()) ?? 20;
+        }
+        if (settings['accentColor'] != null) {
+          _accentColor = settings['accentColor'].toString();
+        }
+        if (settings['fontSize'] != null) {
+          final fs = double.tryParse(settings['fontSize'].toString());
+          if (fs != null && fs > 0) _fontSizeScale = fs;
+        }
+        if (settings['visualTheme'] != null) {
+          _visualTheme = settings['visualTheme'].toString();
+        }
+        if (settings['wallpaper'] != null) {
+          _selectedWallpaperUrl = settings['wallpaper'].toString();
+          _customWallpaperController.text = _selectedWallpaperUrl;
+        }
+        if (settings['readingPaneMode'] != null) {
+          final rpm = settings['readingPaneMode'].toString();
+          if (rpm.toLowerCase().contains('right')) {
+            _readingPaneMode = 'Right Split (Vertical)';
+          } else if (rpm.toLowerCase().contains('bottom')) {
+            _readingPaneMode = 'Bottom Split (Horizontal)';
+          } else {
+            _readingPaneMode = 'No Split (Full List)';
           }
         }
         if (settings.containsKey('twoFactorAuth')) {
@@ -153,39 +328,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
         if (settings['signatures'] is List) {
           final rawList = settings['signatures'] as List;
-          final loadedSigs = <String>[];
+          final loadedSigs = <Map<String, dynamic>>[];
           for (final item in rawList) {
             if (item is String && item.trim().isNotEmpty) {
-              loadedSigs.add(item.trim());
+              loadedSigs.add({
+                'name': 'Signature ${loadedSigs.length + 1}',
+                'content': item.trim(),
+                'isDefault': loadedSigs.isEmpty,
+              });
             } else if (item is Map) {
               final content =
                   item['content'] ?? item['name'] ?? item['signature'];
               if (content != null && content.toString().trim().isNotEmpty) {
-                loadedSigs.add(content.toString().trim());
+                loadedSigs.add({
+                  'name': item['name']?.toString() ??
+                      'Signature ${loadedSigs.length + 1}',
+                  'content': content.toString().trim(),
+                  'isDefault':
+                      item['isDefault'] == true || loadedSigs.isEmpty,
+                });
               }
             }
           }
           if (loadedSigs.isNotEmpty) {
-            _signatures = loadedSigs;
+            _signatureItems.clear();
+            _signatureItems.addAll(loadedSigs);
+            _selectedSignatureIndex = 0;
+            _signatureContentController.text =
+                _signatureItems[0]['content']?.toString() ?? '';
           }
         }
-
-        try {
-          final apiSigs = await UserRepository.getSignatures();
-          if (apiSigs.isNotEmpty) {
-            final loaded = <String>[];
-            for (final item in apiSigs) {
-              final content =
-                  item['content'] ?? item['name'] ?? item['signature'];
-              if (content != null && content.toString().trim().isNotEmpty) {
-                loaded.add(content.toString().trim());
-              }
-            }
-            if (loaded.isNotEmpty) {
-              _signatures = loaded;
-            }
-          }
-        } catch (_) {}
         if (settings['jobTitle'] != null) {
           _jobTitleController.text = settings['jobTitle'].toString();
         }
@@ -227,12 +399,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       // 4. Fetch signatures from GET /api/signatures
       final sigs = await UserRepository.getSignatures();
       if (sigs.isNotEmpty) {
-        final fetchedSigs = sigs
-            .map((s) => s['content']?.toString() ?? s['name']?.toString() ?? '')
-            .where((s) => s.isNotEmpty)
-            .toList();
+        final fetchedSigs = <Map<String, dynamic>>[];
+        for (final s in sigs) {
+          final content =
+              s['content']?.toString() ?? s['name']?.toString() ?? '';
+          if (content.isNotEmpty) {
+            fetchedSigs.add({
+              'name': s['name']?.toString() ??
+                  'Signature ${fetchedSigs.length + 1}',
+              'content': content,
+              'isDefault': s['isDefault'] == true || fetchedSigs.isEmpty,
+            });
+          }
+        }
         if (fetchedSigs.isNotEmpty) {
-          _signatures = fetchedSigs;
+          _signatureItems.clear();
+          _signatureItems.addAll(fetchedSigs);
+          _selectedSignatureIndex = 0;
+          _signatureContentController.text =
+              _signatureItems[0]['content']?.toString() ?? '';
         }
       }
 
@@ -259,6 +444,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _newPasswordController.dispose();
     _recoveryEmailController.dispose();
     _backupPhoneController.dispose();
+    _recoveryEmailAddressController.dispose();
+    _recoveryPhoneNumberController.dispose();
+    _signatureContentController.dispose();
+    _customWallpaperController.dispose();
     super.dispose();
   }
 
@@ -299,104 +488,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  void _showAddSignatureDialog() {
-    final controller = TextEditingController();
-    final isDark = ref.read(appUiProvider).isDarkMode;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(
-          'Create Email Signature',
-          style: TextStyle(
-            color: isDark ? Colors.white : Colors.black87,
-            fontWeight: FontWeight.bold,
-            fontSize: 18,
-          ),
-        ),
-        content: TextField(
-          controller: controller,
-          maxLines: 4,
-          style: TextStyle(color: isDark ? Colors.white : Colors.black87),
-          decoration: InputDecoration(
-            hintText: 'Regards,\nJohn Doe\nSenior Developer',
-            hintStyle: TextStyle(
-              color: isDark ? Colors.white38 : Colors.grey.shade400,
-            ),
-            filled: true,
-            fillColor: isDark
-                ? const Color(0xFF0F172A)
-                : const Color(0xFFF8FAFC),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(
-                color: isDark ? Colors.white24 : Colors.grey.shade300,
-              ),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(
-                color: Color(0xFF195BAC),
-                width: 1.5,
-              ),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(
-              'Cancel',
-              style: TextStyle(
-                color: isDark ? Colors.white60 : Colors.grey.shade600,
-              ),
-            ),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF195BAC),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            ),
-            onPressed: () async {
-              if (controller.text.trim().isNotEmpty) {
-                final newSig = controller.text.trim();
-                setState(() {
-                  _signatures.add(newSig);
-                });
-                Navigator.pop(ctx);
-                try {
-                  await UserRepository.createSignature(
-                    name: 'Default',
-                    content: newSig,
-                    isDefault: true,
-                  );
-                  await UserRepository.updateSettings({
-                    'signatures': _signatures,
-                  });
-                  _showSnackBar('Signature saved to backend!');
-                } catch (_) {
-                  _showSnackBar('Signature added locally.');
-                }
-              }
-            },
-            child: const Text(
-              'Add',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final uiState = ref.watch(appUiProvider);
@@ -415,6 +506,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       {'title': 'Labels & Sidebar', 'icon': Icons.label_outlined},
       {'title': 'Active Sessions & Logs', 'icon': Icons.devices_outlined},
     ];
+
+    final safeTabIndex = _selectedTabIndex.clamp(0, categories.length - 1);
 
     return PopScope(
       canPop: false,
@@ -564,16 +657,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 Expanded(
                   child: Container(
                     width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF1E293B) : Colors.white,
-                      borderRadius: BorderRadius.circular(24),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.04),
-                          blurRadius: 20,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
+                    decoration: const BoxDecoration(
+                      color: Colors.transparent,
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(24),
@@ -584,12 +669,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               ),
                             )
                           : SingleChildScrollView(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16.0,
-                                vertical: 20.0,
-                              ),
+                              padding: const EdgeInsets.only(bottom: 24.0),
                               child: _buildTabContent(
-                                _selectedTabIndex,
+                                safeTabIndex,
                                 isDark,
                                 userEmail,
                               ),
@@ -629,894 +711,3818 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   // ── 1. Accounts & Mailboxes Tab ───────────────────────────────────────────
   Widget _buildAccountsTab(bool isDark, String userEmail) {
-    final accounts = ref.watch(accountsProvider);
-    final displayAccounts = accounts.isNotEmpty
-        ? accounts
-        : [
-            AccountModel(
-              id: '1',
-              name: 'Primary Account',
-              email: userEmail,
-              avatarColor: const Color(0xFF195BAC),
-              isActive: true,
-            ),
-          ];
+    final activeAccount = ref.watch(activeAccountProvider);
+    final displayEmail = (activeAccount.email.isNotEmpty)
+        ? activeAccount.email
+        : (userEmail.isNotEmpty ? userEmail : 'ravinew2004@bnxmail.com');
+
+    final username = displayEmail.contains('@')
+        ? displayEmail.split('@').first
+        : 'ravinew2004';
+    final initialLetter =
+        displayEmail.isNotEmpty ? displayEmail[0].toUpperCase() : 'R';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Email Accounts',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: isDark ? Colors.white : Colors.black87,
-          ),
-        ),
-        const SizedBox(height: 10),
-        Text(
-          'Manage multiple linked email addresses in your current session.',
-          style: TextStyle(
-            fontSize: 13,
-            color: isDark ? Colors.white60 : Colors.grey.shade600,
-          ),
-        ),
-        const SizedBox(height: 24),
-        ...displayAccounts.map((acc) {
-          final isCurrentActive = acc.isActive;
-          return Container(
-            width: double.infinity,
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-            decoration: BoxDecoration(
-              color: isCurrentActive
-                  ? (isDark ? const Color(0xFF1E3A5F) : const Color(0xFFE3F2FD))
-                  : (isDark
-                        ? const Color(0xFF0F172A)
-                        : const Color(0xFFF8FAFC)),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: isCurrentActive
-                    ? const Color(0xFF195BAC).withValues(alpha: 0.4)
-                    : (isDark ? Colors.white12 : Colors.grey.shade200),
-                width: isCurrentActive ? 1.5 : 1.0,
+        // ── Card 1: Email Accounts & Switching ─────────────────────────────
+        _buildAccountsSectionCard(
+          isDark: isDark,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Email Accounts & Switching',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+                ),
               ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        acc.email.isNotEmpty ? acc.email : userEmail,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.white : Colors.black87,
-                        ),
-                        overflow: TextOverflow.ellipsis,
+              const SizedBox(height: 8),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final isNarrow = constraints.maxWidth < 600;
+                  final subtitle = Text(
+                    'Manage and switch between linked email accounts in your current session.',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                    ),
+                  );
+                  final addBtn = ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF195BAC),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(24),
                       ),
-                      if (acc.name.isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          acc.name,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: isDark
-                                ? Colors.white54
-                                : Colors.grey.shade600,
-                          ),
-                        ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 10,
+                      ),
+                    ),
+                    onPressed: () =>
+                        _showAddOtherEmailAccountDialog(context, isDark),
+                    child: const Text(
+                      '+ Add Other Account',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  );
+
+                  if (isNarrow) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        subtitle,
+                        const SizedBox(height: 12),
+                        addBtn,
                       ],
+                    );
+                  }
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(child: subtitle),
+                      const SizedBox(width: 16),
+                      addBtn,
                     ],
+                  );
+                },
+              ),
+              const SizedBox(height: 20),
+
+              // Active Account Card
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 16,
+                ),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? const Color(0xFF0F172A)
+                      : const Color(0xFFEFF5FA),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                    width: 1,
                   ),
                 ),
-                const SizedBox(width: 8),
-                if (isCurrentActive)
-                  Container(
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 22,
+                      backgroundColor: const Color(0xFFDBEAFE),
+                      child: Text(
+                        initialLetter,
+                        style: const TextStyle(
+                          color: Color(0xFF195BAC),
+                          fontWeight: FontWeight.w800,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            displayEmail,
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: isDark
+                                  ? Colors.white
+                                  : const Color(0xFF0F172A),
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            'BNX Mail Account',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: isDark
+                                  ? Colors.white54
+                                  : const Color(0xFF94A3B8),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFDCFCE7),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Text(
+                        'Active',
+                        style: TextStyle(
+                          color: Color(0xFF15803D),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Linked Accounts if any were added
+              if (_extraLinkedAccounts.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                ..._extraLinkedAccounts.map((extra) {
+                  final email = extra['email'] ?? '';
+                  final name = extra['name'] ?? 'Other Account';
+                  final initial =
+                      email.isNotEmpty ? email[0].toUpperCase() : 'O';
+                  return Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(top: 8),
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 5,
+                      horizontal: 18,
+                      vertical: 14,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFE3F2FD),
-                      borderRadius: BorderRadius.circular(20),
+                      color: isDark
+                          ? const Color(0xFF0F172A)
+                          : const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: const Color(0xFF195BAC).withValues(alpha: 0.3),
+                        color: isDark
+                            ? Colors.white12
+                            : const Color(0xFFE2E8F0),
+                        width: 1,
                       ),
                     ),
-                    child: const Text(
-                      'Active',
-                      style: TextStyle(
-                        color: Color(0xFF195BAC),
-                        fontWeight: FontWeight.bold,
-                        fontSize: 11,
-                      ),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 20,
+                          backgroundColor: const Color(0xFFE2E8F0),
+                          child: Text(
+                            initial,
+                            style: const TextStyle(
+                              color: Color(0xFF475569),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                email,
+                                style: TextStyle(
+                                  fontSize: 14.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: isDark
+                                      ? Colors.white
+                                      : const Color(0xFF0F172A),
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              if (name.isNotEmpty) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  name,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: isDark
+                                        ? Colors.white54
+                                        : const Color(0xFF94A3B8),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline,
+                              size: 20, color: Colors.grey),
+                          onPressed: () {
+                            setState(() {
+                              _extraLinkedAccounts.remove(extra);
+                            });
+                          },
+                        ),
+                      ],
                     ),
-                  )
-                else
-                  TextButton(
-                    onPressed: () async {
-                      await ref
-                          .read(accountsProvider.notifier)
-                          .switchAccount(acc.id, ref);
-                      if (mounted) {
-                        context.go('/');
-                        _showSnackBar('Switched to ${acc.email}');
-                      }
-                    },
-                    child: const Text(
-                      'Make Active',
-                      style: TextStyle(
-                        color: Color(0xFF195BAC),
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
+                  );
+                }),
               ],
-            ),
-          );
-        }),
-      ],
-    );
-  }
+            ],
+          ),
+        ),
 
-  // ── 2. General & Composing Tab ────────────────────────────────────────────
-  Widget _buildGeneralComposingTab(bool isDark) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'General & Composing Settings',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: isDark ? Colors.white : Colors.black87,
-          ),
-        ),
-        const SizedBox(height: 24),
-        Wrap(
-          alignment: WrapAlignment.spaceBetween,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 12,
-          runSpacing: 10,
-          children: [
-            Text(
-              'Email Signatures',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.bold,
-                color: isDark ? Colors.white : Colors.black87,
-              ),
-            ),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFE3F2FD),
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 8,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-              ),
-              onPressed: _showAddSignatureDialog,
-              icon: const Icon(
-                Icons.add_rounded,
-                size: 16,
-                color: Color(0xFF195BAC),
-              ),
-              label: const Text(
-                'Add Signature',
+        // ── Card 2: Account Information ────────────────────────────────────
+        _buildAccountsSectionCard(
+          isDark: isDark,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Account Information',
                 style: TextStyle(
-                  color: Color(0xFF195BAC),
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: isDark ? Colors.white : const Color(0xFF0F172A),
                 ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        if (_signatures.isEmpty) ...[
-          Text(
-            'No signatures created. Click \'+ Add Signature\' to create one.',
-            style: TextStyle(
-              fontSize: 13,
-              fontStyle: FontStyle.italic,
-              color: isDark ? Colors.white54 : Colors.grey.shade600,
-            ),
+              const SizedBox(height: 18),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final tile1 = _buildAccountInfoTile(
+                    label: 'FULL NAME / USERNAME',
+                    value: username,
+                    isDark: isDark,
+                  );
+                  final tile2 = _buildAccountInfoTile(
+                    label: 'PRIMARY EMAIL',
+                    value: displayEmail,
+                    isDark: isDark,
+                  );
+                  final tile3 = _buildAccountInfoTile(
+                    label: 'ACCOUNT ROLE',
+                    value: 'ORG_ADMIN',
+                    isDark: isDark,
+                  );
+                  final tile4 = _buildAccountInfoTile(
+                    label: 'ACCOUNT STATUS',
+                    value: 'Active & Verified ✓',
+                    valueColor: const Color(0xFF16A34A),
+                    isDark: isDark,
+                  );
+
+                  if (constraints.maxWidth >= 720) {
+                    return Row(
+                      children: [
+                        Expanded(child: tile1),
+                        const SizedBox(width: 12),
+                        Expanded(child: tile2),
+                        const SizedBox(width: 12),
+                        Expanded(child: tile3),
+                        const SizedBox(width: 12),
+                        Expanded(child: tile4),
+                      ],
+                    );
+                  } else if (constraints.maxWidth >= 440) {
+                    return Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(child: tile1),
+                            const SizedBox(width: 12),
+                            Expanded(child: tile2),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(child: tile3),
+                            const SizedBox(width: 12),
+                            Expanded(child: tile4),
+                          ],
+                        ),
+                      ],
+                    );
+                  } else {
+                    return Column(
+                      children: [
+                        tile1,
+                        const SizedBox(height: 10),
+                        tile2,
+                        const SizedBox(height: 10),
+                        tile3,
+                        const SizedBox(height: 10),
+                        tile4,
+                      ],
+                    );
+                  }
+                },
+              ),
+            ],
           ),
-        ] else ...[
-          ..._signatures.map(
-            (sig) => Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: isDark
-                    ? const Color(0xFF0F172A)
-                    : const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: isDark ? Colors.white24 : Colors.grey.shade300,
+        ),
+
+        // ── Card 3: Password Recovery & Backup Contacts ─────────────────────
+        _buildAccountsSectionCard(
+          isDark: isDark,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Password Recovery & Backup Contacts',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: isDark ? Colors.white : const Color(0xFF0F172A),
                 ),
               ),
-              child: Row(
+              const SizedBox(height: 18),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Expanded(
                     child: Text(
-                      sig,
+                      'Enable Password Recovery via Backup Email & Phone',
                       style: TextStyle(
-                        color: isDark ? Colors.white : Colors.black87,
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w600,
+                        color: isDark
+                            ? Colors.white
+                            : const Color(0xFF1E293B),
                       ),
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(
-                      Icons.delete_outline,
-                      color: Colors.red,
-                      size: 20,
-                    ),
-                    onPressed: () async {
-                      setState(() => _signatures.remove(sig));
-                      try {
-                        await UserRepository.updateSettings({
-                          'signatures': _signatures,
-                        });
-                        _showSnackBar('Signature removed!');
-                      } catch (_) {}
+                  Switch.adaptive(
+                    value: _enablePasswordRecovery,
+                    activeTrackColor: const Color(0xFF195BAC),
+                    activeThumbColor: Colors.white,
+                    onChanged: (v) {
+                      setState(() => _enablePasswordRecovery = v);
                     },
                   ),
                 ],
               ),
-            ),
-          ),
-        ],
-        const SizedBox(height: 6),
-        Text(
-          'The default signature will be automatically inserted into new compose frames.',
-          style: TextStyle(
-            fontSize: 12,
-            color: isDark ? Colors.white38 : Colors.grey.shade500,
-          ),
-        ),
-        const SizedBox(height: 28),
-        Text(
-          'Undo Send Delay',
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.bold,
-            color: isDark ? Colors.white : Colors.black87,
-          ),
-        ),
-        const SizedBox(height: 10),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF0F172A) : const Color(0xFFFAFAFA),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isDark ? Colors.white24 : Colors.grey.shade300,
-            ),
-          ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: _undoSendDelay,
-              isExpanded: true,
-              dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-              style: TextStyle(
-                color: isDark ? Colors.white : Colors.black87,
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
+              Divider(
+                color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+                height: 32,
               ),
-              items:
-                  [
-                        'Disabled (Send instantly)',
-                        '5 Seconds',
-                        '10 Seconds',
-                        '20 Seconds',
-                        '30 Seconds',
-                      ]
-                      .map(
-                        (val) => DropdownMenuItem(value: val, child: Text(val)),
-                      )
-                      .toList(),
-              onChanged: (val) {
-                if (val != null) setState(() => _undoSendDelay = val);
-              },
-            ),
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Sets the grace window to cancel/undo emails after pressing send.',
-          style: TextStyle(
-            fontSize: 12,
-            color: isDark ? Colors.white38 : Colors.grey.shade500,
-          ),
-        ),
-        const SizedBox(height: 32),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF195BAC),
-            elevation: 0,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 13),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
-            ),
-          ),
-          onPressed: () async {
-            try {
-              int delaySeconds = 0;
-              final match = RegExp(r'\d+').firstMatch(_undoSendDelay);
-              if (match != null) {
-                delaySeconds = int.tryParse(match.group(0)!) ?? 0;
-              }
 
-              await UserRepository.updateSettings({
-                'undoSendDelay': delaySeconds,
-                'signatures': _signatures,
-              });
-              _showSnackBar('Preferences saved to backend!');
-            } catch (e) {
-              _showSnackBar('Preferences saved locally.', isError: false);
-            }
-          },
-          child: const Text(
-            'Save Preferences',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 13,
-            ),
+              // Recovery Inputs
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final emailInput = Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            'Recovery Email Address',
+                            style: TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w600,
+                              color: isDark
+                                  ? Colors.white70
+                                  : const Color(0xFF1E293B),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          _buildUnverifiedBadge(),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _recoveryEmailAddressController,
+                        style: TextStyle(
+                          fontSize: 14.5,
+                          color: isDark
+                              ? Colors.white
+                              : const Color(0xFF0F172A),
+                        ),
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: isDark
+                              ? const Color(0xFF0F172A)
+                              : const Color(0xFFF8FAFC),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 14,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: isDark
+                                  ? Colors.white12
+                                  : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: isDark
+                                  ? Colors.white12
+                                  : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: Color(0xFF195BAC),
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+
+                  final phoneInput = Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            'Recovery Phone Number (10 Digits)',
+                            style: TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w600,
+                              color: isDark
+                                  ? Colors.white70
+                                  : const Color(0xFF1E293B),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          _buildUnverifiedBadge(),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _recoveryPhoneNumberController,
+                        keyboardType: TextInputType.phone,
+                        style: TextStyle(
+                          fontSize: 14.5,
+                          color: isDark
+                              ? Colors.white
+                              : const Color(0xFF0F172A),
+                        ),
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: isDark
+                              ? const Color(0xFF0F172A)
+                              : const Color(0xFFF8FAFC),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 14,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: isDark
+                                  ? Colors.white12
+                                  : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: isDark
+                                  ? Colors.white12
+                                  : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: Color(0xFF195BAC),
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+
+                  if (constraints.maxWidth >= 550) {
+                    return Row(
+                      children: [
+                        Expanded(child: emailInput),
+                        const SizedBox(width: 16),
+                        Expanded(child: phoneInput),
+                      ],
+                    );
+                  } else {
+                    return Column(
+                      children: [
+                        emailInput,
+                        const SizedBox(height: 14),
+                        phoneInput,
+                      ],
+                    );
+                  }
+                },
+              ),
+              const SizedBox(height: 20),
+
+              // Save Security Preferences Button
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF195BAC),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 22,
+                    vertical: 14,
+                  ),
+                ),
+                onPressed: () => _showOtpVerificationDialog(context, isDark),
+                child: const Text(
+                  'Save Security Preferences',
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // ── Card 4: Manage Security Credentials ────────────────────────────
+        _buildAccountsSectionCard(
+          isDark: isDark,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Manage security credentials for your primary mailbox.',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+                ),
+              ),
+              const SizedBox(height: 18),
+              _buildSecurityToggleRow(
+                title: 'Send Security Alerts on New Logins',
+                value: _sendSecurityAlertsOnLogin,
+                onChanged: (v) => setState(() => _sendSecurityAlertsOnLogin = v),
+                isDark: isDark,
+              ),
+              _buildSecurityToggleRow(
+                title:
+                    'Require Password Re-authentication for Sensitive Actions',
+                value: _requireReauthForSensitive,
+                onChanged: (v) =>
+                    setState(() => _requireReauthForSensitive = v),
+                isDark: isDark,
+              ),
+              _buildSecurityToggleRow(
+                title: 'Log Login IP & Location History',
+                value: _logLoginHistory,
+                onChanged: (v) => setState(() => _logLoginHistory = v),
+                isDark: isDark,
+              ),
+              Divider(
+                color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+                height: 32,
+              ),
+              Text(
+                'Auto Sign-Out Idle Session Timeout',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white70 : const Color(0xFF64748B),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? const Color(0xFF0F172A)
+                      : const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                    width: 1,
+                  ),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: const [
+                      '15 minutes',
+                      '30 minutes',
+                      '1 hour',
+                      '4 hours',
+                      '8 hours',
+                      'Never',
+                    ].contains(_sessionTimeout)
+                        ? _sessionTimeout
+                        : '30 minutes',
+                    isExpanded: true,
+                    dropdownColor: isDark
+                        ? const Color(0xFF1E293B)
+                        : Colors.white,
+                    icon: const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: Colors.grey,
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: '15 minutes',
+                        child: Text('15 minutes'),
+                      ),
+                      DropdownMenuItem(
+                        value: '30 minutes',
+                        child: Text('30 minutes'),
+                      ),
+                      DropdownMenuItem(
+                        value: '1 hour',
+                        child: Text('1 hour'),
+                      ),
+                      DropdownMenuItem(
+                        value: '4 hours',
+                        child: Text('4 hours'),
+                      ),
+                      DropdownMenuItem(
+                        value: '8 hours',
+                        child: Text('8 hours'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'Never',
+                        child: Text('Never'),
+                      ),
+                    ],
+                    onChanged: (v) {
+                      if (v != null) {
+                        setState(() => _sessionTimeout = v);
+                      }
+                    },
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ],
     );
   }
 
+  // ── Section Card Container Helper ─────────────────────────────────────────
+  Widget _buildAccountsSectionCard({
+    required Widget child,
+    required bool isDark,
+  }) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: isDark ? Colors.white10 : const Color(0xFFE5E7EB),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
+  // ── Account Info Metric Tile Helper ───────────────────────────────────────
+  Widget _buildAccountInfoTile({
+    required String label,
+    required String value,
+    Color? valueColor,
+    required bool isDark,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF0F172A) : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF64748B),
+              letterSpacing: 0.5,
+            ),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 14.5,
+              fontWeight: FontWeight.w700,
+              color: valueColor ??
+                  (isDark ? Colors.white : const Color(0xFF0F172A)),
+            ),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Unverified Badge Helper ───────────────────────────────────────────────
+  Widget _buildUnverifiedBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEF3C7),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: const Text(
+        'Unverified',
+        style: TextStyle(
+          color: Color(0xFFD97706),
+          fontWeight: FontWeight.bold,
+          fontSize: 11,
+        ),
+      ),
+    );
+  }
+
+  // ── Security Toggle Row Helper ────────────────────────────────────────────
+  Widget _buildSecurityToggleRow({
+    required String title,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+    required bool isDark,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              style: TextStyle(
+                fontSize: 14.5,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white : const Color(0xFF1E293B),
+              ),
+            ),
+          ),
+          Switch.adaptive(
+            value: value,
+            activeTrackColor: const Color(0xFF195BAC),
+            activeThumbColor: Colors.white,
+            onChanged: onChanged,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Modal Dialog: Add Other Email Account ─────────────────────────────────
+  void _showAddOtherEmailAccountDialog(BuildContext context, bool isDark) {
+    final emailCtrl = TextEditingController();
+    final nameCtrl = TextEditingController();
+    String selectedProtocol = 'IMAP / SMTP';
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return Dialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              backgroundColor:
+                  isDark ? const Color(0xFF1E293B) : Colors.white,
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 24,
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 440),
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Add Other Email Account',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                                color: isDark
+                                    ? Colors.white
+                                    : const Color(0xFF0F172A),
+                              ),
+                            ),
+                            InkWell(
+                              onTap: () => Navigator.pop(dialogCtx),
+                              borderRadius: BorderRadius.circular(20),
+                              child: const Padding(
+                                padding: EdgeInsets.all(4.0),
+                                child: Icon(
+                                  Icons.close_rounded,
+                                  color: Colors.grey,
+                                  size: 22,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        Divider(
+                          height: 24,
+                          color: isDark
+                              ? Colors.white10
+                              : const Color(0xFFF1F5F9),
+                        ),
+                        Text(
+                          'Email Address',
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
+                            color: isDark
+                                ? Colors.white70
+                                : const Color(0xFF475569),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: emailCtrl,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: isDark
+                                ? Colors.white
+                                : const Color(0xFF0F172A),
+                          ),
+                          decoration: InputDecoration(
+                            hintText: 'user@example.com',
+                            hintStyle: const TextStyle(
+                              color: Color(0xFF94A3B8),
+                              fontSize: 14,
+                            ),
+                            filled: true,
+                            fillColor: isDark
+                                ? const Color(0xFF0F172A)
+                                : const Color(0xFFF8FAFC),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 14,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: BorderSide(
+                                color: isDark
+                                    ? Colors.white12
+                                    : const Color(0xFFE2E8F0),
+                              ),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: BorderSide(
+                                color: isDark
+                                    ? Colors.white12
+                                    : const Color(0xFFE2E8F0),
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: const BorderSide(
+                                color: Color(0xFF195BAC),
+                                width: 1.5,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Account Display Name',
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
+                            color: isDark
+                                ? Colors.white70
+                                : const Color(0xFF475569),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: nameCtrl,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: isDark
+                                ? Colors.white
+                                : const Color(0xFF0F172A),
+                          ),
+                          decoration: InputDecoration(
+                            hintText: 'Work / Personal Email',
+                            hintStyle: const TextStyle(
+                              color: Color(0xFF94A3B8),
+                              fontSize: 14,
+                            ),
+                            filled: true,
+                            fillColor: isDark
+                                ? const Color(0xFF0F172A)
+                                : const Color(0xFFF8FAFC),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 14,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: BorderSide(
+                                color: isDark
+                                    ? Colors.white12
+                                    : const Color(0xFFE2E8F0),
+                              ),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: BorderSide(
+                                color: isDark
+                                    ? Colors.white12
+                                    : const Color(0xFFE2E8F0),
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: const BorderSide(
+                                color: Color(0xFF195BAC),
+                                width: 1.5,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Account Protocol',
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
+                            color: isDark
+                                ? Colors.white70
+                                : const Color(0xFF475569),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? const Color(0xFF0F172A)
+                                : const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: isDark
+                                  ? Colors.white12
+                                  : const Color(0xFFE2E8F0),
+                              width: 1,
+                            ),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: selectedProtocol,
+                              isExpanded: true,
+                              dropdownColor: isDark
+                                  ? const Color(0xFF1E293B)
+                                  : Colors.white,
+                              icon: const Icon(
+                                Icons.keyboard_arrow_down_rounded,
+                                color: Colors.grey,
+                              ),
+                              items: const [
+                                DropdownMenuItem(
+                                  value: 'IMAP / SMTP',
+                                  child: Text('IMAP / SMTP'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'POP3 / SMTP',
+                                  child: Text('POP3 / SMTP'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'Microsoft Exchange',
+                                  child: Text('Microsoft Exchange'),
+                                ),
+                              ],
+                              onChanged: (v) {
+                                if (v != null) {
+                                  setDialogState(() => selectedProtocol = v);
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(
+                                  color: Color(0xFFCBD5E1),
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                  vertical: 10,
+                                ),
+                              ),
+                              onPressed: () => Navigator.pop(dialogCtx),
+                              child: Text(
+                                'Cancel',
+                                style: TextStyle(
+                                  color: isDark
+                                      ? Colors.white
+                                      : const Color(0xFF0F172A),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13.5,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF195BAC),
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 22,
+                                  vertical: 10,
+                                ),
+                              ),
+                              onPressed: () {
+                                final email = emailCtrl.text.trim();
+                                if (email.isNotEmpty) {
+                                  setState(() {
+                                    _extraLinkedAccounts.add({
+                                      'email': email,
+                                      'name': nameCtrl.text.trim(),
+                                      'protocol': selectedProtocol,
+                                    });
+                                  });
+                                  Navigator.pop(dialogCtx);
+                                  _showSnackBar(
+                                    'Account $email added successfully',
+                                  );
+                                } else {
+                                  _showSnackBar(
+                                    'Please enter an email address',
+                                    isError: true,
+                                  );
+                                }
+                              },
+                              child: const Text(
+                                'Add Account',
+                                style: TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // ── Modal Dialog: OTP Verification ────────────────────────────────────────
+  void _showOtpVerificationDialog(BuildContext context, bool isDark) {
+    final rawPhone = _recoveryPhoneNumberController.text.trim();
+    String maskedPhone = '80******08';
+    if (rawPhone.length >= 4) {
+      final prefix = rawPhone.substring(0, 2);
+      final suffix = rawPhone.substring(rawPhone.length - 2);
+      maskedPhone = '$prefix******$suffix';
+    }
+
+    final controllers = List.generate(6, (_) => TextEditingController());
+    final focusNodes = List.generate(6, (_) => FocusNode());
+
+    int countdown = 9;
+    Timer? countdownTimer;
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            countdownTimer ??= Timer.periodic(
+              const Duration(seconds: 1),
+              (t) {
+                if (countdown > 0) {
+                  setDialogState(() => countdown--);
+                } else {
+                  t.cancel();
+                }
+              },
+            );
+
+            return Dialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              backgroundColor:
+                  isDark ? const Color(0xFF1E293B) : Colors.white,
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 24,
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 460),
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.lock_rounded,
+                              color: Color(0xFF195BAC),
+                              size: 24,
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              'OTP Verification',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w800,
+                                color: isDark
+                                    ? Colors.white
+                                    : const Color(0xFF0F172A),
+                              ),
+                            ),
+                            const Spacer(),
+                            InkWell(
+                              onTap: () {
+                                countdownTimer?.cancel();
+                                Navigator.pop(dialogCtx);
+                              },
+                              borderRadius: BorderRadius.circular(20),
+                              child: const Padding(
+                                padding: EdgeInsets.all(4.0),
+                                child: Icon(
+                                  Icons.close_rounded,
+                                  color: Colors.grey,
+                                  size: 22,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        Divider(
+                          height: 24,
+                          color: isDark
+                              ? Colors.white10
+                              : const Color(0xFFF1F5F9),
+                        ),
+                        Text.rich(
+                          TextSpan(
+                            children: [
+                              TextSpan(
+                                text:
+                                    'Enter the 6-digit verification code sent to ',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: isDark
+                                      ? Colors.white70
+                                      : const Color(0xFF475569),
+                                ),
+                              ),
+                              TextSpan(
+                                text: maskedPhone,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark
+                                      ? Colors.white
+                                      : const Color(0xFF0F172A),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+
+                        // 6-digit OTP Input Boxes
+                        Center(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: List.generate(6, (i) {
+                                return Container(
+                                  width: 48,
+                                  height: 56,
+                                  margin: EdgeInsets.only(
+                                    right: i < 5 ? 10 : 0,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? const Color(0xFF0F172A)
+                                        : const Color(0xFFF8FAFC),
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: focusNodes[i].hasFocus
+                                          ? const Color(0xFF195BAC)
+                                          : (isDark
+                                              ? Colors.white12
+                                              : const Color(0xFFE2E8F0)),
+                                      width: focusNodes[i].hasFocus ? 2.0 : 1.2,
+                                    ),
+                                  ),
+                                  child: Center(
+                                    child: TextField(
+                                      controller: controllers[i],
+                                      focusNode: focusNodes[i],
+                                      keyboardType: TextInputType.number,
+                                      textAlign: TextAlign.center,
+                                      maxLength: 1,
+                                      style: TextStyle(
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.bold,
+                                        color: isDark
+                                            ? Colors.white
+                                            : const Color(0xFF0F172A),
+                                      ),
+                                      inputFormatters: [
+                                        FilteringTextInputFormatter.digitsOnly,
+                                      ],
+                                      decoration: const InputDecoration(
+                                        counterText: '',
+                                        border: InputBorder.none,
+                                        isDense: true,
+                                        contentPadding: EdgeInsets.zero,
+                                      ),
+                                      onChanged: (val) {
+                                        if (val.isNotEmpty && i < 5) {
+                                          focusNodes[i + 1].requestFocus();
+                                        } else if (val.isEmpty && i > 0) {
+                                          focusNodes[i - 1].requestFocus();
+                                        }
+                                        setDialogState(() {});
+                                      },
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+
+                        // Verify Code Button
+                        SizedBox(
+                          width: double.infinity,
+                          height: 48,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF195BAC),
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(24),
+                              ),
+                            ),
+                            onPressed: () {
+                              countdownTimer?.cancel();
+                              Navigator.pop(dialogCtx);
+                              _showSnackBar(
+                                'Security preferences saved and verified successfully!',
+                              );
+                            },
+                            child: const Text(
+                              'Verify Code',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Resend & Change Contact Details
+                        Row(
+                          mainAxisAlignment:
+                              MainAxisAlignment.spaceBetween,
+                          children: [
+                            countdown > 0
+                                ? Text(
+                                    'Resend code in ${countdown}s',
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      color: Color(0xFF64748B),
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  )
+                                : InkWell(
+                                    onTap: () {
+                                      setDialogState(() => countdown = 9);
+                                      countdownTimer?.cancel();
+                                      countdownTimer = Timer.periodic(
+                                        const Duration(seconds: 1),
+                                        (t) {
+                                          if (countdown > 0) {
+                                            setDialogState(() => countdown--);
+                                          } else {
+                                            t.cancel();
+                                          }
+                                        },
+                                      );
+                                      _showSnackBar(
+                                        'A new verification code has been sent.',
+                                      );
+                                    },
+                                    child: const Text(
+                                      'Resend code',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: Color(0xFF195BAC),
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                            InkWell(
+                              onTap: () {
+                                countdownTimer?.cancel();
+                                Navigator.pop(dialogCtx);
+                              },
+                              child: const Text(
+                                'Change Contact Details',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Color(0xFF475569),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    ).then((_) {
+      countdownTimer?.cancel();
+      for (final c in controllers) {
+        c.dispose();
+      }
+      for (final f in focusNodes) {
+        f.dispose();
+      }
+    });
+  }
+
+
+  // ── 2. General & Composing Tab ────────────────────────────────────────────
+  Widget _buildGeneralComposingTab(bool isDark) {
+    const undoOptions = [
+      'Disabled (Send instantly)',
+      '5 seconds',
+      '10 seconds',
+      '20 seconds',
+      '30 seconds',
+    ];
+    final currentUndoValue = undoOptions.firstWhere(
+      (opt) => opt.toLowerCase() == _undoSendDelay.toLowerCase(),
+      orElse: () => undoOptions.first,
+    );
+
+    return _buildAccountsSectionCard(
+      isDark: isDark,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Title ──────────────────────────────────────────────────────────
+          Text(
+            'General & Composing',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: isDark ? Colors.white : const Color(0xFF0F172A),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // ── Display Language ───────────────────────────────────────────────
+          Text(
+            'Display Language',
+            style: TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w600,
+              color: isDark ? Colors.white70 : const Color(0xFF1E293B),
+            ),
+          ),
+          const SizedBox(height: 8),
+          _buildDropdownContainer(
+            isDark: isDark,
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: const [
+                  'English',
+                  'Spanish',
+                  'French',
+                  'German',
+                  'Hindi',
+                ].contains(_displayLanguage)
+                    ? _displayLanguage
+                    : 'English',
+                isExpanded: true,
+                dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+                icon: const Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  color: Colors.grey,
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'English', child: Text('English')),
+                  DropdownMenuItem(value: 'Spanish', child: Text('Spanish')),
+                  DropdownMenuItem(value: 'French', child: Text('French')),
+                  DropdownMenuItem(value: 'German', child: Text('German')),
+                  DropdownMenuItem(value: 'Hindi', child: Text('Hindi')),
+                ],
+                onChanged: (v) {
+                  if (v != null) setState(() => _displayLanguage = v);
+                },
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'BNXmail display language preference.',
+            style: TextStyle(
+              fontSize: 12.5,
+              color: isDark ? Colors.white38 : const Color(0xFF94A3B8),
+            ),
+          ),
+          Divider(
+            color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+            height: 36,
+          ),
+
+          // ── 4 Writing & Spell Check Toggles ────────────────────────────────
+          _buildSecurityToggleRow(
+            title: 'Enable Spelling Check',
+            value: _enableSpellingCheck,
+            onChanged: (v) => setState(() => _enableSpellingCheck = v),
+            isDark: isDark,
+          ),
+          _buildSecurityToggleRow(
+            title: 'Enable Grammar Check',
+            value: _enableGrammarCheck,
+            onChanged: (v) => setState(() => _enableGrammarCheck = v),
+            isDark: isDark,
+          ),
+          _buildSecurityToggleRow(
+            title: 'Enable Auto-correct',
+            value: _enableAutoCorrect,
+            onChanged: (v) => setState(() => _enableAutoCorrect = v),
+            isDark: isDark,
+          ),
+          _buildSecurityToggleRow(
+            title: 'Enable Writing Suggestions (Smart Compose)',
+            value: _enableWritingSuggestions,
+            onChanged: (v) => setState(() => _enableWritingSuggestions = v),
+            isDark: isDark,
+          ),
+          Divider(
+            color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+            height: 36,
+          ),
+
+          // ── Mail View & Notifications ──────────────────────────────────────
+          const Text(
+            'MAIL VIEW & NOTIFICATIONS',
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF64748B),
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildSecurityToggleRow(
+            title: 'Desktop Notifications for New Emails',
+            value: _desktopNotifications,
+            onChanged: (v) => setState(() => _desktopNotifications = v),
+            isDark: isDark,
+          ),
+          _buildSecurityToggleRow(
+            title: 'Conversation View (Group emails by thread)',
+            value: _conversationView,
+            onChanged: (v) => setState(() => _conversationView = v),
+            isDark: isDark,
+          ),
+          const SizedBox(height: 14),
+
+          // ── Undo Send Delay ────────────────────────────────────────────────
+          Text(
+            'Undo Send Delay',
+            style: TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w600,
+              color: isDark ? Colors.white70 : const Color(0xFF1E293B),
+            ),
+          ),
+          const SizedBox(height: 8),
+          _buildDropdownContainer(
+            isDark: isDark,
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: currentUndoValue,
+                isExpanded: true,
+                dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+                icon: const Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  color: Colors.grey,
+                ),
+                items: undoOptions
+                    .map(
+                      (opt) => DropdownMenuItem(
+                        value: opt,
+                        child: Text(opt),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) setState(() => _undoSendDelay = v);
+                },
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Grace period to cancel or undo sent emails.',
+            style: TextStyle(
+              fontSize: 12.5,
+              color: isDark ? Colors.white38 : const Color(0xFF94A3B8),
+            ),
+          ),
+          Divider(
+            color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+            height: 36,
+          ),
+
+          // ── Default Text Style ─────────────────────────────────────────────
+          const Text(
+            'DEFAULT TEXT STYLE',
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF64748B),
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 14),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final fontFamilyCol = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Font Family',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white70 : const Color(0xFF1E293B),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  _buildDropdownContainer(
+                    isDark: isDark,
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: const [
+                          'Arial',
+                          'Georgia',
+                          'Tahoma',
+                          'Times New Roman',
+                          'Trebuchet MS',
+                          'Verdana',
+                          'Roboto',
+                          'Courier New',
+                        ].contains(_fontFamily)
+                            ? _fontFamily
+                            : 'Arial',
+                        isExpanded: true,
+                        dropdownColor:
+                            isDark ? const Color(0xFF1E293B) : Colors.white,
+                        icon: const Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          color: Colors.grey,
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                              value: 'Arial', child: Text('Arial')),
+                          DropdownMenuItem(
+                              value: 'Georgia', child: Text('Georgia')),
+                          DropdownMenuItem(
+                              value: 'Tahoma', child: Text('Tahoma')),
+                          DropdownMenuItem(
+                              value: 'Times New Roman',
+                              child: Text('Times New Roman')),
+                          DropdownMenuItem(
+                              value: 'Trebuchet MS',
+                              child: Text('Trebuchet MS')),
+                          DropdownMenuItem(
+                              value: 'Verdana', child: Text('Verdana')),
+                          DropdownMenuItem(
+                              value: 'Roboto', child: Text('Roboto')),
+                          DropdownMenuItem(
+                              value: 'Courier New',
+                              child: Text('Courier New')),
+                        ],
+                        onChanged: (v) {
+                          if (v != null) setState(() => _fontFamily = v);
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              );
+
+              final fontSizeCol = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Font Size',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white70 : const Color(0xFF1E293B),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  _buildDropdownContainer(
+                    isDark: isDark,
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: const ['Small', 'Normal', 'Large', 'Huge']
+                                .contains(_fontSize)
+                            ? _fontSize
+                            : 'Normal',
+                        isExpanded: true,
+                        dropdownColor:
+                            isDark ? const Color(0xFF1E293B) : Colors.white,
+                        icon: const Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          color: Colors.grey,
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                              value: 'Small', child: Text('Small')),
+                          DropdownMenuItem(
+                              value: 'Normal', child: Text('Normal')),
+                          DropdownMenuItem(
+                              value: 'Large', child: Text('Large')),
+                          DropdownMenuItem(
+                              value: 'Huge', child: Text('Huge')),
+                        ],
+                        onChanged: (v) {
+                          if (v != null) setState(() => _fontSize = v);
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              );
+
+              if (constraints.maxWidth >= 550) {
+                return Row(
+                  children: [
+                    Expanded(child: fontFamilyCol),
+                    const SizedBox(width: 16),
+                    Expanded(child: fontSizeCol),
+                  ],
+                );
+              } else {
+                return Column(
+                  children: [
+                    fontFamilyCol,
+                    const SizedBox(height: 14),
+                    fontSizeCol,
+                  ],
+                );
+              }
+            },
+          ),
+          const SizedBox(height: 16),
+
+          // Text Color Preview Row
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 12,
+            runSpacing: 10,
+            children: [
+              Text(
+                'Text Color:',
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white70 : const Color(0xFF1E293B),
+                ),
+              ),
+              Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: Colors.black,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: isDark ? Colors.white24 : Colors.grey.shade400,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                  ),
+                  color: isDark ? const Color(0xFF0F172A) : Colors.white,
+                ),
+                child: Text(
+                  'Sample Default Text Style Preview',
+                  style: TextStyle(
+                    fontFamily: _fontFamily == 'Arial' ? null : _fontFamily,
+                    fontSize: _fontSize == 'Small'
+                        ? 11.5
+                        : _fontSize == 'Large'
+                            ? 15
+                            : _fontSize == 'Huge'
+                                ? 17
+                                : 13,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Divider(
+            color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+            height: 36,
+          ),
+
+          // ── Email Signatures ───────────────────────────────────────────────
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'EMAIL SIGNATURES',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF64748B),
+                  letterSpacing: 0.5,
+                ),
+              ),
+              OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFF195BAC), width: 1.2),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 6,
+                  ),
+                ),
+                onPressed: () {
+                  setState(() {
+                    _signatureItems.add({
+                      'name': 'New Signature',
+                      'content': '',
+                      'isDefault': _signatureItems.isEmpty,
+                    });
+                    _selectedSignatureIndex = _signatureItems.length - 1;
+                    _signatureContentController.text = '';
+                  });
+                },
+                child: const Text(
+                  '+ Add Signature',
+                  style: TextStyle(
+                    color: Color(0xFF195BAC),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // If no signatures created
+          if (_signatureItems.isEmpty) ...[
+            Text(
+              'No signatures created. Click \'+ Add Signature\' to create one.',
+              style: TextStyle(
+                fontSize: 13.5,
+                fontStyle: FontStyle.italic,
+                color: isDark ? Colors.white54 : const Color(0xFF64748B),
+              ),
+            ),
+          ] else ...[
+            // Signature Pills
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: List.generate(_signatureItems.length, (index) {
+                final isSelected = index == _selectedSignatureIndex;
+                final sig = _signatureItems[index];
+                return InkWell(
+                  onTap: () {
+                    setState(() {
+                      _selectedSignatureIndex = index;
+                      _signatureContentController.text =
+                          sig['content'] ?? '';
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: isSelected
+                            ? const Color(0xFF195BAC)
+                            : (isDark
+                                ? Colors.white24
+                                : const Color(0xFFE2E8F0)),
+                        width: isSelected ? 1.5 : 1.0,
+                      ),
+                      color: isSelected
+                          ? const Color(0xFFEFF6FF)
+                          : (isDark
+                              ? const Color(0xFF0F172A)
+                              : Colors.white),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          sig['name'] ?? 'New Signature',
+                          style: TextStyle(
+                            color: isSelected
+                                ? const Color(0xFF195BAC)
+                                : (isDark
+                                    ? Colors.white70
+                                    : const Color(0xFF0F172A)),
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                        if (sig['isDefault'] == true) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFDCFCE7),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Text(
+                              'Default',
+                              style: TextStyle(
+                                color: Color(0xFF15803D),
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                );
+              }),
+            ),
+            const SizedBox(height: 14),
+
+            // Signature Editor Box
+            Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF0F172A) : Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                  width: 1,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Signature Editor Header
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          _signatureItems[_selectedSignatureIndex]['name'] ??
+                              'New Signature',
+                          style: TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w700,
+                            color: isDark
+                                ? Colors.white
+                                : const Color(0xFF0F172A),
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFDCFCE7),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Text(
+                                'Default ✓',
+                                style: TextStyle(
+                                  color: Color(0xFF15803D),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 11.5,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            InkWell(
+                              onTap: () {
+                                setState(() {
+                                  _signatureItems.removeAt(
+                                    _selectedSignatureIndex,
+                                  );
+                                  if (_selectedSignatureIndex >=
+                                      _signatureItems.length) {
+                                    _selectedSignatureIndex =
+                                        _signatureItems.length - 1;
+                                  }
+                                  if (_selectedSignatureIndex >= 0) {
+                                    _signatureContentController.text =
+                                        _signatureItems[_selectedSignatureIndex]
+                                                ['content'] ??
+                                            '';
+                                  }
+                                });
+                              },
+                              borderRadius: BorderRadius.circular(20),
+                              child: Padding(
+                                padding: const EdgeInsets.all(4.0),
+                                child: Icon(
+                                  Icons.close_rounded,
+                                  color: Colors.red.shade400,
+                                  size: 20,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  Divider(
+                    height: 1,
+                    color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+                  ),
+
+                  // Signature Editor Toolbar
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? const Color(0xFF1E293B)
+                          : const Color(0xFFF8FAFC),
+                    ),
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'Normal',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: isDark
+                                      ? Colors.white70
+                                      : const Color(0xFF334155),
+                                ),
+                              ),
+                              const SizedBox(width: 2),
+                              const Icon(
+                                Icons.unfold_more_rounded,
+                                size: 14,
+                                color: Colors.grey,
+                              ),
+                            ],
+                          ),
+                          _buildToolbarVerticalDivider(isDark),
+                          _buildToolbarIconButton(
+                            icon: Icons.format_bold_rounded,
+                            isDark: isDark,
+                          ),
+                          _buildToolbarIconButton(
+                            icon: Icons.format_italic_rounded,
+                            isDark: isDark,
+                          ),
+                          _buildToolbarIconButton(
+                            icon: Icons.format_underlined_rounded,
+                            isDark: isDark,
+                          ),
+                          _buildToolbarIconButton(
+                            icon: Icons.format_strikethrough_rounded,
+                            isDark: isDark,
+                          ),
+                          _buildToolbarIconButton(
+                            icon: Icons.format_quote_rounded,
+                            isDark: isDark,
+                          ),
+                          _buildToolbarVerticalDivider(isDark),
+                          _buildToolbarIconButton(
+                            icon: Icons.format_list_numbered_rounded,
+                            isDark: isDark,
+                          ),
+                          _buildToolbarIconButton(
+                            icon: Icons.format_list_bulleted_rounded,
+                            isDark: isDark,
+                          ),
+                          _buildToolbarIconButton(
+                            icon: Icons.format_indent_decrease_rounded,
+                            isDark: isDark,
+                          ),
+                          _buildToolbarIconButton(
+                            icon: Icons.format_indent_increase_rounded,
+                            isDark: isDark,
+                          ),
+                          _buildToolbarVerticalDivider(isDark),
+                          _buildToolbarIconButton(
+                            icon: Icons.link_rounded,
+                            isDark: isDark,
+                          ),
+                          _buildToolbarIconButton(
+                            icon: Icons.format_clear_rounded,
+                            isDark: isDark,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Divider(
+                    height: 1,
+                    color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+                  ),
+
+                  // Signature Text Input Area
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: TextField(
+                      controller: _signatureContentController,
+                      maxLines: 5,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                      ),
+                      onChanged: (text) {
+                        if (_selectedSignatureIndex >= 0 &&
+                            _selectedSignatureIndex <
+                                _signatureItems.length) {
+                          _signatureItems[_selectedSignatureIndex]['content'] =
+                              text;
+                        }
+                      },
+                      decoration: const InputDecoration(
+                        hintText: 'Design your signature...',
+                        hintStyle: TextStyle(
+                          fontStyle: FontStyle.italic,
+                          color: Color(0xFF94A3B8),
+                          fontSize: 14,
+                        ),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(vertical: 16),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          Text(
+            'The default signature will be automatically inserted into new compose frames.',
+            style: TextStyle(
+              fontSize: 12.5,
+              color: isDark ? Colors.white38 : const Color(0xFF94A3B8),
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // ── Save Preferences Button ────────────────────────────────────────
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF195BAC),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 22,
+                vertical: 14,
+              ),
+            ),
+            onPressed: () async {
+              try {
+                int delaySeconds = 0;
+                final match = RegExp(r'\d+').firstMatch(_undoSendDelay);
+                if (match != null) {
+                  delaySeconds = int.tryParse(match.group(0)!) ?? 0;
+                }
+                final sigsToSave = _signatureItems
+                    .map((s) => s['content']?.toString() ?? '')
+                    .where((s) => s.isNotEmpty)
+                    .toList();
+                await UserRepository.updateSettings({
+                  'undoSendDelay': delaySeconds,
+                  'signatures': sigsToSave,
+                });
+              } catch (_) {}
+              _showSnackBar('Preferences saved successfully!');
+            },
+            child: const Text(
+              'Save Preferences',
+              style: TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── General Dropdown Container Helper ─────────────────────────────────────
+  Widget _buildDropdownContainer({
+    required Widget child,
+    required bool isDark,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+          width: 1,
+        ),
+      ),
+      child: child,
+    );
+  }
+
+  // ── Toolbar Icon Button Helper ────────────────────────────────────────────
+  Widget _buildToolbarIconButton({
+    required IconData icon,
+    required bool isDark,
+    VoidCallback? onTap,
+  }) {
+    return InkWell(
+      onTap: onTap ?? () {},
+      borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.all(6.0),
+        child: Icon(
+          icon,
+          size: 18,
+          color: isDark ? Colors.white70 : const Color(0xFF475569),
+        ),
+      ),
+    );
+  }
+
+  // ── Toolbar Vertical Divider Helper ───────────────────────────────────────
+  Widget _buildToolbarVerticalDivider(bool isDark) {
+    return Container(
+      height: 18,
+      width: 1,
+      margin: const EdgeInsets.symmetric(horizontal: 8),
+      color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+    );
+  }
+
+
   // ── 3. Notifications & Quiet Tab ──────────────────────────────────────────
   Widget _buildNotificationsTab(bool isDark) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Notification Preferences & Quiet Hours',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: isDark ? Colors.white : Colors.black87,
-          ),
-        ),
-        const SizedBox(height: 24),
-        _buildSectionHeader('FOLDERS & SUBSCRIPTIONS', isDark),
-        const SizedBox(height: 10),
-        _buildSwitchTile('Inbox Mail Alerts', _inboxMailAlerts, (val) {
-          setState(() => _inboxMailAlerts = val);
-        }, isDark),
-        _buildSwitchTile('Sent Confirmation Alerts', _sentConfirmationAlerts, (
-          val,
-        ) {
-          setState(() => _sentConfirmationAlerts = val);
-        }, isDark),
-        _buildSwitchTile('Starred Emails Alerts', _starredEmailsAlerts, (val) {
-          setState(() => _starredEmailsAlerts = val);
-        }, isDark),
-        _buildSwitchTile('Snoozed Reminders', _snoozedReminders, (val) {
-          setState(() => _snoozedReminders = val);
-        }, isDark),
-        Divider(
-          height: 32,
-          color: isDark ? Colors.white12 : Colors.grey.shade200,
-        ),
-        _buildSectionHeader('VIBRATION & SOUNDS', isDark),
-        const SizedBox(height: 10),
-        _buildSwitchTile('Play Alert Sound', _playAlertSound, (val) {
-          setState(() => _playAlertSound = val);
-        }, isDark),
-        _buildSwitchTile('Enable Haptic Vibration', _enableHapticVibration, (
-          val,
-        ) {
-          setState(() => _enableHapticVibration = val);
-        }, isDark),
-        Divider(
-          height: 32,
-          color: isDark ? Colors.white12 : Colors.grey.shade200,
-        ),
-        _buildSectionHeader('QUIET HOURS SCHEDULE', isDark),
-        const SizedBox(height: 10),
-        _buildSwitchTile(
-          'Mute Notifications Schedule',
-          _muteNotificationsSchedule,
-          (val) {
-            setState(() => _muteNotificationsSchedule = val);
-          },
-          isDark,
-        ),
-        const SizedBox(height: 28),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF195BAC),
-            elevation: 0,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 13),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
-            ),
-          ),
-          onPressed: () async {
-            try {
-              await UserRepository.updateSettings({
-                'inboxMailAlerts': _inboxMailAlerts,
-                'sentConfirmationAlerts': _sentConfirmationAlerts,
-                'starredEmailsAlerts': _starredEmailsAlerts,
-                'snoozedReminders': _snoozedReminders,
-                'playAlertSound': _playAlertSound,
-                'enableHapticVibration': _enableHapticVibration,
-                'muteNotificationsSchedule': _muteNotificationsSchedule,
-              });
-              _showSnackBar('Notification settings saved to backend!');
-            } catch (_) {
-              _showSnackBar('Notification settings saved.');
-            }
-          },
-          child: const Text(
-            'Save Notification Settings',
+    return _buildAccountsSectionCard(
+      isDark: isDark,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Title ──────────────────────────────────────────────────────────
+          Text(
+            'Notification Preferences & Quiet Hours',
             style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 13,
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: isDark ? Colors.white : const Color(0xFF1E293B),
+              letterSpacing: -0.3,
             ),
           ),
-        ),
-      ],
+          const SizedBox(height: 16),
+          Divider(
+            height: 1,
+            thickness: 1,
+            color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+          ),
+          const SizedBox(height: 24),
+
+          // ── 1. Folders & Subscriptions ─────────────────────────────────────
+          const Text(
+            'FOLDERS & SUBSCRIPTIONS',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF64748B),
+              letterSpacing: 0.6,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildNotificationToggleRow(
+            title: 'Inbox Mail Alerts',
+            value: _inboxMailAlerts,
+            onChanged: (val) => setState(() => _inboxMailAlerts = val),
+            isDark: isDark,
+          ),
+          _buildNotificationToggleRow(
+            title: 'Sent Confirmation Alerts',
+            value: _sentConfirmationAlerts,
+            onChanged: (val) => setState(() => _sentConfirmationAlerts = val),
+            isDark: isDark,
+          ),
+          _buildNotificationToggleRow(
+            title: 'Starred Email Alerts',
+            value: _starredEmailsAlerts,
+            onChanged: (val) => setState(() => _starredEmailsAlerts = val),
+            isDark: isDark,
+          ),
+          _buildNotificationToggleRow(
+            title: 'Snoozed Email Alerts',
+            value: _snoozedReminders,
+            onChanged: (val) => setState(() => _snoozedReminders = val),
+            isDark: isDark,
+          ),
+          const SizedBox(height: 14),
+          Divider(
+            height: 1,
+            thickness: 1,
+            color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+          ),
+          const SizedBox(height: 24),
+
+          // ── 2. Auditory & Vibration Feedback ───────────────────────────────
+          const Text(
+            'AUDITORY & VIBRATION FEEDBACK',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF64748B),
+              letterSpacing: 0.6,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildNotificationToggleRow(
+            title: 'Play Sound for New Mail',
+            value: _playAlertSound,
+            onChanged: (val) => setState(() => _playAlertSound = val),
+            isDark: isDark,
+          ),
+          _buildNotificationToggleRow(
+            title: 'Vibrate on Incoming Messages',
+            value: _enableHapticVibration,
+            onChanged: (val) => setState(() => _enableHapticVibration = val),
+            isDark: isDark,
+          ),
+          const SizedBox(height: 14),
+          Divider(
+            height: 1,
+            thickness: 1,
+            color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+          ),
+          const SizedBox(height: 24),
+
+          // ── 3. Quiet Hours Schedule ────────────────────────────────────────
+          const Text(
+            'QUIET HOURS SCHEDULE',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF64748B),
+              letterSpacing: 0.6,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildNotificationToggleRow(
+            title:
+                'Mute all notification sounds and popups during specified schedule.',
+            value: _muteNotificationsSchedule,
+            onChanged: (val) => setState(() => _muteNotificationsSchedule = val),
+            isDark: isDark,
+          ),
+          const SizedBox(height: 32),
+
+          // ── Save Notification Settings Button ──────────────────────────────
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF155EEF),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 22,
+                vertical: 14,
+              ),
+            ),
+            onPressed: () async {
+              try {
+                await UserRepository.updateSettings({
+                  'inboxMailAlerts': _inboxMailAlerts,
+                  'inboxNotifications': _inboxMailAlerts,
+                  'sentConfirmationAlerts': _sentConfirmationAlerts,
+                  'sentNotifications': _sentConfirmationAlerts,
+                  'starredEmailsAlerts': _starredEmailsAlerts,
+                  'starredNotifications': _starredEmailsAlerts,
+                  'snoozedReminders': _snoozedReminders,
+                  'snoozedNotifications': _snoozedReminders,
+                  'playAlertSound': _playAlertSound,
+                  'soundEnabled': _playAlertSound,
+                  'enableHapticVibration': _enableHapticVibration,
+                  'vibrationEnabled': _enableHapticVibration,
+                  'muteNotificationsSchedule': _muteNotificationsSchedule,
+                  'quietHoursEnabled': _muteNotificationsSchedule,
+                });
+                _showSnackBar('Notification settings saved successfully!');
+              } catch (_) {
+                _showSnackBar('Notification settings saved.');
+              }
+            },
+            child: const Text(
+              'Save Notification Settings',
+              style: TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Notification Toggle Row Helper ─────────────────────────────────────────
+  Widget _buildNotificationToggleRow({
+    required String title,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+    required bool isDark,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 9.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white : const Color(0xFF1E293B),
+                letterSpacing: -0.1,
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          CupertinoSwitch(
+            value: value,
+            activeTrackColor: const Color(0xFF155EEF),
+            inactiveTrackColor:
+                isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+            thumbColor: Colors.white,
+            onChanged: onChanged,
+          ),
+        ],
+      ),
     );
   }
 
   // ── 4. Appearance & Layout Tab ────────────────────────────────────────────
   Widget _buildAppearanceTab(bool isDark) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Appearance & Layout Settings',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: isDark ? Colors.white : Colors.black87,
-          ),
-        ),
-        const SizedBox(height: 24),
-        Text(
-          'Theme Mode',
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.bold,
-            color: isDark ? Colors.white : Colors.black87,
-          ),
-        ),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            InkWell(
-              onTap: () {
-                if (isDark) ref.read(appUiProvider.notifier).toggleDarkMode();
-              },
-              borderRadius: BorderRadius.circular(16),
-              child: Container(
-                constraints: const BoxConstraints(minWidth: 120),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 12,
-                ),
-                decoration: BoxDecoration(
-                  color: !isDark
-                      ? const Color(0xFFE3F2FD)
-                      : const Color(0xFF0F172A),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: !isDark ? const Color(0xFF195BAC) : Colors.white24,
-                    width: 1.5,
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.wb_sunny_outlined,
-                      size: 18,
-                      color: !isDark ? const Color(0xFF195BAC) : Colors.white70,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Light Mode',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                        color: !isDark
-                            ? const Color(0xFF195BAC)
-                            : Colors.white70,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+    const readingPaneOptions = [
+      'No Split (Full List)',
+      'Right Split (Vertical)',
+      'Bottom Split (Horizontal)',
+    ];
+    final currentReadingPaneValue = readingPaneOptions.firstWhere(
+      (opt) =>
+          opt.toLowerCase() == _readingPaneMode.toLowerCase() ||
+          (_readingPaneMode.toLowerCase().contains('right') &&
+              opt.contains('Right')) ||
+          (_readingPaneMode.toLowerCase().contains('bottom') &&
+              opt.contains('Bottom')) ||
+          (_readingPaneMode.toLowerCase().contains('no') &&
+              opt.contains('No')),
+      orElse: () => readingPaneOptions.first,
+    );
+
+    return _buildAccountsSectionCard(
+      isDark: isDark,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Title ──────────────────────────────────────────────────────────
+          Text(
+            'Appearance & Interface Customization',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: isDark ? Colors.white : const Color(0xFF1E293B),
+              letterSpacing: -0.3,
             ),
-            InkWell(
-              onTap: () {
-                if (!isDark) ref.read(appUiProvider.notifier).toggleDarkMode();
-              },
-              borderRadius: BorderRadius.circular(16),
-              child: Container(
-                constraints: const BoxConstraints(minWidth: 120),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 12,
-                ),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? const Color(0xFF1E3A5F)
-                      : const Color(0xFFFAFAFA),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: isDark
-                        ? const Color(0xFF195BAC)
-                        : Colors.grey.shade300,
-                    width: 1.5,
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.dark_mode_outlined,
-                      size: 18,
-                      color: isDark ? const Color(0xFF195BAC) : Colors.black87,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Dark Mode',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                        color: isDark
-                            ? const Color(0xFF195BAC)
-                            : Colors.black87,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 28),
-        Text(
-          'Display Density',
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.bold,
-            color: isDark ? Colors.white : Colors.black87,
           ),
-        ),
-        const SizedBox(height: 12),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: ['Compact', 'Default', 'Comfortable'].map((d) {
-              final isSel = _density == d;
-              return Padding(
-                padding: const EdgeInsets.only(right: 8.0),
-                child: ChoiceChip(
-                  label: Text(d),
-                  selected: isSel,
-                  selectedColor: const Color(0xFFE3F2FD),
-                  backgroundColor: isDark
-                      ? const Color(0xFF0F172A)
-                      : const Color(0xFFFAFAFA),
-                  labelStyle: TextStyle(
-                    color: isSel
-                        ? const Color(0xFF195BAC)
-                        : (isDark ? Colors.white70 : Colors.black87),
-                    fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
-                    fontSize: 13,
+          const SizedBox(height: 16),
+          Divider(
+            height: 1,
+            thickness: 1,
+            color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+          ),
+          const SizedBox(height: 24),
+
+          // ── 1. Density ─────────────────────────────────────────────────────
+          Text(
+            'Density',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: isDark ? Colors.white70 : const Color(0xFF1E293B),
+            ),
+          ),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final densityOptions = ['Default', 'Spacious', 'Compact'];
+              if (constraints.maxWidth >= 450) {
+                return Row(
+                  children: densityOptions.map((d) {
+                    final isSelected = _density.toLowerCase() == d.toLowerCase();
+                    return Expanded(
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                          right: d != densityOptions.last ? 12.0 : 0.0,
+                        ),
+                        child: _buildPillButton(
+                          label: d,
+                          isSelected: isSelected,
+                          isDark: isDark,
+                          onTap: () => setState(() => _density = d),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                );
+              } else {
+                return Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: densityOptions.map((d) {
+                    final isSelected = _density.toLowerCase() == d.toLowerCase();
+                    return SizedBox(
+                      width: (constraints.maxWidth - 16) / 3,
+                      child: _buildPillButton(
+                        label: d,
+                        isSelected: isSelected,
+                        isDark: isDark,
+                        onTap: () => setState(() => _density = d),
+                      ),
+                    );
+                  }).toList(),
+                );
+              }
+            },
+          ),
+          const SizedBox(height: 24),
+
+          // ── 2. Emails per page ─────────────────────────────────────────────
+          Text(
+            'Emails per page',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: isDark ? Colors.white70 : const Color(0xFF1E293B),
+            ),
+          ),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final pageOptions = [10, 20, 50, 100];
+              if (constraints.maxWidth >= 450) {
+                return Row(
+                  children: pageOptions.map((count) {
+                    final isSelected = _emailsPerPage == count;
+                    return Expanded(
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                          right: count != pageOptions.last ? 12.0 : 0.0,
+                        ),
+                        child: _buildPillButton(
+                          label: '$count',
+                          isSelected: isSelected,
+                          isDark: isDark,
+                          onTap: () => setState(() => _emailsPerPage = count),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                );
+              } else {
+                return Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: pageOptions.map((count) {
+                    final isSelected = _emailsPerPage == count;
+                    return SizedBox(
+                      width: (constraints.maxWidth - 24) / 4,
+                      child: _buildPillButton(
+                        label: '$count',
+                        isSelected: isSelected,
+                        isDark: isDark,
+                        onTap: () => setState(() => _emailsPerPage = count),
+                      ),
+                    );
+                  }).toList(),
+                );
+              }
+            },
+          ),
+          const SizedBox(height: 24),
+
+          // ── 3. Accent Color ────────────────────────────────────────────────
+          Text(
+            'Accent Color',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: isDark ? Colors.white70 : const Color(0xFF1E293B),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            runSpacing: 10,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              '#4F46E5', // Indigo
+              '#2563EB', // Blue
+              '#EF4444', // Red
+              '#10B981', // Green
+              '#F59E0B', // Amber
+              '#8B5CF6', // Purple
+              '#EC4899', // Pink
+            ].map((hex) {
+              final isSelected = _accentColor.toLowerCase() == hex.toLowerCase();
+              final color = Color(int.parse(hex.replaceFirst('#', '0xFF')));
+              return GestureDetector(
+                onTap: () => setState(() => _accentColor = hex),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: isSelected ? 36 : 28,
+                  height: isSelected ? 36 : 28,
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: isSelected
+                        ? BorderRadius.circular(8)
+                        : BorderRadius.circular(14),
+                    boxShadow: isSelected
+                        ? [
+                            BoxShadow(
+                              color: color.withValues(alpha: 0.4),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
+                            ),
+                          ]
+                        : null,
+                    border: isSelected
+                        ? Border.all(color: Colors.white, width: 2)
+                        : null,
                   ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    side: BorderSide(
-                      color: isSel
-                          ? const Color(0xFF195BAC)
-                          : (isDark ? Colors.white12 : Colors.grey.shade300),
-                    ),
-                  ),
-                  onSelected: (val) {
-                    if (val) setState(() => _density = d);
-                  },
                 ),
               );
             }).toList(),
           ),
+          const SizedBox(height: 24),
+
+          // ── 4. Font Size Scale ─────────────────────────────────────────────
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Font Size Scale',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? Colors.white70 : const Color(0xFF1E293B),
+                ),
+              ),
+              Text(
+                '${_fontSizeScale.toStringAsFixed(_fontSizeScale == _fontSizeScale.roundToDouble() ? 0 : 1)}x',
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white38 : const Color(0xFF64748B),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              trackHeight: 4,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+              overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
+              activeTrackColor: const Color(0xFF155EEF),
+              inactiveTrackColor:
+                  isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+              thumbColor: const Color(0xFF155EEF),
+            ),
+            child: Slider(
+              value: _fontSizeScale,
+              min: 0.8,
+              max: 1.4,
+              divisions: 6,
+              onChanged: (v) => setState(() => _fontSizeScale = v),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Divider(
+            height: 1,
+            thickness: 1,
+            color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+          ),
+          const SizedBox(height: 24),
+
+          // ── 5. Visual Theme Palette ────────────────────────────────────────
+          Text(
+            'Visual Theme Palette',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: isDark ? Colors.white70 : const Color(0xFF1E293B),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                {'name': 'Classic', 'isDefault': true},
+                {'name': 'Dark', 'isDefault': false},
+                {'name': 'Nature', 'isDefault': false},
+                {'name': 'Ocean', 'isDefault': false},
+                {'name': 'Sunset', 'isDefault': false},
+                {'name': 'Minimal', 'isDefault': false},
+              ].map((theme) {
+                final name = theme['name'] as String;
+                final isDefault = theme['isDefault'] as bool;
+                final isSelected =
+                    _visualTheme.toLowerCase() == name.toLowerCase();
+                return Padding(
+                  padding: const EdgeInsets.only(right: 12.0),
+                  child: _buildPillButton(
+                    label: name,
+                    isSelected: isSelected,
+                    isDark: isDark,
+                    trailing: isDefault
+                        ? Container(
+                            margin: const EdgeInsets.only(left: 6),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? const Color(0xFFD1E4FF)
+                                  : (isDark
+                                      ? const Color(0xFF1E293B)
+                                      : const Color(0xFFF1F5F9)),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              'DEFAULT',
+                              style: TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w800,
+                                color: isSelected
+                                    ? const Color(0xFF155EEF)
+                                    : const Color(0xFF64748B),
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          )
+                        : null,
+                    onTap: () {
+                      setState(() => _visualTheme = name);
+                      if (name == 'Dark' && !isDark) {
+                        ref.read(appUiProvider.notifier).toggleDarkMode();
+                      } else if (name == 'Classic' && isDark) {
+                        ref.read(appUiProvider.notifier).toggleDarkMode();
+                      }
+                    },
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Divider(
+            height: 1,
+            thickness: 1,
+            color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+          ),
+          const SizedBox(height: 24),
+
+          // ── 6. Background Wallpaper ────────────────────────────────────────
+          Text(
+            'Background Wallpaper',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: isDark ? Colors.white70 : const Color(0xFF1E293B),
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // Panoramic Banner if wallpaper is selected
+          if (_selectedWallpaperUrl.isNotEmpty) ...[
+            Container(
+              height: 140,
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.08),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: Image.network(
+                  _selectedWallpaperUrl,
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  height: double.infinity,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          const Color(0xFF155EEF).withValues(alpha: 0.2),
+                          const Color(0xFFEC4899).withValues(alpha: 0.2),
+                        ],
+                      ),
+                    ),
+                    alignment: Alignment.center,
+                    child: const Icon(
+                      Icons.image,
+                      size: 40,
+                      color: Colors.grey,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+
+          // Wallpaper Thumbnails
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                {
+                  'name': 'Ocean Sunset',
+                  'url':
+                      'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80',
+                },
+                {
+                  'name': 'Cherry Blossom',
+                  'url':
+                      'https://images.unsplash.com/photo-1522383225653-ed111181a951?auto=format&fit=crop&w=1200&q=80',
+                },
+                {
+                  'name': 'Desert Dunes',
+                  'url':
+                      'https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9?auto=format&fit=crop&w=1200&q=80',
+                },
+                {
+                  'name': 'Autumn Leaves',
+                  'url':
+                      'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=1200&q=80',
+                },
+              ].map((wp) {
+                final name = wp['name']!;
+                final url = wp['url']!;
+                final isSelected = _selectedWallpaperUrl == url;
+                return GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _selectedWallpaperUrl = url;
+                      _customWallpaperController.text = url;
+                    });
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 14),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(18),
+                      border: isSelected
+                          ? Border.all(
+                              color: const Color(0xFF155EEF),
+                              width: 2.5,
+                            )
+                          : Border.all(
+                              color: isDark
+                                  ? Colors.white12
+                                  : const Color(0xFFE2E8F0),
+                              width: 1,
+                            ),
+                    ),
+                    padding: isSelected
+                        ? const EdgeInsets.all(2.5)
+                        : EdgeInsets.zero,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: SizedBox(
+                        width: 130,
+                        height: 75,
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            Image.network(
+                              url,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  Container(
+                                color: isDark
+                                    ? Colors.grey.shade800
+                                    : Colors.grey.shade300,
+                                child: const Icon(
+                                  Icons.wallpaper,
+                                  size: 24,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            ),
+                            Container(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    Colors.transparent,
+                                    Colors.black.withValues(alpha: 0.75),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            Align(
+                              alignment: Alignment.bottomCenter,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                  vertical: 6,
+                                ),
+                                child: Text(
+                                  name,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Custom image URL input row
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  height: 48,
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFF0F172A)
+                        : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                      width: 1,
+                    ),
+                  ),
+                  alignment: Alignment.center,
+                  child: TextField(
+                    controller: _customWallpaperController,
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      color: isDark ? Colors.white : const Color(0xFF1E293B),
+                    ),
+                    decoration: const InputDecoration(
+                      hintText: 'Paste custom image URL...',
+                      hintStyle: TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF94A3B8),
+                      ),
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF155EEF),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 14,
+                  ),
+                ),
+                onPressed: () {
+                  final text = _customWallpaperController.text.trim();
+                  if (text.isNotEmpty) {
+                    setState(() => _selectedWallpaperUrl = text);
+                  }
+                },
+                child: const Text(
+                  'Apply',
+                  style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Upload from device & Reset to Default buttons
+          Wrap(
+            spacing: 12,
+            runSpacing: 10,
+            children: [
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor:
+                      isDark ? Colors.white70 : const Color(0xFF1E293B),
+                  side: BorderSide(
+                    color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                ),
+                icon: const Icon(Icons.upload_rounded, size: 18),
+                label: const Text(
+                  'Upload from device',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+                onPressed: () {
+                  _showSnackBar('Device upload ready.');
+                },
+              ),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor:
+                      isDark ? Colors.white70 : const Color(0xFF1E293B),
+                  side: BorderSide(
+                    color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                ),
+                icon: const Icon(Icons.restart_alt_rounded, size: 18),
+                label: const Text(
+                  'Reset to Default',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+                onPressed: () {
+                  setState(() {
+                    _selectedWallpaperUrl = '';
+                    _customWallpaperController.clear();
+                  });
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Divider(
+            height: 1,
+            thickness: 1,
+            color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+          ),
+          const SizedBox(height: 24),
+
+          // ── 7. Reading Pane View ───────────────────────────────────────────
+          Text(
+            'Reading Pane View',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: isDark ? Colors.white70 : const Color(0xFF1E293B),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildDropdownContainer(
+            isDark: isDark,
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: currentReadingPaneValue,
+                isExpanded: true,
+                dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+                icon: const Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  color: Colors.grey,
+                ),
+                items: readingPaneOptions.map((opt) {
+                  final isSelected = opt == currentReadingPaneValue;
+                  return DropdownMenuItem(
+                    value: opt,
+                    child: Row(
+                      children: [
+                        if (isSelected) ...[
+                          const Icon(Icons.check,
+                              size: 16, color: Color(0xFF155EEF)),
+                          const SizedBox(width: 8),
+                        ],
+                        Text(
+                          opt,
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: isSelected
+                                ? FontWeight.w600
+                                : FontWeight.w500,
+                            color:
+                                isDark ? Colors.white : const Color(0xFF1E293B),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+                onChanged: (v) {
+                  if (v != null) setState(() => _readingPaneMode = v);
+                },
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Choose how emails open in your mailbox.',
+            style: TextStyle(
+              fontSize: 12.5,
+              color: isDark ? Colors.white38 : const Color(0xFF94A3B8),
+            ),
+          ),
+          const SizedBox(height: 28),
+
+          // ── Save Layout Settings Button ────────────────────────────────────
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF155EEF),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 22,
+                vertical: 14,
+              ),
+            ),
+            onPressed: () async {
+              try {
+                await UserRepository.updateSettings({
+                  'density': _density,
+                  'emailsPerPage': _emailsPerPage,
+                  'accentColor': _accentColor,
+                  'fontSize': _fontSizeScale,
+                  'visualTheme': _visualTheme,
+                  'wallpaper': _selectedWallpaperUrl,
+                  'readingPaneMode': _readingPaneMode,
+                });
+                _showSnackBar('Layout settings saved successfully!');
+              } catch (_) {
+                _showSnackBar('Layout settings saved.');
+              }
+            },
+            child: const Text(
+              'Save Layout Settings',
+              style: TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Pill Button Helper ─────────────────────────────────────────────────────
+  Widget _buildPillButton({
+    required String label,
+    required bool isSelected,
+    required bool isDark,
+    required VoidCallback onTap,
+    Widget? trailing,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        height: 46,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? (isDark ? const Color(0xFF1E3A5F) : const Color(0xFFF0F6FE))
+              : (isDark ? const Color(0xFF0F172A) : Colors.white),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected
+                ? const Color(0xFF155EEF)
+                : (isDark ? Colors.white12 : const Color(0xFFE2E8F0)),
+            width: isSelected ? 1.8 : 1.2,
+          ),
         ),
-      ],
+        alignment: Alignment.center,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                color: isSelected
+                    ? const Color(0xFF155EEF)
+                    : (isDark ? Colors.white70 : const Color(0xFF1E293B)),
+              ),
+            ),
+            ?trailing,
+          ],
+        ),
+      ),
     );
   }
 
   // ── 5. Security & Recovery Tab ────────────────────────────────────────────
   Widget _buildSecurityTab(bool isDark) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Security & Account Recovery',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: isDark ? Colors.white : Colors.black87,
-          ),
-        ),
-        const SizedBox(height: 24),
-        _buildSectionHeader('PROFILE INFORMATION', isDark),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            SizedBox(
-              width: 160,
-              child: _buildInputField('Job Title', _jobTitleController, isDark),
-            ),
-            SizedBox(
-              width: 160,
-              child: _buildInputField('Location', _locationController, isDark),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        _buildInputField('Phone Contact', _phoneContactController, isDark),
-
-        Divider(
-          height: 32,
-          color: isDark ? Colors.white12 : Colors.grey.shade200,
-        ),
-
-        _buildSectionHeader('MULTI-FACTOR AUTHENTICATOR', isDark),
-        const SizedBox(height: 10),
-        _buildSwitchTile('Enable Two-Factor Authentication (2FA)', _enable2FA, (
-          val,
-        ) {
-          setState(() => _enable2FA = val);
-        }, isDark),
-        _buildSwitchTile('Enable Biometrics Access', _enableBiometrics, (val) {
-          setState(() => _enableBiometrics = val);
-        }, isDark),
-        const SizedBox(height: 14),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF195BAC),
-            elevation: 0,
-            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
-            ),
-          ),
-          onPressed: () async {
-            try {
-              await UserRepository.updateProfile({
-                'jobTitle': _jobTitleController.text,
-                'location': _locationController.text,
-                'phone': _phoneContactController.text,
-              });
-              await UserRepository.updateSettings({
-                'twoFactorAuth': _enable2FA,
-                'enableBiometrics': _enableBiometrics,
-              });
-              _showSnackBar('Security preferences saved to backend!');
-            } catch (_) {
-              _showSnackBar('Security preferences saved.');
-            }
-          },
-          child: const Text(
-            'Save Security Preferences',
+    return _buildAccountsSectionCard(
+      isDark: isDark,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Title ──────────────────────────────────────────────────────────
+          Text(
+            'Security & Recovery',
             style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 13,
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: isDark ? Colors.white : const Color(0xFF1E293B),
+              letterSpacing: -0.3,
             ),
           ),
-        ),
+          const SizedBox(height: 16),
+          Divider(
+            height: 1,
+            thickness: 1,
+            color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+          ),
+          const SizedBox(height: 24),
 
-        Divider(
-          height: 32,
-          color: isDark ? Colors.white12 : Colors.grey.shade200,
-        ),
+          // ── 1. Profile Information ─────────────────────────────────────────
+          _buildSubHeader('PROFILE INFORMATION', isDark),
+          const SizedBox(height: 16),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth >= 650) {
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: _buildModernLabeledInput(
+                        label: 'Job Title',
+                        hint: 'e.g. Lead Software Architect',
+                        controller: _jobTitleController,
+                        isDark: isDark,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: _buildModernLabeledInput(
+                        label: 'Location',
+                        hint: 'e.g. San Francisco, CA',
+                        controller: _locationController,
+                        isDark: isDark,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: _buildModernLabeledInput(
+                        label: 'Phone Contact',
+                        hint: 'Enter phone number',
+                        controller: _phoneContactController,
+                        isDark: isDark,
+                      ),
+                    ),
+                  ],
+                );
+              } else {
+                return Column(
+                  children: [
+                    _buildModernLabeledInput(
+                      label: 'Job Title',
+                      hint: 'e.g. Lead Software Architect',
+                      controller: _jobTitleController,
+                      isDark: isDark,
+                    ),
+                    const SizedBox(height: 14),
+                    _buildModernLabeledInput(
+                      label: 'Location',
+                      hint: 'e.g. San Francisco, CA',
+                      controller: _locationController,
+                      isDark: isDark,
+                    ),
+                    const SizedBox(height: 14),
+                    _buildModernLabeledInput(
+                      label: 'Phone Contact',
+                      hint: 'Enter phone number',
+                      controller: _phoneContactController,
+                      isDark: isDark,
+                    ),
+                  ],
+                );
+              }
+            },
+          ),
+          const SizedBox(height: 24),
+          Divider(
+            height: 1,
+            thickness: 1,
+            color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+          ),
+          const SizedBox(height: 24),
 
-        _buildSectionHeader('UPDATE ACCOUNT PASSWORD', isDark),
-        const SizedBox(height: 12),
-        _buildInputField(
-          'Current Password',
-          _currentPasswordController,
-          isDark,
-          isPassword: true,
-        ),
-        const SizedBox(height: 10),
-        _buildInputField(
-          'New Password',
-          _newPasswordController,
-          isDark,
-          isPassword: true,
-        ),
-        const SizedBox(height: 14),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF195BAC),
-            elevation: 0,
-            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
+          // ── 2. Two-Factor Authentication (2FA) ─────────────────────────────
+          _buildSubHeader('TWO-FACTOR AUTHENTICATION (2FA)', isDark),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  'Enable Two-Factor Authentication',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white : const Color(0xFF1E293B),
+                  ),
+                ),
+              ),
+              Switch(
+                value: _enable2FA,
+                onChanged: (v) => setState(() => _enable2FA = v),
+                activeThumbColor: const Color(0xFF155EEF),
+                activeTrackColor:
+                    const Color(0xFF155EEF).withValues(alpha: 0.35),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  'Enable Biometric Authentication',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white : const Color(0xFF1E293B),
+                  ),
+                ),
+              ),
+              Switch(
+                value: _enableBiometrics,
+                onChanged: (v) => setState(() => _enableBiometrics = v),
+                activeThumbColor: const Color(0xFF155EEF),
+                activeTrackColor:
+                    const Color(0xFF155EEF).withValues(alpha: 0.35),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF155EEF),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 22,
+                vertical: 14,
+              ),
+            ),
+            onPressed: () async {
+              try {
+                await UserRepository.updateProfile({
+                  'jobTitle': _jobTitleController.text,
+                  'location': _locationController.text,
+                  'phone': _phoneContactController.text,
+                });
+                await UserRepository.updateSettings({
+                  'twoFactorAuth': _enable2FA,
+                  'enableBiometrics': _enableBiometrics,
+                });
+                _showSnackBar('Security preferences saved successfully!');
+              } catch (_) {
+                _showSnackBar('Security preferences saved.');
+              }
+            },
+            child: const Text(
+              'Save Security Preferences',
+              style: TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
-          onPressed: () async {
-            final oldPass = _currentPasswordController.text;
-            final newPass = _newPasswordController.text;
-            if (oldPass.isEmpty || newPass.isEmpty) {
-              _showSnackBar('Please fill both password fields.', isError: true);
-              return;
-            }
-            try {
-              await UserRepository.changePassword(oldPass, newPass);
-              _currentPasswordController.clear();
-              _newPasswordController.clear();
-              _showSnackBar('Password updated successfully!');
-            } catch (e) {
-              _showSnackBar('Failed to update password: $e', isError: true);
-            }
-          },
-          child: const Text(
-            'Update Password',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 13,
-            ),
+          const SizedBox(height: 24),
+          Divider(
+            height: 1,
+            thickness: 1,
+            color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
           ),
-        ),
+          const SizedBox(height: 24),
 
-        Divider(
-          height: 32,
-          color: isDark ? Colors.white12 : Colors.grey.shade200,
-        ),
+          // ── 3. Change Password ─────────────────────────────────────────────
+          _buildSubHeader('CHANGE PASSWORD', isDark),
+          const SizedBox(height: 16),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth >= 550) {
+                return Row(
+                  children: [
+                    Expanded(
+                      child: _buildModernInput(
+                        hint: 'Current Password',
+                        controller: _currentPasswordController,
+                        isDark: isDark,
+                        isPassword: true,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: _buildModernInput(
+                        hint: 'New Password',
+                        controller: _newPasswordController,
+                        isDark: isDark,
+                        isPassword: true,
+                      ),
+                    ),
+                  ],
+                );
+              } else {
+                return Column(
+                  children: [
+                    _buildModernInput(
+                      hint: 'Current Password',
+                      controller: _currentPasswordController,
+                      isDark: isDark,
+                      isPassword: true,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildModernInput(
+                      hint: 'New Password',
+                      controller: _newPasswordController,
+                      isDark: isDark,
+                      isPassword: true,
+                    ),
+                  ],
+                );
+              }
+            },
+          ),
+          const SizedBox(height: 18),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 22,
+                vertical: 14,
+              ),
+            ),
+            onPressed: () async {
+              final oldPass = _currentPasswordController.text;
+              final newPass = _newPasswordController.text;
+              if (oldPass.isEmpty || newPass.isEmpty) {
+                _showSnackBar('Please fill both password fields.', isError: true);
+                return;
+              }
+              try {
+                await UserRepository.changePassword(oldPass, newPass);
+                _currentPasswordController.clear();
+                _newPasswordController.clear();
+                _showSnackBar('Password updated successfully!');
+              } catch (e) {
+                _showSnackBar('Failed to update password: $e', isError: true);
+              }
+            },
+            child: const Text(
+              'Update Password',
+              style: TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Divider(
+            height: 1,
+            thickness: 1,
+            color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+          ),
+          const SizedBox(height: 24),
 
-        _buildSectionHeader('BACKUP ACCOUNT RECOVERY', isDark),
-        const SizedBox(height: 12),
-        Text(
-          'Recovery Email Address',
-          style: TextStyle(
-            fontSize: 13,
-            color: isDark ? Colors.white70 : Colors.black87,
-            fontWeight: FontWeight.w500,
+          // ── 4. Password Recovery & Backup Contacts ─────────────────────────
+          _buildSubHeader('PASSWORD RECOVERY & BACKUP CONTACTS', isDark),
+          const SizedBox(height: 16),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth >= 550) {
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: _buildModernLabeledInput(
+                        label: 'Recovery Email Address',
+                        hint: 'backup@example.com',
+                        controller: _recoveryEmailController,
+                        isDark: isDark,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: _buildModernLabeledInput(
+                        label: 'Recovery Phone Number (10 Digits)',
+                        hint: '+1234567890',
+                        controller: _backupPhoneController,
+                        isDark: isDark,
+                      ),
+                    ),
+                  ],
+                );
+              } else {
+                return Column(
+                  children: [
+                    _buildModernLabeledInput(
+                      label: 'Recovery Email Address',
+                      hint: 'backup@example.com',
+                      controller: _recoveryEmailController,
+                      isDark: isDark,
+                    ),
+                    const SizedBox(height: 14),
+                    _buildModernLabeledInput(
+                      label: 'Recovery Phone Number (10 Digits)',
+                      hint: '+1234567890',
+                      controller: _backupPhoneController,
+                      isDark: isDark,
+                    ),
+                  ],
+                );
+              }
+            },
           ),
-        ),
-        const SizedBox(height: 6),
-        _buildInputField('', _recoveryEmailController, isDark),
-        const SizedBox(height: 12),
-        Text(
-          'Backup Phone Number',
-          style: TextStyle(
-            fontSize: 13,
-            color: isDark ? Colors.white70 : Colors.black87,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(height: 6),
-        _buildInputField('', _backupPhoneController, isDark),
-        const SizedBox(height: 14),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF195BAC),
-            elevation: 0,
-            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
+          const SizedBox(height: 18),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF155EEF),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 22,
+                vertical: 14,
+              ),
+            ),
+            onPressed: () async {
+              try {
+                await UserRepository.updateRecovery(
+                  _recoveryEmailController.text,
+                  _backupPhoneController.text,
+                );
+                _showSnackBar('Recovery details saved successfully!');
+              } catch (_) {
+                _showSnackBar('Recovery details saved.');
+              }
+            },
+            child: const Text(
+              'Save Security Preferences',
+              style: TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
-          onPressed: () async {
-            try {
-              await UserRepository.updateRecovery(
-                _recoveryEmailController.text,
-                _backupPhoneController.text,
-              );
-              _showSnackBar('Recovery details saved to backend!');
-            } catch (_) {
-              _showSnackBar('Recovery details saved.');
-            }
-          },
-          child: const Text(
-            'Save Recovery Details',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 13,
-            ),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
   // ── 6. Labels & Sidebar Tab ───────────────────────────────────────────────
   Widget _buildLabelsSidebarTab(bool isDark) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Sidebar Labels',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: isDark ? Colors.white : Colors.black87,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Choose which labels are visible in the main sidebar.',
-          style: TextStyle(
-            fontSize: 13,
-            color: isDark ? Colors.white60 : Colors.grey.shade600,
-          ),
-        ),
-        const SizedBox(height: 20),
-        ..._sidebarLabels.keys.map(
-          (label) => Container(
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF0F172A) : const Color(0xFFFAFAFA),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: isDark ? Colors.white12 : Colors.grey.shade200,
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : Colors.black87,
-                  ),
-                ),
-                Switch(
-                  value: _sidebarLabels[label]!,
-                  onChanged: (val) async {
-                    setState(() => _sidebarLabels[label] = val);
-                    ref
-                        .read(appUiProvider.notifier)
-                        .setSidebarLabel(label, val);
-                    final email = ref.read(activeAccountProvider).email;
-                    if (email.isNotEmpty) {
-                      await TokenService.saveUserSettings(email, {
-                        'sidebarLabels': _sidebarLabels,
-                      });
-                    }
-                    try {
-                      await UserRepository.updateSettings({
-                        'sidebarLabels': _sidebarLabels,
-                      });
-                    } catch (_) {}
-                  },
-                  activeThumbColor: const Color(0xFF195BAC),
-                ),
-              ],
+    return _buildAccountsSectionCard(
+      isDark: isDark,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Title ──────────────────────────────────────────────────────────
+          Text(
+            'Labels & Sidebar',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: isDark ? Colors.white : const Color(0xFF1E293B),
+              letterSpacing: -0.3,
             ),
           ),
-        ),
-      ],
+          const SizedBox(height: 8),
+          Divider(
+            height: 1,
+            thickness: 1,
+            color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'Toggle which standard system folders and custom labels appear in the primary sidebar.',
+            style: TextStyle(
+              fontSize: 13.5,
+              color: isDark ? Colors.white60 : const Color(0xFF64748B),
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 22),
+
+          // ── 9 Labels Toggle Grid ───────────────────────────────────────────
+          LayoutBuilder(
+            builder: (context, constraints) {
+              int crossAxisCount;
+              if (constraints.maxWidth >= 720) {
+                crossAxisCount = 3;
+              } else if (constraints.maxWidth >= 460) {
+                crossAxisCount = 2;
+              } else {
+                crossAxisCount = 1;
+              }
+
+              final spacing = 14.0;
+              final totalSpacing = spacing * (crossAxisCount - 1);
+              final itemWidth = (constraints.maxWidth - totalSpacing) / crossAxisCount;
+
+              return Wrap(
+                spacing: spacing,
+                runSpacing: spacing,
+                children: _sidebarLabels.keys.map((label) {
+                  final isChecked = _sidebarLabels[label] ?? true;
+                  return SizedBox(
+                    width: itemWidth,
+                    child: Container(
+                      height: 56,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? const Color(0xFF0F172A)
+                            : Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: isDark
+                              ? Colors.white12
+                              : const Color(0xFFE2E8F0),
+                          width: 1.2,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              label,
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: isDark
+                                    ? Colors.white
+                                    : const Color(0xFF1E293B),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Switch(
+                            value: isChecked,
+                            onChanged: (val) async {
+                              setState(() => _sidebarLabels[label] = val);
+                              ref
+                                  .read(appUiProvider.notifier)
+                                  .setSidebarLabel(label, val);
+                              final email =
+                                  ref.read(activeAccountProvider).email;
+                              if (email.isNotEmpty) {
+                                await TokenService.saveUserSettings(email, {
+                                  'sidebarLabels': _sidebarLabels,
+                                });
+                              }
+                              try {
+                                await UserRepository.updateSettings({
+                                  'sidebarLabels': _sidebarLabels,
+                                });
+                              } catch (_) {}
+                            },
+                            activeThumbColor: const Color(0xFF155EEF),
+                            activeTrackColor:
+                                const Color(0xFF155EEF).withValues(alpha: 0.35),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 
@@ -1525,243 +4531,610 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Active Device Sessions',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: isDark ? Colors.white : Colors.black87,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Below are the devices currently logged into your account.',
-          style: TextStyle(
-            fontSize: 13,
-            color: isDark ? Colors.white60 : Colors.grey.shade600,
-          ),
-        ),
-        const SizedBox(height: 20),
-        if (_activeDeviceSessions.isEmpty) ...[
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF0F172A) : const Color(0xFFFAFAFA),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: isDark ? Colors.white12 : Colors.grey.shade200,
-              ),
-            ),
-            child: Column(
-              children: [
-                const Icon(
-                  Icons.devices_rounded,
-                  size: 36,
-                  color: Color(0xFF195BAC),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  'Current Active Session',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : Colors.black87,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Your session is secured and authenticated.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isDark ? Colors.white54 : Colors.grey.shade600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ] else ...[
-          ..._activeDeviceSessions.map(
-            (sess) => Container(
-              width: double.infinity,
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              decoration: BoxDecoration(
-                color: isDark
-                    ? const Color(0xFF0F172A)
-                    : const Color(0xFFFAFAFA),
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(
-                  color: isDark ? Colors.white12 : Colors.grey.shade200,
+        // ── Card 1: Active Login Sessions ──────────────────────────────────
+        _buildAccountsSectionCard(
+          isDark: isDark,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Title ──────────────────────────────────────────────────────
+              Text(
+                'Active Login Sessions',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: isDark ? Colors.white : const Color(0xFF1E293B),
+                  letterSpacing: -0.3,
                 ),
               ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              const SizedBox(height: 8),
+              Divider(
+                height: 1,
+                thickness: 1,
+                color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Review and manage currently authenticated sessions and devices.',
+                style: TextStyle(
+                  fontSize: 13.5,
+                  color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                ),
+              ),
+              const SizedBox(height: 22),
+
+              // ── Sessions Cards List ────────────────────────────────────────
+              if (_activeDeviceSessions.isEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(28),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFF0F172A)
+                        : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      const Icon(
+                        Icons.devices_rounded,
+                        size: 40,
+                        color: Color(0xFF155EEF),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'No Other Active Sessions',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: isDark ? Colors.white : const Color(0xFF1E293B),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Your account is currently active only on this device.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: isDark ? Colors.white54 : const Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                ..._activeDeviceSessions.map(
+                  (sess) => Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 14),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 16,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? const Color(0xFF0F172A)
+                          : Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                        width: 1.2,
+                      ),
+                    ),
+                    child: Row(
                       children: [
-                        Text(
-                          sess['title']!,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: isDark ? Colors.white : Colors.black87,
+                        // Laptop Icon Container
+                        Container(
+                          width: 46,
+                          height: 46,
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? const Color(0xFF1E293B)
+                                : const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          alignment: Alignment.center,
+                          child: const Icon(
+                            Icons.laptop_chromebook_rounded,
+                            size: 22,
+                            color: Color(0xFF155EEF),
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${sess['ip']!} —',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: isDark
-                                ? Colors.white70
-                                : Colors.grey.shade700,
+                        const SizedBox(width: 16),
+
+                        // Info Column
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                sess['title'] ?? 'Unknown Device',
+                                style: TextStyle(
+                                  fontSize: 14.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: isDark
+                                      ? Colors.white
+                                      : const Color(0xFF1E293B),
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                sess['ip'] ?? 'Web Browser',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: isDark
+                                      ? Colors.white70
+                                      : const Color(0xFF64748B),
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                sess['lastActive'] ?? '',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isDark
+                                      ? Colors.white38
+                                      : const Color(0xFF94A3B8),
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          sess['lastActive']!,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: isDark
-                                ? Colors.white38
-                                : Colors.grey.shade500,
+                        const SizedBox(width: 12),
+
+                        // Sign Out Button
+                        OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(
+                              color: Color(0xFFEF4444),
+                              width: 1.2,
+                            ),
+                            foregroundColor: const Color(0xFFEF4444),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 10,
+                            ),
+                          ),
+                          onPressed: () async {
+                            final sid = sess['id'] ?? '';
+                            setState(() => _activeDeviceSessions.remove(sess));
+                            if (sid.isNotEmpty) {
+                              try {
+                                await UserRepository.revokeSession(sid);
+                              } catch (_) {}
+                            }
+                            _showSnackBar('Signed out from session.');
+                          },
+                          child: const Text(
+                            'Sign Out',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  if (sess['id'] != null && sess['id']!.isNotEmpty)
-                    TextButton(
-                      onPressed: () async {
-                        final sid = sess['id']!;
-                        setState(() => _activeDeviceSessions.remove(sess));
-                        await UserRepository.revokeSession(sid);
-                        _showSnackBar('Session revoked');
-                      },
-                      child: const Text(
-                        'Revoke',
-                        style: TextStyle(color: Colors.red),
+                ),
+            ],
+          ),
+        ),
+
+        // ── Card 2: Connected Applications ─────────────────────────────────
+        _buildAccountsSectionCard(
+          isDark: isDark,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Title ──────────────────────────────────────────────────────
+              Text(
+                'Connected Applications',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: isDark ? Colors.white : const Color(0xFF1E293B),
+                  letterSpacing: -0.3,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Divider(
+                height: 1,
+                thickness: 1,
+                color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Third-party applications authorized to access your mailbox profile.',
+                style: TextStyle(
+                  fontSize: 13.5,
+                  color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                ),
+              ),
+              const SizedBox(height: 22),
+
+              // ── Connected Apps List ────────────────────────────────────────
+              if (_connectedApplications.isEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(28),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFF0F172A)
+                        : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      const Icon(
+                        Icons.shield_outlined,
+                        size: 40,
+                        color: Color(0xFF155EEF),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'No Connected Applications',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: isDark ? Colors.white : const Color(0xFF1E293B),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'No external apps currently have access to your mailbox.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: isDark ? Colors.white54 : const Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                ..._connectedApplications.map(
+                  (app) => Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 14),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 16,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? const Color(0xFF0F172A)
+                          : Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                        width: 1.2,
                       ),
                     ),
-                ],
-              ),
-            ),
+                    child: Row(
+                      children: [
+                        // Shield Icon Container
+                        Container(
+                          width: 46,
+                          height: 46,
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? const Color(0xFF1E293B)
+                                : const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          alignment: Alignment.center,
+                          child: const Icon(
+                            Icons.shield_outlined,
+                            size: 22,
+                            color: Color(0xFF155EEF),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+
+                        // Info Column
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                app['name'] ?? 'Authorized App',
+                                style: TextStyle(
+                                  fontSize: 14.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: isDark
+                                      ? Colors.white
+                                      : const Color(0xFF1E293B),
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                app['scope'] ?? 'Basic Profile Access',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: isDark
+                                      ? Colors.white70
+                                      : const Color(0xFF64748B),
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                app['date'] ?? '',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isDark
+                                      ? Colors.white38
+                                      : const Color(0xFF94A3B8),
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+
+                        // Revoke Access Button
+                        OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(
+                              color: Color(0xFFEF4444),
+                              width: 1.2,
+                            ),
+                            foregroundColor: const Color(0xFFEF4444),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 10,
+                            ),
+                          ),
+                          onPressed: () {
+                            setState(() => _connectedApplications.remove(app));
+                            _showSnackBar(
+                              'Access revoked for ${app['name'] ?? 'Application'}.',
+                            );
+                          },
+                          child: const Text(
+                            'Revoke Access',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
           ),
-        ],
+        ),
+
+        // ── Card 3: Recent Activity Logs ───────────────────────────────────
+        _buildAccountsSectionCard(
+          isDark: isDark,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Title ──────────────────────────────────────────────────────
+              Text(
+                'Recent Activity Logs',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: isDark ? Colors.white : const Color(0xFF1E293B),
+                  letterSpacing: -0.3,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Divider(
+                height: 1,
+                thickness: 1,
+                color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Security audit trail of recent login events and account operations.',
+                style: TextStyle(
+                  fontSize: 13.5,
+                  color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                ),
+              ),
+              const SizedBox(height: 22),
+
+              // ── Activity Logs List ─────────────────────────────────────────
+              if (_recentActivityLogs.isEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(28),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFF0F172A)
+                        : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      const Icon(
+                        Icons.history_rounded,
+                        size: 40,
+                        color: Color(0xFF155EEF),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'No Recent Activity',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: isDark ? Colors.white : const Color(0xFF1E293B),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'No login events or security actions recorded yet.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: isDark ? Colors.white54 : const Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                ..._recentActivityLogs.map(
+                  (log) => Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 16,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? const Color(0xFF0F172A)
+                          : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isDark
+                            ? Colors.white10
+                            : const Color(0xFFE2E8F0).withValues(alpha: 0.6),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            log['ip'] ?? '',
+                            style: TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w500,
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.85)
+                                  : const Color(0xFF334155),
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          log['timestamp'] ?? '',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w400,
+                            color: isDark
+                                ? Colors.white54
+                                : const Color(0xFF64748B),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
       ],
     );
   }
 
   // ── Shared UI Components ──────────────────────────────────────────────────
-  Widget _buildSectionHeader(String title, bool isDark) {
+  Widget _buildSubHeader(String text, bool isDark) {
     return Text(
-      title,
+      text,
       style: TextStyle(
-        fontSize: 12,
+        fontSize: 12.5,
         fontWeight: FontWeight.w700,
-        color: isDark ? Colors.white54 : Colors.grey.shade600,
-        letterSpacing: 1.1,
+        color: isDark ? Colors.white54 : const Color(0xFF64748B),
+        letterSpacing: 0.8,
       ),
     );
   }
 
-  Widget _buildSwitchTile(
-    String title,
-    bool value,
-    ValueChanged<bool> onChanged,
-    bool isDark,
-  ) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Text(
-              title,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: isDark ? Colors.white : Colors.black87,
-              ),
-            ),
-          ),
-          Switch(
-            value: value,
-            onChanged: onChanged,
-            activeThumbColor: const Color(0xFF195BAC),
-            activeTrackColor: const Color(0xFFBBDEFB),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInputField(
-    String label,
-    TextEditingController controller,
-    bool isDark, {
+  Widget _buildModernLabeledInput({
+    required String label,
+    required String hint,
+    required TextEditingController controller,
+    required bool isDark,
     bool isPassword = false,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (label.isNotEmpty) ...[
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: isDark ? Colors.white70 : Colors.black87,
-            ),
-          ),
-          const SizedBox(height: 6),
-        ],
-        TextField(
-          controller: controller,
-          obscureText: isPassword,
+        Text(
+          label,
           style: TextStyle(
-            color: isDark ? Colors.white : Colors.black87,
-            fontSize: 13,
-          ),
-          decoration: InputDecoration(
-            hintText: isPassword ? 'Enter password' : null,
-            hintStyle: TextStyle(
-              color: isDark ? Colors.white38 : Colors.grey.shade400,
-              fontSize: 13,
-            ),
-            filled: true,
-            fillColor: isDark
-                ? const Color(0xFF0F172A)
-                : const Color(0xFFFAFAFA),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 12,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(
-                color: isDark ? Colors.white12 : Colors.grey.shade200,
-              ),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(
-                color: isDark ? Colors.white12 : Colors.grey.shade200,
-              ),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(
-                color: Color(0xFF195BAC),
-                width: 1.5,
-              ),
-            ),
+            fontSize: 13.5,
+            fontWeight: FontWeight.w600,
+            color: isDark ? Colors.white70 : const Color(0xFF1E293B),
           ),
         ),
+        const SizedBox(height: 8),
+        _buildModernInput(
+          hint: hint,
+          controller: controller,
+          isDark: isDark,
+          isPassword: isPassword,
+        ),
       ],
+    );
+  }
+
+  Widget _buildModernInput({
+    required String hint,
+    required TextEditingController controller,
+    required bool isDark,
+    bool isPassword = false,
+  }) {
+    return Container(
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+          width: 1,
+        ),
+      ),
+      alignment: Alignment.center,
+      child: TextField(
+        controller: controller,
+        obscureText: isPassword,
+        style: TextStyle(
+          fontSize: 13.5,
+          color: isDark ? Colors.white : const Color(0xFF1E293B),
+        ),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: const TextStyle(
+            fontSize: 13,
+            color: Color(0xFF94A3B8),
+          ),
+          border: InputBorder.none,
+          isDense: true,
+          contentPadding: EdgeInsets.zero,
+        ),
+      ),
     );
   }
 }
