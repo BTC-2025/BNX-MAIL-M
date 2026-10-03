@@ -185,17 +185,57 @@ class EmailModel {
     }
 
     // ── Body ─────────────────────────────────────────────────────────────
-    final h = json['html']?.toString();
+    String? explicitHtml = json['html']?.toString() ??
+        json['htmlBody']?.toString() ??
+        json['bodyHtml']?.toString() ??
+        json['htmlContent']?.toString() ??
+        json['contentHtml']?.toString() ??
+        json['rawHtml']?.toString() ??
+        json['html_body']?.toString() ??
+        json['body_html']?.toString() ??
+        json['messageHtml']?.toString();
+
+    if (explicitHtml != null && explicitHtml.trim().isEmpty) {
+      explicitHtml = null;
+    }
+
     final c = json['content']?.toString();
     final b = json['body']?.toString();
     final t = json['text']?.toString();
 
-    // Prefer explicit 'html' field if it exists, otherwise fallback to others
-    final rawHtml = (h != null && h.isNotEmpty) ? h : (c ?? b ?? t ?? '');
+    // Check if content or body contains HTML tags
+    if (explicitHtml == null) {
+      if (c != null && _looksLikeHtml(c)) {
+        explicitHtml = c;
+      } else if (b != null && _looksLikeHtml(b)) {
+        explicitHtml = b;
+      }
+    }
+
+    // Check multipart parts if HTML is embedded in MIME parts
+    if (explicitHtml == null) {
+      final parts = json['parts'] ?? json['bodyParts'] ?? json['contentParts'] ?? json['mimeParts'];
+      if (parts is List) {
+        for (final p in parts) {
+          if (p is Map) {
+            final ct = (p['contentType'] ?? p['type'] ?? p['mimeType'] ?? '').toString().toLowerCase();
+            if (ct.contains('text/html') || ct.contains('html')) {
+              final content = (p['content'] ?? p['body'] ?? p['data'] ?? p['html'] ?? '').toString();
+              if (content.isNotEmpty) {
+                explicitHtml = content;
+                break;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    final rawHtml = explicitHtml ?? (c ?? b ?? t ?? '');
     final htmlBody = rawHtml;
 
     // For snippets, we want plain text
-    final bodyStr = t ?? c ?? b ?? h ?? '';
+    final bodyStr = t ?? c ?? b ?? explicitHtml ?? '';
     final bodyText = _looksLikeHtml(bodyStr) ? _stripHtml(bodyStr) : bodyStr;
 
     // ── Date ─────────────────────────────────────────────────────────────

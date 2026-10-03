@@ -6,10 +6,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/network/token_service.dart';
+import '../../../core/widgets/create_label_dialog.dart';
 import '../../../data/app_state_provider.dart';
 import '../../../data/account_provider.dart';
+import '../../../data/repositories/storage_repository.dart';
 import '../../../data/repositories/user_repository.dart';
 import '../../../data/settings_provider.dart';
+import '../../../data/storage_provider.dart';
 import '../../../models/two_factor_model.dart';
 
 
@@ -37,6 +40,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   String _fontSize = 'Normal';
   final List<Map<String, dynamic>> _signatureItems = [];
   int _selectedSignatureIndex = 0;
+  final TextEditingController _signatureNameController =
+      TextEditingController();
   final TextEditingController _signatureContentController =
       TextEditingController();
 
@@ -89,45 +94,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       TextEditingController();
   String _readingPaneMode = 'No Split (Full List)';
 
-  // ── Active Sessions List ──────────────────────────────────────────────────
-  List<Map<String, String>> _activeDeviceSessions = [
-    {
-      'id': 'sess_1',
-      'title': 'Unknown Device',
-      'ip': '122.183.50.145 — Web Browser',
-      'lastActive': 'Logged in: 29/09/2026, 14:03:08',
-    },
-    {
-      'id': 'sess_2',
-      'title': 'Unknown Device',
-      'ip': '122.183.50.145 — Web Browser',
-      'lastActive': 'Logged in: 29/09/2026, 14:59:22',
-    },
-    {
-      'id': 'sess_3',
-      'title': 'Unknown Device',
-      'ip': '122.183.50.145 — Web Browser',
-      'lastActive': 'Logged in: 29/09/2026, 15:20:41',
-    },
-    {
-      'id': 'sess_4',
-      'title': 'Unknown Device',
-      'ip': '157.51.116.36 — Web Browser',
-      'lastActive': 'Logged in: 30/09/2026, 12:10:45',
-    },
-    {
-      'id': 'sess_5',
-      'title': 'Unknown Device',
-      'ip': '157.51.116.36 — Web Browser',
-      'lastActive': 'Logged in: 30/09/2026, 12:10:45',
-    },
-    {
-      'id': 'sess_6',
-      'title': 'MacBook',
-      'ip': '157.51.122.9 — Chrome',
-      'lastActive': 'Logged in: 01/10/2026, 12:54:50',
-    },
-  ];
+  // ── Active Sessions List (Loaded dynamically from GET /api/auth/sessions) ───
+  List<Map<String, String>> _activeDeviceSessions = [];
 
   // ── Connected Applications List ───────────────────────────────────────────
   final List<Map<String, String>> _connectedApplications = [
@@ -163,25 +131,62 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     },
   ];
 
-  // ── Recent Activity Logs ──────────────────────────────────────────────────
-  final List<Map<String, String>> _recentActivityLogs = [
-    {
-      'ip': '157.51.122.9',
-      'timestamp': '01/10/2026, 08:41:39',
-    },
-    {
-      'ip': '157.51.122.9',
-      'timestamp': '01/10/2026, 08:36:44',
-    },
-    {
-      'ip': '157.51.122.9',
-      'timestamp': '01/10/2026, 08:25:51',
-    },
-    {
-      'ip': '157.51.122.9',
-      'timestamp': '01/10/2026, 07:59:56',
-    },
-  ];
+  // ── Recent Activity Logs (Loaded dynamically from GET /api/users/activity-logs) ─
+  List<Map<String, String>> _recentActivityLogs = [];
+
+  // ── Signature Content & HTML Cleanup Helpers ──────────────────────────────
+  String _cleanHtmlForEditor(String html) {
+    if (html.isEmpty) return '';
+    var text = html
+        .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
+        .replaceAll(RegExp(r'</p>', caseSensitive: false), '\n')
+        .replaceAll(RegExp(r'<[^>]*>'), '')
+        .replaceAll('&nbsp;', ' ')
+        .replaceAll('&amp;', '&')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&#39;', "'");
+    return text.trim();
+  }
+
+  String _formatContentForBackend(String text) {
+    if (text.isEmpty) return '<p></p>';
+    if (text.contains('<p>') || text.contains('<div>')) return text;
+    final lines = text.split('\n');
+    final htmlLines = lines.map((l) => l.isEmpty ? '<br/>' : l).join('<br/>');
+    return '<p>$htmlLines</p>';
+  }
+
+  void _applyFormattingToSignature(String prefix, [String suffix = '']) {
+    final text = _signatureContentController.text;
+    final selection = _signatureContentController.selection;
+    if (selection.start >= 0 && selection.end >= 0 && selection.start != selection.end) {
+      final selectedText = text.substring(selection.start, selection.end);
+      final newText = text.replaceRange(
+        selection.start,
+        selection.end,
+        '$prefix$selectedText$suffix',
+      );
+      _signatureContentController.value = TextEditingValue(
+        text: newText,
+        selection: TextSelection(
+          baseOffset: selection.start + prefix.length,
+          extentOffset: selection.end + prefix.length,
+        ),
+      );
+    } else {
+      final cursor = selection.start >= 0 ? selection.start : text.length;
+      final newText = text.replaceRange(cursor, cursor, '$prefix$suffix');
+      _signatureContentController.value = TextEditingValue(
+        text: newText,
+        selection: TextSelection.collapsed(offset: cursor + prefix.length),
+      );
+    }
+    if (_selectedSignatureIndex >= 0 && _selectedSignatureIndex < _signatureItems.length) {
+      _signatureItems[_selectedSignatureIndex]['content'] = _signatureContentController.text;
+    }
+  }
 
   // ── Accounts & Mailboxes State ─────────────────────────────────────────────
   bool _enablePasswordRecovery = true;
@@ -361,12 +366,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       if (_selectedSignatureIndex >= _signatureItems.length) {
         _selectedSignatureIndex = 0;
       }
+      final cur = _signatureItems[_selectedSignatureIndex];
+      _signatureNameController.text = cur['name']?.toString() ?? 'New Signature';
       _signatureContentController.text =
-          _signatureItems[_selectedSignatureIndex]['content']?.toString() ?? '';
+          _cleanHtmlForEditor(cur['content']?.toString() ?? '');
     } else if (state.isLoaded) {
       // Backend confirmed empty signature list for this account
       _signatureItems.clear();
       _selectedSignatureIndex = 0;
+      _signatureNameController.clear();
       _signatureContentController.clear();
     }
   }
@@ -425,11 +433,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         });
       }
 
-      // 5. Fetch active sessions from GET /api/users/activity-logs
+      // 5. Fetch active sessions from GET /api/auth/sessions
       final sessions = await UserRepository.getSessions();
-      if (mounted && sessions.isNotEmpty) {
+      if (mounted) {
         setState(() => _activeDeviceSessions = sessions);
       }
+
+      // 6. Fetch recent activity logs from GET /api/users/activity-logs
+      final logs = await UserRepository.getActivityLogs();
+      if (mounted) {
+        setState(() => _recentActivityLogs = logs);
+      }
+
+      // 7. Refresh live storage quota
+      ref.read(storageQuotaProvider.notifier).refresh();
     } catch (e) {
       print('[SETTINGS] _loadBackendData error: $e');
     } finally {
@@ -450,6 +467,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _backupPhoneController.dispose();
     _recoveryEmailAddressController.dispose();
     _recoveryPhoneNumberController.dispose();
+    _signatureNameController.dispose();
     _signatureContentController.dispose();
     _customWallpaperController.dispose();
     super.dispose();
@@ -1011,6 +1029,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
         ),
 
+        const SizedBox(height: 20),
+        _buildStorageQuotaOverviewCard(isDark),
+
         // ── Card 2: Account Information ────────────────────────────────────
         _buildAccountsSectionCard(
           isDark: isDark,
@@ -1453,7 +1474,186 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  // ── Section Card Container Helper ─────────────────────────────────────────
+  // ── Storage Quota Overview Card (Live GET /api/mail/storage-quota) ────────
+  Widget _buildStorageQuotaOverviewCard(bool isDark) {
+    final quotaAsync = ref.watch(storageQuotaProvider);
+
+    return _buildAccountsSectionCard(
+      isDark: isDark,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF155EEF).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    alignment: Alignment.center,
+                    child: const Icon(
+                      Icons.cloud_queue_rounded,
+                      color: Color(0xFF155EEF),
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Mailbox Storage & Quota',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        'Live IMAP Dovecot server mailbox allocation and usage',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.refresh_rounded, size: 20),
+                    color: isDark ? Colors.white70 : const Color(0xFF64748B),
+                    tooltip: 'Refresh Storage Quota',
+                    onPressed: () {
+                      ref.read(storageQuotaProvider.notifier).refresh();
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF155EEF),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    ),
+                    onPressed: () => context.go('/storage'),
+                    child: const Text(
+                      'Manage Storage',
+                      style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          quotaAsync.when(
+            data: (quota) {
+              final usedStr = StorageQuota.formatBytes(quota.storageUsed);
+              final limitStr = StorageQuota.formatBytes(quota.storageLimit);
+              final pct = quota.storagePercentage;
+              final pctStr = '${pct.toStringAsFixed(2)}%';
+
+              Color progressColor = const Color(0xFF155EEF);
+              if (pct > 90) {
+                progressColor = const Color(0xFFEF4444);
+              } else if (pct > 75) {
+                progressColor = const Color(0xFFF59E0B);
+              }
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '$usedStr used of $limitStr ($pctStr)',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: isDark ? Colors.white : const Color(0xFF1E293B),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: progressColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          pctStr,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: progressColor,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: LinearProgressIndicator(
+                      value: (pct / 100.0).clamp(0.0, 1.0),
+                      minHeight: 8,
+                      backgroundColor: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                      valueColor: AlwaysStoppedAnimation<Color>(progressColor),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF10B981),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Dovecot IMAP Mail Server Connected & Synced',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: isDark ? Colors.white54 : const Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
+            loading: () => const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: LinearProgressIndicator(),
+            ),
+            error: (err, _) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text(
+                'Unable to load live storage quota: $err',
+                style: const TextStyle(fontSize: 13, color: Colors.red),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
   Widget _buildAccountsSectionCard({
     required Widget child,
     required bool isDark,
@@ -3000,12 +3200,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                 ),
                 onPressed: () async {
+                  // Save current draft before creating new
+                  if (_selectedSignatureIndex >= 0 &&
+                      _selectedSignatureIndex < _signatureItems.length) {
+                    _signatureItems[_selectedSignatureIndex]['content'] =
+                        _signatureContentController.text;
+                    if (_signatureNameController.text.trim().isNotEmpty) {
+                      _signatureItems[_selectedSignatureIndex]['name'] =
+                          _signatureNameController.text.trim();
+                    }
+                  }
                   final newName = 'Signature ${_signatureItems.length + 1}';
                   final res = await ref
                       .read(settingsProvider.notifier)
                       .createSignature(
                         name: newName,
-                        content: '',
+                        content: '<p></p>',
                         isDefault: _signatureItems.isEmpty,
                       );
                   if (res.success && res.signature != null) {
@@ -3017,6 +3227,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         'isDefault': res.signature!.isDefault,
                       });
                       _selectedSignatureIndex = _signatureItems.length - 1;
+                      _signatureNameController.text = res.signature!.name;
                       _signatureContentController.text = '';
                     });
                     _showSnackBar('New signature created');
@@ -3028,6 +3239,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         'isDefault': _signatureItems.isEmpty,
                       });
                       _selectedSignatureIndex = _signatureItems.length - 1;
+                      _signatureNameController.text = newName;
                       _signatureContentController.text = '';
                     });
                   }
@@ -3066,9 +3278,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 return InkWell(
                   onTap: () {
                     setState(() {
+                      // Save current edits into currently selected signature before switching
+                      if (_selectedSignatureIndex >= 0 &&
+                          _selectedSignatureIndex < _signatureItems.length) {
+                        _signatureItems[_selectedSignatureIndex]['content'] =
+                            _signatureContentController.text;
+                        if (_signatureNameController.text.trim().isNotEmpty) {
+                          _signatureItems[_selectedSignatureIndex]['name'] =
+                              _signatureNameController.text.trim();
+                        }
+                      }
                       _selectedSignatureIndex = index;
+                      _signatureNameController.text =
+                          sig['name']?.toString() ?? 'New Signature';
                       _signatureContentController.text =
-                          sig['content'] ?? '';
+                          _cleanHtmlForEditor(sig['content']?.toString() ?? '');
                     });
                   },
                   borderRadius: BorderRadius.circular(20),
@@ -3155,24 +3379,144 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
-                      vertical: 12,
+                      vertical: 10,
                     ),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          _signatureItems[_selectedSignatureIndex]['name'] ??
-                              'New Signature',
-                          style: TextStyle(
-                            fontSize: 14.5,
-                            fontWeight: FontWeight.w700,
-                            color: isDark
-                                ? Colors.white
-                                : const Color(0xFF0F172A),
+                        // Editable Signature Name
+                        Expanded(
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.edit_note_rounded,
+                                size: 20,
+                                color: Color(0xFF195BAC),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextField(
+                                  controller: _signatureNameController,
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                    color: isDark
+                                        ? Colors.white
+                                        : const Color(0xFF0F172A),
+                                  ),
+                                  decoration: const InputDecoration(
+                                    hintText: 'Signature Name (click to edit)',
+                                    isDense: true,
+                                    contentPadding:
+                                        EdgeInsets.symmetric(vertical: 4),
+                                    border: InputBorder.none,
+                                  ),
+                                  onChanged: (val) {
+                                    if (_selectedSignatureIndex >= 0 &&
+                                        _selectedSignatureIndex <
+                                            _signatureItems.length) {
+                                      _signatureItems[_selectedSignatureIndex]
+                                          ['name'] = val;
+                                    }
+                                  },
+                                ),
+                              ),
+                            ],
                           ),
                         ),
+                        const SizedBox(width: 8),
                         Row(
                           children: [
+                            // Save Signature Button
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF195BAC),
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              icon: const Icon(Icons.check_rounded, size: 14),
+                              label: const Text(
+                                'Save',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              onPressed: () async {
+                                if (_selectedSignatureIndex < 0 ||
+                                    _selectedSignatureIndex >=
+                                        _signatureItems.length) {
+                                  return;
+                                }
+                                final sig =
+                                    _signatureItems[_selectedSignatureIndex];
+                                final id = sig['id']?.toString();
+                                final name = _signatureNameController.text
+                                        .trim()
+                                        .isNotEmpty
+                                    ? _signatureNameController.text.trim()
+                                    : (sig['name']?.toString() ?? 'Signature');
+                                final content = _formatContentForBackend(
+                                  _signatureContentController.text,
+                                );
+                                final isDefault = sig['isDefault'] == true;
+
+                                if (id != null && id.isNotEmpty) {
+                                  final res = await ref
+                                      .read(settingsProvider.notifier)
+                                      .updateSignature(
+                                        id: id,
+                                        name: name,
+                                        content: content,
+                                        isDefault: isDefault,
+                                      );
+                                  if (res.success) {
+                                    setState(() {
+                                      sig['name'] = name;
+                                      sig['content'] = content;
+                                    });
+                                    _showSnackBar(
+                                        'Signature "$name" saved successfully!');
+                                  } else {
+                                    _showSnackBar(
+                                      res.message ??
+                                          'Failed to update signature',
+                                      isError: true,
+                                    );
+                                  }
+                                } else {
+                                  final res = await ref
+                                      .read(settingsProvider.notifier)
+                                      .createSignature(
+                                        name: name,
+                                        content: content,
+                                        isDefault: isDefault,
+                                      );
+                                  if (res.success && res.signature != null) {
+                                    setState(() {
+                                      sig['id'] = res.signature!.id;
+                                      sig['name'] = res.signature!.name;
+                                      sig['content'] = res.signature!.content;
+                                    });
+                                    _showSnackBar(
+                                        'Signature "$name" created successfully!');
+                                  } else {
+                                    _showSnackBar(
+                                      res.message ??
+                                          'Failed to create signature',
+                                      isError: true,
+                                    );
+                                  }
+                                }
+                              },
+                            ),
+                            const SizedBox(width: 8),
                             InkWell(
                               onTap: () async {
                                 if (_selectedSignatureIndex < 0 ||
@@ -3288,12 +3632,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                         _signatureItems.length - 1;
                                   }
                                   if (_selectedSignatureIndex >= 0) {
+                                    final nextSig =
+                                        _signatureItems[_selectedSignatureIndex];
+                                    _signatureNameController.text =
+                                        nextSig['name']?.toString() ??
+                                            'Signature';
                                     _signatureContentController.text =
-                                        _signatureItems[_selectedSignatureIndex]
-                                                ['content'] ??
-                                            '';
+                                        _cleanHtmlForEditor(
+                                      nextSig['content']?.toString() ?? '',
+                                    );
                                   } else {
-                                    _signatureContentController.text = '';
+                                    _signatureNameController.clear();
+                                    _signatureContentController.clear();
                                   }
                                 });
                                 _showSnackBar('Signature deleted');
@@ -3359,48 +3709,72 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           _buildToolbarIconButton(
                             icon: Icons.format_bold_rounded,
                             isDark: isDark,
+                            onTap: () => _applyFormattingToSignature('<b>', '</b>'),
                           ),
                           _buildToolbarIconButton(
                             icon: Icons.format_italic_rounded,
                             isDark: isDark,
+                            onTap: () => _applyFormattingToSignature('<i>', '</i>'),
                           ),
                           _buildToolbarIconButton(
                             icon: Icons.format_underlined_rounded,
                             isDark: isDark,
+                            onTap: () => _applyFormattingToSignature('<u>', '</u>'),
                           ),
                           _buildToolbarIconButton(
                             icon: Icons.format_strikethrough_rounded,
                             isDark: isDark,
+                            onTap: () => _applyFormattingToSignature('<s>', '</s>'),
                           ),
                           _buildToolbarIconButton(
                             icon: Icons.format_quote_rounded,
                             isDark: isDark,
+                            onTap: () => _applyFormattingToSignature(
+                              '<blockquote>',
+                              '</blockquote>',
+                            ),
                           ),
                           _buildToolbarVerticalDivider(isDark),
                           _buildToolbarIconButton(
                             icon: Icons.format_list_numbered_rounded,
                             isDark: isDark,
+                            onTap: () => _applyFormattingToSignature('1. '),
                           ),
                           _buildToolbarIconButton(
                             icon: Icons.format_list_bulleted_rounded,
                             isDark: isDark,
+                            onTap: () => _applyFormattingToSignature('• '),
                           ),
                           _buildToolbarIconButton(
                             icon: Icons.format_indent_decrease_rounded,
                             isDark: isDark,
+                            onTap: () => _applyFormattingToSignature(''),
                           ),
                           _buildToolbarIconButton(
                             icon: Icons.format_indent_increase_rounded,
                             isDark: isDark,
+                            onTap: () => _applyFormattingToSignature('    '),
                           ),
                           _buildToolbarVerticalDivider(isDark),
                           _buildToolbarIconButton(
                             icon: Icons.link_rounded,
                             isDark: isDark,
+                            onTap: () => _applyFormattingToSignature(
+                              '<a href="https://">',
+                              '</a>',
+                            ),
                           ),
                           _buildToolbarIconButton(
                             icon: Icons.format_clear_rounded,
                             isDark: isDark,
+                            onTap: () {
+                              setState(() {
+                                _signatureContentController.text =
+                                    _cleanHtmlForEditor(
+                                  _signatureContentController.text,
+                                );
+                              });
+                            },
                           ),
                         ],
                       ),
@@ -3479,8 +3853,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   _selectedSignatureIndex < _signatureItems.length) {
                 final currentSig = _signatureItems[_selectedSignatureIndex];
                 final sigId = currentSig['id']?.toString();
-                final sigContent = _signatureContentController.text;
-                final sigName = currentSig['name']?.toString() ?? 'Default';
+                final sigContent = _formatContentForBackend(
+                  _signatureContentController.text,
+                );
+                final sigName = _signatureNameController.text.trim().isNotEmpty
+                    ? _signatureNameController.text.trim()
+                    : (currentSig['name']?.toString() ?? 'Default');
                 final sigIsDefault = currentSig['isDefault'] == true;
 
                 if (sigId != null && sigId.isNotEmpty) {
@@ -3490,7 +3868,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         content: sigContent,
                         isDefault: sigIsDefault,
                       );
-                } else if (sigContent.isNotEmpty || sigName.isNotEmpty) {
+                } else if (_signatureContentController.text.isNotEmpty ||
+                    sigName.isNotEmpty) {
                   final created = await ref
                       .read(settingsProvider.notifier)
                       .createSignature(
@@ -5038,140 +5417,39 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   // ── 6. Labels & Sidebar Tab ───────────────────────────────────────────────
-  Widget _buildLabelsSidebarTab(bool isDark) {
-    return _buildAccountsSectionCard(
-      isDark: isDark,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Title ──────────────────────────────────────────────────────────
-          Text(
-            'Labels & Sidebar',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-              color: isDark ? Colors.white : const Color(0xFF1E293B),
-              letterSpacing: -0.3,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Divider(
-            height: 1,
-            thickness: 1,
-            color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            'Toggle which standard system folders and custom labels appear in the primary sidebar.',
-            style: TextStyle(
-              fontSize: 13.5,
-              color: isDark ? Colors.white60 : const Color(0xFF64748B),
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 22),
-
-          // ── 9 Labels Toggle Grid ───────────────────────────────────────────
-          LayoutBuilder(
-            builder: (context, constraints) {
-              int crossAxisCount;
-              if (constraints.maxWidth >= 720) {
-                crossAxisCount = 3;
-              } else if (constraints.maxWidth >= 460) {
-                crossAxisCount = 2;
-              } else {
-                crossAxisCount = 1;
-              }
-
-              final spacing = 14.0;
-              final totalSpacing = spacing * (crossAxisCount - 1);
-              final itemWidth = (constraints.maxWidth - totalSpacing) / crossAxisCount;
-
-              return Wrap(
-                spacing: spacing,
-                runSpacing: spacing,
-                children: _sidebarLabels.keys.map((label) {
-                  final isChecked = _sidebarLabels[label] ?? true;
-                  return SizedBox(
-                    width: itemWidth,
-                    child: Container(
-                      height: 56,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? const Color(0xFF0F172A)
-                            : Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: isDark
-                              ? Colors.white12
-                              : const Color(0xFFE2E8F0),
-                          width: 1.2,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              label,
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: isDark
-                                    ? Colors.white
-                                    : const Color(0xFF1E293B),
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          Switch(
-                            value: isChecked,
-                            onChanged: (val) async {
-                              setState(() => _sidebarLabels[label] = val);
-                              ref
-                                  .read(appUiProvider.notifier)
-                                  .setSidebarLabel(label, val);
-                              final email =
-                                  ref.read(activeAccountProvider).email;
-                              if (email.isNotEmpty) {
-                                await TokenService.saveUserSettings(email, {
-                                  'sidebarLabels': _sidebarLabels,
-                                });
-                              }
-                              try {
-                                await UserRepository.updateSettings({
-                                  'sidebarLabels': _sidebarLabels,
-                                });
-                              } catch (_) {}
-                            },
-                            activeThumbColor: const Color(0xFF155EEF),
-                            activeTrackColor:
-                                const Color(0xFF155EEF).withValues(alpha: 0.35),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }).toList(),
-              );
-            },
-          ),
-        ],
-      ),
-    );
+  IconData _getFolderIcon(String label) {
+    switch (label) {
+      case 'Inbox':
+        return Icons.inbox_rounded;
+      case 'Starred':
+        return Icons.star_rounded;
+      case 'Snoozed':
+        return Icons.schedule_rounded;
+      case 'Sent':
+        return Icons.send_rounded;
+      case 'Draft':
+        return Icons.insert_drive_file_rounded;
+      case 'Trash':
+        return Icons.delete_rounded;
+      case 'Bulk Mail':
+        return Icons.report_rounded;
+      case 'Notifications':
+        return Icons.notifications_rounded;
+      case 'Archive':
+        return Icons.archive_rounded;
+      default:
+        return Icons.folder_rounded;
+    }
   }
 
-  // ── 7. Active Sessions & Logs Tab ──────────────────────────────────────────
-  Widget _buildActiveSessionsTab(bool isDark) {
+  // ── 6. Labels & Sidebar Tab ───────────────────────────────────────────────
+  Widget _buildLabelsSidebarTab(bool isDark) {
+    final customLabels = ref.watch(customLabelsProvider);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── Card 1: Active Login Sessions ──────────────────────────────────
+        // ── Card 1: System Folders Visibility ──────────────────────────────
         _buildAccountsSectionCard(
           isDark: isDark,
           child: Column(
@@ -5179,7 +5457,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             children: [
               // ── Title ──────────────────────────────────────────────────────
               Text(
-                'Active Login Sessions',
+                'System Folders & Navigation',
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w800,
@@ -5195,11 +5473,439 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               const SizedBox(height: 14),
               Text(
-                'Review and manage currently authenticated sessions and devices.',
+                'Toggle which standard system folders appear in the main navigation sidebar.',
                 style: TextStyle(
                   fontSize: 13.5,
                   color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                  height: 1.4,
                 ),
+              ),
+              const SizedBox(height: 22),
+
+              // ── 9 Standard Labels Toggle Grid ─────────────────────────────
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  int crossAxisCount;
+                  if (constraints.maxWidth >= 720) {
+                    crossAxisCount = 3;
+                  } else if (constraints.maxWidth >= 460) {
+                    crossAxisCount = 2;
+                  } else {
+                    crossAxisCount = 1;
+                  }
+
+                  final spacing = 14.0;
+                  final totalSpacing = spacing * (crossAxisCount - 1);
+                  final itemWidth = (constraints.maxWidth - totalSpacing) / crossAxisCount;
+
+                  return Wrap(
+                    spacing: spacing,
+                    runSpacing: spacing,
+                    children: _sidebarLabels.keys.map((label) {
+                      final isChecked = _sidebarLabels[label] ?? true;
+                      return SizedBox(
+                        width: itemWidth,
+                        child: Container(
+                          height: 56,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? const Color(0xFF0F172A)
+                                : Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: isDark
+                                  ? Colors.white12
+                                  : const Color(0xFFE2E8F0),
+                              width: 1.2,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                _getFolderIcon(label),
+                                size: 20,
+                                color: isDark
+                                    ? Colors.white70
+                                    : const Color(0xFF155EEF),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  label,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: isDark
+                                        ? Colors.white
+                                        : const Color(0xFF1E293B),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              Switch(
+                                value: isChecked,
+                                onChanged: (val) async {
+                                  setState(() => _sidebarLabels[label] = val);
+                                  ref
+                                      .read(appUiProvider.notifier)
+                                      .setSidebarLabel(label, val);
+                                  final email =
+                                      ref.read(activeAccountProvider).email;
+                                  if (email.isNotEmpty) {
+                                    await TokenService.saveUserSettings(email, {
+                                      'sidebarLabels': _sidebarLabels,
+                                    });
+                                  }
+                                  try {
+                                    await UserRepository.updateSettings({
+                                      'sidebarLabels': _sidebarLabels,
+                                    });
+                                  } catch (_) {}
+                                },
+                                activeThumbColor: const Color(0xFF155EEF),
+                                activeTrackColor:
+                                    const Color(0xFF155EEF).withValues(alpha: 0.35),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 20),
+
+        // ── Card 2: Custom Labels Management & Visibility ──────────────────
+        _buildAccountsSectionCard(
+          isDark: isDark,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Custom Labels',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: isDark ? Colors.white : const Color(0xFF1E293B),
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Create, edit, delete, and toggle user-defined tags on the sidebar.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
+                  ),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF155EEF),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
+                    ),
+                    icon: const Icon(Icons.add_rounded, size: 18),
+                    label: const Text(
+                      'New Label',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                    onPressed: () {
+                      CreateLabelDialog.show(context);
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Divider(
+                height: 1,
+                thickness: 1,
+                color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+              ),
+              const SizedBox(height: 18),
+
+              if (customLabels.isEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFF0F172A)
+                        : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.label_outline_rounded,
+                        size: 36,
+                        color: isDark ? Colors.white38 : const Color(0xFF94A3B8),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        'No Custom Labels Yet',
+                        style: TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w700,
+                          color: isDark ? Colors.white : const Color(0xFF1E293B),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Click "+ New Label" above to create custom category tags for your inbox.',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: isDark ? Colors.white54 : const Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    int crossAxisCount = constraints.maxWidth >= 550 ? 2 : 1;
+                    final spacing = 14.0;
+                    final itemWidth = (constraints.maxWidth - (spacing * (crossAxisCount - 1))) / crossAxisCount;
+
+                    return Wrap(
+                      spacing: spacing,
+                      runSpacing: spacing,
+                      children: customLabels.map((lbl) {
+                        final isVisible = _sidebarLabels[lbl.name] ?? true;
+                        return SizedBox(
+                          width: itemWidth,
+                          child: Container(
+                            height: 60,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? const Color(0xFF0F172A)
+                                  : Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: isDark
+                                    ? Colors.white12
+                                    : const Color(0xFFE2E8F0),
+                                width: 1.2,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 14,
+                                  height: 14,
+                                  decoration: BoxDecoration(
+                                    color: lbl.color,
+                                    borderRadius: BorderRadius.circular(4),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: lbl.color.withValues(alpha: 0.4),
+                                        blurRadius: 4,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    lbl.name,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: isDark
+                                          ? Colors.white
+                                          : const Color(0xFF1E293B),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.edit_outlined, size: 18),
+                                  color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                                  tooltip: 'Edit Label',
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                  onPressed: () {
+                                    CreateLabelDialog.show(context, labelToEdit: lbl);
+                                  },
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                                  color: const Color(0xFFEF4444),
+                                  tooltip: 'Delete Label',
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                  onPressed: () async {
+                                    await ref
+                                        .read(customLabelsProvider.notifier)
+                                        .deleteLabel(lbl.id);
+                                    _showSnackBar('Label "${lbl.name}" deleted');
+                                  },
+                                ),
+                                Switch(
+                                  value: isVisible,
+                                  onChanged: (val) async {
+                                    setState(() => _sidebarLabels[lbl.name] = val);
+                                    ref
+                                        .read(appUiProvider.notifier)
+                                        .setSidebarLabel(lbl.name, val);
+                                    final email =
+                                        ref.read(activeAccountProvider).email;
+                                    if (email.isNotEmpty) {
+                                      await TokenService.saveUserSettings(email, {
+                                        'sidebarLabels': _sidebarLabels,
+                                      });
+                                    }
+                                    try {
+                                      await UserRepository.updateSettings({
+                                        'sidebarLabels': _sidebarLabels,
+                                      });
+                                    } catch (_) {}
+                                  },
+                                  activeThumbColor: const Color(0xFF155EEF),
+                                  activeTrackColor:
+                                      const Color(0xFF155EEF).withValues(alpha: 0.35),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    );
+                  },
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── 7. Active Sessions & Logs Tab ──────────────────────────────────────────
+  Widget _buildActiveSessionsTab(bool isDark) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── Card 1: Active Login Sessions ──────────────────────────────────
+        _buildAccountsSectionCard(
+          isDark: isDark,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Title & Actions ────────────────────────────────────────────
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Active Login Sessions',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: isDark ? Colors.white : const Color(0xFF1E293B),
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.refresh_rounded, size: 20),
+                    tooltip: 'Refresh Sessions',
+                    color: const Color(0xFF155EEF),
+                    onPressed: () async {
+                      _showSnackBar('Refreshing active sessions...');
+                      await _loadBackendData();
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Divider(
+                height: 1,
+                thickness: 1,
+                color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Review and manage currently authenticated sessions and devices.',
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                      ),
+                    ),
+                  ),
+                  if (_activeDeviceSessions.any((s) => s['currentSession'] != 'true'))
+                    TextButton.icon(
+                      style: TextButton.styleFrom(
+                        foregroundColor: const Color(0xFFEF4444),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                      ),
+                      icon: const Icon(Icons.logout_rounded, size: 16),
+                      label: const Text(
+                        'Sign Out All Other Sessions',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      onPressed: () async {
+                        final toRevoke = _activeDeviceSessions
+                            .where((s) => s['currentSession'] != 'true')
+                            .toList();
+                        setState(() {
+                          _activeDeviceSessions.removeWhere(
+                            (s) => s['currentSession'] != 'true',
+                          );
+                        });
+                        for (final s in toRevoke) {
+                          final sid = s['id'] ?? '';
+                          if (sid.isNotEmpty) {
+                            await UserRepository.revokeSession(sid);
+                          }
+                        }
+                        _showSnackBar('Signed out of all other sessions.');
+                      },
+                    ),
+                ],
               ),
               const SizedBox(height: 22),
 
@@ -5246,125 +5952,224 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 )
               else
                 ..._activeDeviceSessions.map(
-                  (sess) => Container(
-                    width: double.infinity,
-                    margin: const EdgeInsets.only(bottom: 14),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 18,
-                      vertical: 16,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? const Color(0xFF0F172A)
-                          : Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
-                        width: 1.2,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        // Laptop Icon Container
-                        Container(
-                          width: 46,
-                          height: 46,
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? const Color(0xFF1E293B)
-                                : const Color(0xFFF1F5F9),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          alignment: Alignment.center,
-                          child: const Icon(
-                            Icons.laptop_chromebook_rounded,
-                            size: 22,
-                            color: Color(0xFF155EEF),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
+                  (sess) {
+                    final isCurrent = sess['currentSession'] == 'true';
+                    final title = sess['title'] ?? 'Unknown Device';
+                    final ua = sess['userAgent'] ?? '';
+                    final titleLower = title.toLowerCase();
+                    final uaLower = ua.toLowerCase();
 
-                        // Info Column
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                sess['title'] ?? 'Unknown Device',
-                                style: TextStyle(
-                                  fontSize: 14.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: isDark
-                                      ? Colors.white
-                                      : const Color(0xFF1E293B),
+                    IconData deviceIcon = Icons.laptop_chromebook_rounded;
+                    if (titleLower.contains('mobile') ||
+                        titleLower.contains('phone') ||
+                        titleLower.contains('android') ||
+                        titleLower.contains('ios') ||
+                        uaLower.contains('mobile') ||
+                        uaLower.contains('android') ||
+                        uaLower.contains('iphone')) {
+                      deviceIcon = Icons.smartphone_rounded;
+                    } else if (titleLower.contains('desktop app') ||
+                        uaLower.contains('dart')) {
+                      deviceIcon = Icons.desktop_windows_rounded;
+                    } else if (titleLower.contains('tablet') ||
+                        uaLower.contains('ipad')) {
+                      deviceIcon = Icons.tablet_mac_rounded;
+                    }
+
+                    return Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 14),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 16,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? const Color(0xFF0F172A)
+                            : Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: isCurrent
+                              ? const Color(0xFF10B981).withValues(alpha: 0.5)
+                              : (isDark ? Colors.white12 : const Color(0xFFE2E8F0)),
+                          width: isCurrent ? 1.5 : 1.2,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          // Device Icon Container
+                          Container(
+                            width: 46,
+                            height: 46,
+                            decoration: BoxDecoration(
+                              color: isCurrent
+                                  ? const Color(0xFF10B981).withValues(alpha: 0.12)
+                                  : (isDark
+                                      ? const Color(0xFF1E293B)
+                                      : const Color(0xFFF1F5F9)),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            alignment: Alignment.center,
+                            child: Icon(
+                              deviceIcon,
+                              size: 22,
+                              color: isCurrent
+                                  ? const Color(0xFF10B981)
+                                  : const Color(0xFF155EEF),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+
+                          // Info Column
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        title,
+                                        style: TextStyle(
+                                          fontSize: 14.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: isDark
+                                              ? Colors.white
+                                              : const Color(0xFF1E293B),
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    if (isCurrent) ...[
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF10B981)
+                                              .withValues(alpha: 0.15),
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        child: const Text(
+                                          'This Device',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700,
+                                            color: Color(0xFF10B981),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
                                 ),
-                                overflow: TextOverflow.ellipsis,
+                                const SizedBox(height: 4),
+                                Text(
+                                  sess['ip'] ?? 'Web Browser',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                    color: isDark
+                                        ? Colors.white70
+                                        : const Color(0xFF64748B),
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  sess['lastActive'] ?? '',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: isDark
+                                        ? Colors.white38
+                                        : const Color(0xFF94A3B8),
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+
+                          // Right Action: Current badge or Sign Out Button
+                          if (isCurrent)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 7,
                               ),
-                              const SizedBox(height: 4),
-                              Text(
-                                sess['ip'] ?? 'Web Browser',
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B981)
+                                    .withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: const Color(0xFF10B981)
+                                      .withValues(alpha: 0.3),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    width: 7,
+                                    height: 7,
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFF10B981),
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  const Text(
+                                    'Current Session',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF10B981),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          else
+                            OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(
+                                  color: Color(0xFFEF4444),
+                                  width: 1.2,
+                                ),
+                                foregroundColor: const Color(0xFFEF4444),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 18,
+                                  vertical: 9,
+                                ),
+                              ),
+                              onPressed: () async {
+                                final sid = sess['id'] ?? '';
+                                setState(() => _activeDeviceSessions.remove(sess));
+                                if (sid.isNotEmpty) {
+                                  try {
+                                    await UserRepository.revokeSession(sid);
+                                  } catch (_) {}
+                                }
+                                _showSnackBar('Signed out from session.');
+                              },
+                              child: const Text(
+                                'Sign Out',
                                 style: TextStyle(
                                   fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                  color: isDark
-                                      ? Colors.white70
-                                      : const Color(0xFF64748B),
+                                  fontWeight: FontWeight.w600,
                                 ),
-                                overflow: TextOverflow.ellipsis,
                               ),
-                              const SizedBox(height: 4),
-                              Text(
-                                sess['lastActive'] ?? '',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: isDark
-                                      ? Colors.white38
-                                      : const Color(0xFF94A3B8),
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-
-                        // Sign Out Button
-                        OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(
-                              color: Color(0xFFEF4444),
-                              width: 1.2,
                             ),
-                            foregroundColor: const Color(0xFFEF4444),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 10,
-                            ),
-                          ),
-                          onPressed: () async {
-                            final sid = sess['id'] ?? '';
-                            setState(() => _activeDeviceSessions.remove(sess));
-                            if (sid.isNotEmpty) {
-                              try {
-                                await UserRepository.revokeSession(sid);
-                              } catch (_) {}
-                            }
-                            _showSnackBar('Signed out from session.');
-                          },
-                          child: const Text(
-                            'Sign Out',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                        ],
+                      ),
+                    );
+                  },
                 ),
             ],
           ),
@@ -5571,15 +6376,31 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Title ──────────────────────────────────────────────────────
-              Text(
-                'Recent Activity Logs',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                  color: isDark ? Colors.white : const Color(0xFF1E293B),
-                  letterSpacing: -0.3,
-                ),
+              // ── Title & Actions ────────────────────────────────────────────
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Recent Activity Logs',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: isDark ? Colors.white : const Color(0xFF1E293B),
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.refresh_rounded, size: 20),
+                    tooltip: 'Refresh Activity Logs',
+                    color: const Color(0xFF155EEF),
+                    onPressed: () async {
+                      _showSnackBar('Refreshing activity logs...');
+                      await _loadBackendData();
+                    },
+                  ),
+                ],
               ),
               const SizedBox(height: 8),
               Divider(
@@ -5640,55 +6461,119 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 )
               else
                 ..._recentActivityLogs.map(
-                  (log) => Container(
-                    width: double.infinity,
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 16,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? const Color(0xFF0F172A)
-                          : const Color(0xFFF1F5F9),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: isDark
-                            ? Colors.white10
-                            : const Color(0xFFE2E8F0).withValues(alpha: 0.6),
-                        width: 1,
+                  (log) {
+                    final activityName = log['activity'] ?? 'Account Event';
+                    final ip = log['ip'] ?? '';
+                    final details = log['details'] ?? '';
+                    final timestamp = log['timestamp'] ?? '';
+
+                    IconData activityIcon = Icons.shield_outlined;
+                    Color activityColor = const Color(0xFF155EEF);
+
+                    final actLower = activityName.toLowerCase();
+                    if (actLower.contains('login') ||
+                        actLower.contains('sign in')) {
+                      activityIcon = Icons.login_rounded;
+                      activityColor = const Color(0xFF10B981);
+                    } else if (actLower.contains('logout') ||
+                        actLower.contains('sign out') ||
+                        actLower.contains('revoke')) {
+                      activityIcon = Icons.logout_rounded;
+                      activityColor = const Color(0xFFEF4444);
+                    } else if (actLower.contains('password')) {
+                      activityIcon = Icons.lock_reset_rounded;
+                      activityColor = const Color(0xFFF59E0B);
+                    } else if (actLower.contains('settings') ||
+                        actLower.contains('update') ||
+                        actLower.contains('profile')) {
+                      activityIcon = Icons.tune_rounded;
+                      activityColor = const Color(0xFF8B5CF6);
+                    }
+
+                    return Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 14,
                       ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            log['ip'] ?? '',
-                            style: TextStyle(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w500,
-                              color: isDark
-                                  ? Colors.white.withValues(alpha: 0.85)
-                                  : const Color(0xFF334155),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? const Color(0xFF0F172A)
+                            : Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: isDark
+                              ? Colors.white12
+                              : const Color(0xFFE2E8F0),
+                          width: 1.1,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: activityColor.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(10),
                             ),
-                            overflow: TextOverflow.ellipsis,
+                            alignment: Alignment.center,
+                            child: Icon(
+                              activityIcon,
+                              size: 19,
+                              color: activityColor,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          log['timestamp'] ?? '',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w400,
-                            color: isDark
-                                ? Colors.white54
-                                : const Color(0xFF64748B),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  activityName,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                    color: isDark
+                                        ? Colors.white
+                                        : const Color(0xFF1E293B),
+                                  ),
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  [
+                                    if (ip.isNotEmpty) ip,
+                                    if (details.isNotEmpty) details,
+                                  ].join(' • '),
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    color: isDark
+                                        ? Colors.white60
+                                        : const Color(0xFF64748B),
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
+                          if (timestamp.isNotEmpty) ...[
+                            const SizedBox(width: 12),
+                            Text(
+                              timestamp,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w400,
+                                color: isDark
+                                    ? Colors.white38
+                                    : const Color(0xFF94A3B8),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    );
+                  },
                 ),
             ],
           ),

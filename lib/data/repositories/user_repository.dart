@@ -334,51 +334,83 @@ class UserRepository {
 
   // ── Sessions & Activity Logs ──────────────────────────────────────────────
 
+  /// Fetches active authenticated login sessions from GET /api/auth/sessions
   static Future<List<Map<String, String>>> getSessions() async {
     try {
-      // Primary official endpoint: GET /api/users/activity-logs
-      Map<String, dynamic> res;
-      try {
-        res = await ApiClient.get('/api/users/activity-logs');
-      } catch (_) {
-        res = await ApiClient.get('/api/user/sessions');
-      }
+      final res = await ApiClient.get('/api/auth/sessions');
+      final list = res['data'] ?? res['sessions'] ?? res;
+      if (list is List) {
+        return list.map((item) {
+          final map = item is Map
+              ? Map<String, dynamic>.from(item)
+              : <String, dynamic>{};
+          final ua = map['userAgent']?.toString() ?? '';
+          String deviceTitle = 'Web Browser Session';
+          if (ua.contains('Dart')) {
+            deviceTitle = 'BNX Mail Desktop App';
+          } else if (ua.contains('Macintosh') || ua.contains('Mac OS')) {
+            deviceTitle = 'macOS Browser';
+          } else if (ua.contains('Windows')) {
+            deviceTitle = 'Windows Browser';
+          } else if (ua.contains('Android')) {
+            deviceTitle = 'Android Mobile';
+          } else if (ua.contains('iPhone') || ua.contains('iPad')) {
+            deviceTitle = 'iOS Mobile';
+          }
 
-      final list = res['data'] ?? res['activityLogs'] ?? res['sessions'] ?? res;
+          final loc = map['location']?.toString();
+          final ip = map['ipAddress']?.toString() ?? map['ip']?.toString() ?? '127.0.0.1';
+          final ipAndLoc = (loc != null && loc.isNotEmpty) ? '$ip — $loc' : ip;
+
+          return {
+            'id': map['id']?.toString() ?? '',
+            'title': deviceTitle,
+            'ip': ipAndLoc,
+            'userAgent': ua,
+            'lastActive': map['createdAt']?.toString() ?? map['lastActive']?.toString() ?? 'Active Now',
+            'currentSession': (map['currentSession'] == true).toString(),
+          };
+        }).toList();
+      }
+    } catch (e) {
+      print('[USER_REPOSITORY] getSessions error: $e');
+    }
+    return [];
+  }
+
+  /// Revokes an active session via DELETE /api/auth/sessions/{id}
+  static Future<bool> revokeSession(String sessionId) async {
+    try {
+      final res = await ApiClient.delete('/api/auth/sessions/$sessionId');
+      return res['success'] == true;
+    } catch (e) {
+      print('[USER_REPOSITORY] revokeSession error: $e');
+      return false;
+    }
+  }
+
+  /// Fetches recent security and activity logs from GET /api/users/activity-logs
+  static Future<List<Map<String, String>>> getActivityLogs() async {
+    try {
+      final res = await ApiClient.get('/api/users/activity-logs');
+      final list = res['data'] ?? res['activityLogs'] ?? res;
       if (list is List) {
         return list.map((item) {
           final map = item is Map
               ? Map<String, dynamic>.from(item)
               : <String, dynamic>{};
           return {
-            'id': map['id']?.toString() ?? map['sessionId']?.toString() ?? '',
-            'title':
-                map['device']?.toString() ??
-                map['client']?.toString() ??
-                map['action']?.toString() ??
-                'Active Device Session',
-            'ip':
-                map['ip']?.toString() ??
-                map['ipAddress']?.toString() ??
-                '127.0.0.1',
-            'lastActive':
-                map['lastActive']?.toString() ??
-                map['timestamp']?.toString() ??
-                'Active Now',
+            'activity': map['activity']?.toString() ?? 'Account Event',
+            'ip': map['ipAddress']?.toString() ?? map['ip']?.toString() ?? '',
+            'details': map['details']?.toString() ?? '',
+            'timestamp': map['timestamp']?.toString() ?? '',
           };
         }).toList();
       }
-    } catch (_) {}
+    } catch (e) {
+      print('[USER_REPOSITORY] getActivityLogs error: $e');
+    }
     return [];
-  }
-
-  static Future<void> revokeSession(String sessionId) async {
-    try {
-      await ApiClient.post(
-        '/api/user/sessions/revoke',
-        body: {'sessionId': sessionId},
-      );
-    } catch (_) {}
   }
 
   // ── Device Token API for FCM Push Notifications ──────────────────────────

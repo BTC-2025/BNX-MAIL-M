@@ -281,13 +281,26 @@ class MailRepository {
       return null;
     }
     try {
-      final res = await ApiClient.get(
-        '/api/mail/email/$cleanId',
-        tempToken: tempToken,
-      );
-      final data = res['data'] as Map<String, dynamic>? ?? res;
+      dynamic res;
+      try {
+        res = await ApiClient.get(
+          '/api/mail/email/$cleanId',
+          queryParams: {'folder': folder},
+          tempToken: tempToken,
+        );
+      } catch (_) {
+        res = await ApiClient.get(
+          '/api/mail/email/$cleanId',
+          tempToken: tempToken,
+        );
+      }
+      final data = res is Map<String, dynamic>
+          ? (res['data'] as Map<String, dynamic>? ?? res)
+          : <String, dynamic>{};
+      print('[FETCH EMAIL SUCCESS] $cleanId returned keys: ${data.keys.toList()}');
       return EmailModel.fromJson(data, folder: folder);
-    } catch (_) {
+    } catch (e) {
+      print('[FETCH EMAIL ERROR] /api/mail/email/$cleanId failed: $e');
       return null;
     }
   }

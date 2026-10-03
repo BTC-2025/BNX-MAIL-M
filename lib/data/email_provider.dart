@@ -946,6 +946,9 @@ class EmailNotifier extends StateNotifier<EmailState> {
           return existing.copyWith(
             attachments: mergedAttachments,
             body: fullEmail.body.isNotEmpty ? fullEmail.body : existing.body,
+            htmlBody: fullEmail.htmlBody.isNotEmpty
+                ? fullEmail.htmlBody
+                : existing.htmlBody,
             hasAttachment:
                 existing.hasAttachment ||
                 fullEmail.hasAttachment ||

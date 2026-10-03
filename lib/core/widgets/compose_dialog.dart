@@ -1528,21 +1528,27 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
                 onTap: () async {
                   Navigator.pop(context);
                   try {
-                    final r = await FilePicker.platform.pickFiles();
+                    final r = await FilePicker.platform.pickFiles(
+                      allowMultiple: true,
+                    );
                     if (r != null && r.files.isNotEmpty) {
-                      final f = r.files.first;
-                      setState(
-                        () => targetList.add(
-                          AttachmentModel(
-                            fileName: f.name,
-                            fileType: f.extension ?? 'bin',
-                            fileSize: f.size > 1 << 20
-                                ? '${(f.size / (1 << 20)).toStringAsFixed(1)} MB'
-                                : '${f.size >> 10} KB',
-                            filePath: f.path,
-                          ),
-                        ),
-                      );
+                      setState(() {
+                        for (final f in r.files) {
+                          if (f.path == null) continue;
+                          targetList.add(
+                            AttachmentModel(
+                              fileName: f.name,
+                              fileType: f.extension ?? 'bin',
+                              fileSize: f.size >= 1 << 20
+                                  ? '${(f.size / (1 << 20)).toStringAsFixed(1)} MB'
+                                  : f.size >= 1 << 10
+                                      ? '${(f.size / (1 << 10)).toStringAsFixed(0)} KB'
+                                      : '${f.size} B',
+                              filePath: f.path,
+                            ),
+                          );
+                        }
+                      });
                     }
                   } catch (e) {
                     _snack('Failed: $e');

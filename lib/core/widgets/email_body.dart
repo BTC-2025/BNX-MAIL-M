@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import 'avatar_widget.dart';
 import 'label_chip.dart';
 import '../../models/email_model.dart';
@@ -23,6 +24,7 @@ import '../constants/constants.dart';
 import 'create_label_dialog.dart';
 import '../../features/ai/presentation/ai_smart_reply_bar.dart';
 import '../../features/inbox/presentation/snooze_scheduler_dialog.dart';
+import 'email_html_view.dart';
 
 class EmailBody extends ConsumerWidget {
   final String emailId;
@@ -78,9 +80,23 @@ class EmailBody extends ConsumerWidget {
       ),
     );
 
-    if (email.id != 'error' && !_handledDetailIds.contains(email.id)) {
+    final bool needsFullDetails = email.id != 'error' &&
+        (!_handledDetailIds.contains(email.id) ||
+            email.htmlBody.isEmpty ||
+            !EmailHtmlView.looksLikeHtml(email.htmlBody));
+
+    if (needsFullDetails) {
       _handledDetailIds.add(email.id);
       WidgetsBinding.instance.addPostFrameCallback((_) async {
+        final currentFolder = (email.memberOfFolders.isNotEmpty &&
+                email.memberOfFolders.first != 'All Inboxes' &&
+                email.memberOfFolders.first != 'All inboxes')
+            ? email.memberOfFolders.first
+            : (uiState.activeFolder != 'All Inboxes' &&
+                    uiState.activeFolder != 'All inboxes'
+                ? uiState.activeFolder
+                : 'Inbox');
+
         String? ownerToken;
         final ownerEmail = email.ownerEmail;
         if (ownerEmail != null && ownerEmail.isNotEmpty) {
@@ -98,17 +114,17 @@ class EmailBody extends ConsumerWidget {
           try {
             final detail = await MailRepository.fetchEmail(
               email.id,
-              folder: 'Inbox',
+              folder: currentFolder,
               tempToken: ownerToken,
             );
             if (detail != null) {
               ref.read(allInboxesProvider.notifier).updateEmail(detail);
             }
           } catch (_) {}
-        } else if (uiState.activeFolder != 'All Inboxes' && uiState.activeFolder != 'All inboxes') {
+        } else {
           ref
               .read(emailProvider.notifier)
-              .fetchFullEmailDetails(email.id, 'Inbox');
+              .fetchFullEmailDetails(email.id, currentFolder);
         }
       });
     }
@@ -921,6 +937,16 @@ class EmailBody extends ConsumerWidget {
       );
     }
 
+    final attachmentFolder = email.isSent
+        ? 'Sent'
+        : email.isTrash
+            ? 'Trash'
+            : email.isArchive
+                ? 'Archive'
+                : email.isDraft
+                    ? 'Drafts'
+                    : 'INBOX';
+
     Future<void> triggerAttachmentDownload(BuildContext context, AttachmentModel att) async {
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -933,7 +959,7 @@ class EmailBody extends ConsumerWidget {
                 child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
               ),
               const SizedBox(width: 12),
-              Expanded(child: Text('Saving "${att.fileName}" to internal storage...')),
+              Expanded(child: Text('Downloading "${att.fileName}"...')),
             ],
           ),
           duration: const Duration(seconds: 10),
@@ -943,7 +969,7 @@ class EmailBody extends ConsumerWidget {
       final savedPath = await AttachmentDownloader.downloadAndSave(
         att,
         emailId: email.id,
-        folder: 'INBOX',
+        folder: attachmentFolder,
       );
 
       if (!context.mounted) return;
@@ -952,7 +978,7 @@ class EmailBody extends ConsumerWidget {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: const Color(0xFF16A34A),
-            content: Text('✓ Saved to internal storage:\n$savedPath'),
+            content: Text('✓ Saved ${att.fileName}\n$savedPath'),
             duration: const Duration(seconds: 5),
             action: SnackBarAction(
               label: 'OK',
@@ -1027,7 +1053,7 @@ class EmailBody extends ConsumerWidget {
                     child: SmartImageWidget(
                       attachment: att,
                       emailId: email.id,
-                      folder: 'INBOX',
+                      folder: attachmentFolder,
                       height: 320,
                       width: double.infinity,
                       fit: BoxFit.contain,
@@ -1246,172 +1272,7 @@ class EmailBody extends ConsumerWidget {
       );
     }
 
-    // ── lightweight HTML → TextSpan parser ─────────────────────────────
-    TextSpan parseHtmlToSpan(String raw) {
-      const baseStyle = TextStyle(
-        fontSize: 14,
-        height: 1.55,
-        letterSpacing: 0.15,
-      );
-
-      if (raw.trim().isEmpty) {
-        return const TextSpan(text: '(No Content)', style: baseStyle);
-      }
-
-      // Decode HTML entities
-      String decodeEntities(String s) => s
-          .replaceAll('&amp;', '&')
-          .replaceAll('&lt;', '<')
-          .replaceAll('&gt;', '>')
-          .replaceAll('&quot;', '"')
-          .replaceAll('&nbsp;', ' ')
-          .replaceAll('&#39;', "'")
-          .replaceAll('&rsquo;', "'")
-          .replaceAll('&lsquo;', "'")
-          .replaceAll('&ldquo;', '"')
-          .replaceAll('&rdquo;', '"')
-          .replaceAll('&ndash;', '-')
-          .replaceAll('&mdash;', '—');
-
-      // Check if content is actually HTML
-      final isHtml = RegExp(
-        r'<(html|body|div|p|span|table|br|a|b|i|u|s|strong|em|del|strike|ul|ol|li|h[1-6])\b',
-        caseSensitive: false,
-      ).hasMatch(raw);
-
-      // Simple markdown parser for plain text
-      TextSpan parseMarkdownToSpan(String text, TextStyle baseStyle) {
-        final spans = <InlineSpan>[];
-        // Match asterisks for bold, underscores for italic across multiple lines
-        final RegExp re = RegExp(r'(\*\*|\*)(.*?)\1|(__|_)(.*?)\3', dotAll: true);
-        int cursor = 0;
-        
-        for (final match in re.allMatches(text)) {
-          if (match.start > cursor) {
-            spans.add(TextSpan(text: text.substring(cursor, match.start), style: baseStyle));
-          }
-          final isBold = match.group(1) != null; // matched asterisks
-          final content = isBold ? match.group(2)! : match.group(4)!;
-          
-          final style = baseStyle.copyWith(
-            fontWeight: isBold ? FontWeight.bold : null,
-            fontStyle: !isBold ? FontStyle.italic : null,
-          );
-          spans.add(TextSpan(text: content, style: style));
-          cursor = match.end;
-        }
-        
-        if (cursor < text.length) {
-          spans.add(TextSpan(text: text.substring(cursor), style: baseStyle));
-        }
-        
-        return spans.length == 1 ? spans.first as TextSpan : TextSpan(children: spans);
-      }
-
-      if (!isHtml) {
-        // Plain text — preserve exact line breaks and parse basic markdown
-        String cleaned = decodeEntities(raw);
-        cleaned = cleaned.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
-        return parseMarkdownToSpan(cleaned.trim(), baseStyle);
-      }
-
-      // ── HTML parsing → styled TextSpans ──────────────────────────────
-      final spans = <InlineSpan>[];
-
-      // Regex that splits on HTML tags, keeping the tags as separate matches
-      final tagRe = RegExp(r'<(/?)(\w+)([^>]*?)(/?)>', caseSensitive: false);
-      final parts = <_HtmlPart>[];
-      int cursor = 0;
-      for (final m in tagRe.allMatches(raw)) {
-        if (m.start > cursor) {
-          parts.add(_HtmlPart.text(raw.substring(cursor, m.start)));
-        }
-        final isClose = m.group(1) == '/';
-        final tag = m.group(2)!.toLowerCase();
-        final attrs = m.group(3) ?? '';
-        final isSelf = m.group(4) == '/';
-        parts.add(_HtmlPart.tag(tag, attributes: attrs, isClose: isClose, isSelfClosing: isSelf));
-        cursor = m.end;
-      }
-      if (cursor < raw.length) {
-        parts.add(_HtmlPart.text(raw.substring(cursor)));
-      }
-
-      // Walk through parts, tracking active styles using a stack for nested tags
-      final styleStack = <_HtmlPart>[];
-      int boldCount = 0, italicCount = 0, underlineCount = 0, strikeCount = 0;
-
-      for (final part in parts) {
-        if (part.isTag) {
-          final t = part.tagName!;
-          final opening = !part.isClose;
-          final attrs = part.attributes ?? '';
-
-          // Block-level tags → insert line break
-          if (['p', 'div', 'li', 'tr', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-               'blockquote', 'section', 'article'].contains(t)) {
-            if (part.isClose) {
-              spans.add(const TextSpan(text: '\n'));
-            }
-            continue;
-          }
-          if (t == 'br') {
-            spans.add(const TextSpan(text: '\n'));
-            continue;
-          }
-
-          // Inline style tags and styles
-          if (opening) {
-            bool isB = t == 'b' || t == 'strong' || RegExp(r'font-weight:\s*bold', caseSensitive: false).hasMatch(attrs);
-            bool isI = t == 'i' || t == 'em' || RegExp(r'font-style:\s*italic', caseSensitive: false).hasMatch(attrs);
-            bool isU = t == 'u' || RegExp(r'text-decoration:\s*underline', caseSensitive: false).hasMatch(attrs);
-            bool isS = t == 's' || t == 'del' || t == 'strike' || RegExp(r'text-decoration:\s*line-through', caseSensitive: false).hasMatch(attrs);
-
-            // Store the computed flags in the attributes field for easy removal
-            styleStack.add(_HtmlPart.tag(t, attributes: '$isB,$isI,$isU,$isS'));
-            if (isB) boldCount++;
-            if (isI) italicCount++;
-            if (isU) underlineCount++;
-            if (isS) strikeCount++;
-          } else {
-            for (int i = styleStack.length - 1; i >= 0; i--) {
-              if (styleStack[i].tagName == t) {
-                final removed = styleStack.removeAt(i);
-                final flags = removed.attributes!.split(',');
-                if (flags[0] == 'true') boldCount--;
-                if (flags[1] == 'true') italicCount--;
-                if (flags[2] == 'true') underlineCount--;
-                if (flags[3] == 'true') strikeCount--;
-                break;
-              }
-            }
-          }
-        } else {
-          // Text node
-          String txt = decodeEntities(part.text!);
-          if (txt.isEmpty) continue;
-
-          TextStyle style = baseStyle;
-          if (boldCount > 0) style = style.copyWith(fontWeight: FontWeight.bold);
-          if (italicCount > 0) style = style.copyWith(fontStyle: FontStyle.italic);
-          final decs = <TextDecoration>[];
-          if (underlineCount > 0) decs.add(TextDecoration.underline);
-          if (strikeCount > 0) decs.add(TextDecoration.lineThrough);
-          if (decs.isNotEmpty) {
-            style = style.copyWith(decoration: TextDecoration.combine(decs));
-          }
-          spans.add(TextSpan(text: txt, style: style));
-        }
-      }
-
-      if (spans.isEmpty) {
-        return TextSpan(text: decodeEntities(raw).trim(), style: baseStyle);
-      }
-      return TextSpan(children: spans);
-    }
-
     // ── build the widget tree ─────────────────────────────────────────
-    final bodySource = email.htmlBody.isNotEmpty ? email.htmlBody : email.body;
 
     return Column(
       children: [
@@ -1424,8 +1285,10 @@ class EmailBody extends ConsumerWidget {
               const Divider(),
               const SizedBox(height: 16),
               // Email Body Content
-              SelectableText.rich(
-                parseHtmlToSpan(bodySource),
+              EmailHtmlView(
+                html: email.htmlBody,
+                text: email.body,
+                isDark: isDark,
               ),
               buildAttachments(),
               // Feature 1: AI Smart Reply bar
@@ -1584,27 +1447,33 @@ class AttachmentDownloader {
 
       final cleanName = att.fileName.split('/').last.split('\\').last;
       final cleanUid = emailId != null ? MailRepository.cleanUid(emailId) : '';
-      final currentFolder = folder?.isNotEmpty == true ? folder : 'INBOX';
+
+      // Try the caller's folder first, then the common IMAP folders.
+      final folders = <String>{
+        if (folder != null && folder.isNotEmpty) folder,
+        'INBOX',
+        'Sent',
+        'Archive',
+        'Trash',
+        'Drafts',
+      }.toList();
 
       final candidateUrls = <String>[
         if (cleanUid.isNotEmpty)
-          '${ApiClient.baseUrl}/api/mail/$cleanUid/attachments/${Uri.encodeComponent(cleanName)}?folder=$currentFolder',
+          for (final f in folders)
+            '${ApiClient.baseUrl}/api/mail/$cleanUid/attachments/${Uri.encodeComponent(cleanName)}?folder=${Uri.encodeQueryComponent(f)}',
         if (cleanUid.isNotEmpty)
-          '${ApiClient.baseUrl}/api/mail/$cleanUid/attachments/$cleanName?folder=$currentFolder',
-        if (cleanUid.isNotEmpty)
-          '${ApiClient.baseUrl}/api/mail/$cleanUid/attachments/$cleanName',
+          '${ApiClient.baseUrl}/api/mail/$cleanUid/attachments/${Uri.encodeComponent(cleanName)}',
         if (rawPath.startsWith('http://') || rawPath.startsWith('https://')) rawPath,
         if (rawPath.isNotEmpty && !rawPath.startsWith('http'))
           '${ApiClient.baseUrl}/${rawPath.startsWith('/') ? rawPath.substring(1) : rawPath}',
-        '${ApiClient.baseUrl}/api/mail/attachments/$cleanName',
-        '${ApiClient.baseUrl}/api/mail/attachments/${att.fileName}',
-        '${ApiClient.baseUrl}/api/mail/drafts/attachments/$cleanName',
-        '${ApiClient.baseUrl}/api/mail/trash/attachments/$cleanName',
       ];
 
       for (final url in candidateUrls) {
         try {
-          final res = await http.get(Uri.parse(url), headers: headers).timeout(const Duration(seconds: 5));
+          final res = await http
+              .get(Uri.parse(url), headers: headers)
+              .timeout(const Duration(seconds: 60));
           if (res.statusCode == 200 && res.bodyBytes.isNotEmpty) {
             bytes = res.bodyBytes;
             break;
@@ -1613,10 +1482,8 @@ class AttachmentDownloader {
       }
     }
 
-    // 4. Guaranteed Valid PNG Image Fallback (Decodes 100% valid PNG image bytes so decoding never fails)
-    bytes ??= _generateFallbackImageBytes(att.fileName);
-
-    if (bytes.isNotEmpty) {
+    // Never fabricate bytes: a failed fetch must surface as a failed download.
+    if (bytes != null && bytes.isNotEmpty) {
       _memoryCache[cacheKey] = bytes;
     }
     return bytes;
@@ -1628,10 +1495,31 @@ class AttachmentDownloader {
     return RegExp(r'^[A-Za-z0-9+/=]+$').hasMatch(clean);
   }
 
-  static Uint8List _generateFallbackImageBytes(String title) {
-    const base64Png =
-        'iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAYAAACtWK6eAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAACNSURBVHhe7cExAQAAAMKg9U9tDQ8gAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPDFARtWAAEvnRFaAAAAAElFTkSuQmCC';
-    return base64Decode(base64Png);
+  static Future<Directory> _resolveDownloadDir() async {
+    try {
+      if (Platform.isAndroid) {
+        for (final p in const ['/storage/emulated/0/Download', '/sdcard/Download']) {
+          final d = Directory(p);
+          if (await d.exists()) return d;
+        }
+      } else if (Platform.isMacOS || Platform.isLinux || Platform.isWindows) {
+        final d = await getDownloadsDirectory();
+        if (d != null) {
+          if (!await d.exists()) await d.create(recursive: true);
+          return d;
+        }
+        final home = Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
+        if (home != null) {
+          final fallback = Directory('$home${Platform.pathSeparator}Downloads');
+          if (await fallback.exists()) return fallback;
+        }
+      }
+    } catch (_) {}
+    try {
+      return await getApplicationDocumentsDirectory();
+    } catch (_) {
+      return Directory.systemTemp;
+    }
   }
 
   static Future<String?> downloadAndSave(
@@ -1643,52 +1531,34 @@ class AttachmentDownloader {
       final bytes = await getAttachmentBytes(att, emailId: emailId, folder: folder);
       if (bytes == null || bytes.isEmpty) return null;
 
-      // Direct Main Downloads Folder: /storage/emulated/0/Download
-      Directory? downloadDir;
-      if (Platform.isAndroid) {
-        final mainDownload = Directory('/storage/emulated/0/Download');
-        if (await mainDownload.exists()) {
-          downloadDir = mainDownload;
-        } else {
-          final sdcard = Directory('/sdcard/Download');
-          if (await sdcard.exists()) {
-            downloadDir = sdcard;
-          }
-        }
-      } else if (Platform.isWindows) {
-        final userProfile = Platform.environment['USERPROFILE'];
-        if (userProfile != null) {
-          final winDownload = Directory('$userProfile\\Downloads');
-          if (await winDownload.exists()) {
-            downloadDir = winDownload;
-          }
-        }
+      final downloadDir = await _resolveDownloadDir();
+
+      // Keep spaces/unicode; only strip characters illegal on any OS.
+      var name = att.fileName
+          .split('/')
+          .last
+          .split('\\')
+          .last
+          .replaceAll(RegExp(r'[\\/:*?"<>|\x00-\x1F]'), '_')
+          .trim();
+      if (name.isEmpty) name = 'attachment';
+
+      // Never overwrite an existing file: report (1), (2), ...
+      final dot = name.lastIndexOf('.');
+      final stem = dot > 0 ? name.substring(0, dot) : name;
+      final ext = dot > 0 ? name.substring(dot) : '';
+      var savePath = '${downloadDir.path}${Platform.pathSeparator}$name';
+      var n = 1;
+      while (await File(savePath).exists()) {
+        savePath = '${downloadDir.path}${Platform.pathSeparator}$stem ($n)$ext';
+        n++;
       }
 
-      downloadDir ??= Directory.systemTemp;
-
-      final sanitizedFileName = att.fileName.replaceAll(RegExp(r'[^\w\.\-]'), '_');
-      final savePath = '${downloadDir.path}${Platform.pathSeparator}$sanitizedFileName';
-      final saveFile = File(savePath);
-      await saveFile.writeAsBytes(bytes);
-      print('[DOWNLOAD ATTACHMENT SUCCESS] Saved to $savePath');
+      await File(savePath).writeAsBytes(bytes, flush: true);
       return savePath;
     } catch (e) {
-      print('[DOWNLOAD ATTACHMENT ERROR] $e');
+      debugPrint('[DOWNLOAD ATTACHMENT ERROR] $e');
       return null;
     }
   }
-}
-
-class _HtmlPart {
-  final String? text;
-  final String? tagName;
-  final String? attributes;
-  final bool isClose;
-  final bool isSelfClosing;
-
-  bool get isTag => tagName != null;
-
-  _HtmlPart.text(this.text) : tagName = null, attributes = null, isClose = false, isSelfClosing = false;
-  _HtmlPart.tag(this.tagName, {this.attributes, this.isClose = false, this.isSelfClosing = false}) : text = null;
 }

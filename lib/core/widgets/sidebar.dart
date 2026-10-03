@@ -315,14 +315,15 @@ class _SidebarState extends ConsumerState<Sidebar> {
         collapsed: isCollapsed,
         onTap: () => navigateToFolder('Outbox', '/'),
       ),
-      _buildPillTile(
-        icon: Icons.archive_outlined,
-        title: 'Archive',
-        isSelected: uiState.activeFolder == 'Archive',
-        badgeText: archiveCount > 0 ? '$archiveCount' : null,
-        collapsed: isCollapsed,
-        onTap: () => navigateToFolder('Archive', '/'),
-      ),
+      if (labelsVis['Archive'] ?? true)
+        _buildPillTile(
+          icon: Icons.archive_outlined,
+          title: 'Archive',
+          isSelected: uiState.activeFolder == 'Archive',
+          badgeText: archiveCount > 0 ? '$archiveCount' : null,
+          collapsed: isCollapsed,
+          onTap: () => navigateToFolder('Archive', '/'),
+        ),
       _buildPillTile(
         icon: Icons.mail_outline_rounded,
         title: 'All Mail',
@@ -341,14 +342,15 @@ class _SidebarState extends ConsumerState<Sidebar> {
           collapsed: isCollapsed,
           onTap: () => navigateToFolder('All Inboxes', '/'),
         ),
-      _buildPillTile(
-        icon: Icons.report_gmailerrorred_outlined,
-        title: 'Spam',
-        isSelected: uiState.activeFolder == 'Spam',
-        badgeText: spamCount > 0 ? '$spamCount' : null,
-        collapsed: isCollapsed,
-        onTap: () => navigateToFolder('Spam', '/'),
-      ),
+      if ((labelsVis['Spam'] ?? true) && (labelsVis['Bulk Mail'] ?? true))
+        _buildPillTile(
+          icon: Icons.report_gmailerrorred_outlined,
+          title: 'Spam',
+          isSelected: uiState.activeFolder == 'Spam',
+          badgeText: spamCount > 0 ? '$spamCount' : null,
+          collapsed: isCollapsed,
+          onTap: () => navigateToFolder('Spam', '/'),
+        ),
       if (labelsVis['Trash'] ?? true)
         _buildPillTile(
           icon: Icons.delete_outline_rounded,
@@ -658,7 +660,9 @@ class _SidebarState extends ConsumerState<Sidebar> {
                 child: Divider(indent: 16, endIndent: 16, thickness: 0.8),
               ),
               _buildLabelsHeader(isDark, isCollapsed: isCollapsed),
-              ...customLabels.map(
+              ...customLabels
+                  .where((l) => labelsVis[l.name] ?? true)
+                  .map(
                 (l) => _buildPillTile(
                   icon: uiState.activeLabel == l.name
                       ? Icons.label_rounded
@@ -778,6 +782,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
     int allInboxesCount = 0,
   }) {
     final currentRoute = GoRouterState.of(context).uri.toString();
+    final labelsVis = uiState.sidebarLabelVisibility;
     final isColab =
         currentRoute == '/colab' ||
         uiState.activeFolder == 'Chat' ||
@@ -1001,7 +1006,9 @@ class _SidebarState extends ConsumerState<Sidebar> {
                               ],
                             ),
                           ),
-                          ...customLabels.map(
+                          ...customLabels
+                              .where((l) => labelsVis[l.name] ?? true)
+                              .map(
                             (l) => _buildDesktopLabelTile(l, uiState, isDark),
                           ),
                         ],
