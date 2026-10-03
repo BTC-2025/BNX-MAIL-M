@@ -2216,6 +2216,7 @@ class _CasboxInteractiveWidgetState
     'itsokletssee123': true,
     'ravinew2004': true,
   };
+  List<String> _authorizedContacts = [];
   final TextEditingController _desktopChatInputController =
       TextEditingController();
   final ScrollController _desktopChatScrollController = ScrollController();
@@ -2316,6 +2317,17 @@ class _CasboxInteractiveWidgetState
     await ref
         .read(casboxMessagesProvider.notifier)
         .fetchMessages(mailboxEmails);
+    try {
+      final authContacts = await CasboxRepository.getAuthorizedContacts();
+      if (mounted && authContacts.isNotEmpty) {
+        setState(() {
+          _authorizedContacts = authContacts;
+          for (final c in authContacts) {
+            _contactConnectionStatus[c] = true;
+          }
+        });
+      }
+    } catch (_) {}
     await Future.delayed(const Duration(milliseconds: 350));
     if (mounted) {
       setState(() => _isLoading = false);
@@ -2490,7 +2502,8 @@ class _CasboxInteractiveWidgetState
     final rawReceived = filteredUserMessages
         .where((m) =>
             !isSentByMe(m) &&
-            m.status.toUpperCase() == 'ACCEPTED' &&
+            m.status.toUpperCase() != 'PENDING' &&
+            m.status.toUpperCase() != 'REQUEST' &&
             !_archivedIds.contains(m.id))
         .toList();
     final rawCombined = filteredUserMessages
@@ -2527,7 +2540,8 @@ class _CasboxInteractiveWidgetState
       }
       if (_activeTab == 'Received' || _activeTab == 'Messages') {
         if (isSentByMe(m)) return true;
-        return m.status.toUpperCase() == 'ACCEPTED';
+        final s = m.status.toUpperCase();
+        return s != 'PENDING' && s != 'REQUEST';
       }
       if (_activeTab == 'Sent') {
         return isSentByMe(m);
@@ -2917,6 +2931,18 @@ class _CasboxInteractiveWidgetState
                 setState(() {
                   _showConnectionsPopup = !_showConnectionsPopup;
                 });
+                if (_showConnectionsPopup) {
+                  CasboxRepository.getAuthorizedContacts().then((authContacts) {
+                    if (mounted && authContacts.isNotEmpty) {
+                      setState(() {
+                        _authorizedContacts = authContacts;
+                        for (final c in authContacts) {
+                          _contactConnectionStatus[c] = true;
+                        }
+                      });
+                    }
+                  });
+                }
               },
               child: Container(
                 width: 34,
@@ -2985,22 +3011,36 @@ class _CasboxInteractiveWidgetState
   }
 
   Widget _buildConnectionsPopup(bool isDark) {
-    final contacts = [
-      {
-        'id': 'itsokletssee123',
-        'name': 'itsokletssee123',
-        'handle': '@itsokletssee123',
-        'letter': 'I',
-        'isPhoto': false,
-      },
-      {
-        'id': 'ravinew2004',
-        'name': 'ravinew2004',
-        'handle': '@ravinew2004',
-        'letter': 'R',
-        'isPhoto': true,
-      },
-    ];
+    final contacts = <Map<String, dynamic>>[];
+    if (_authorizedContacts.isNotEmpty) {
+      for (final email in _authorizedContacts) {
+        final handle = email.contains('@') ? email.split('@').first : email;
+        contacts.add({
+          'id': email,
+          'name': handle,
+          'handle': email.contains('@') ? email : '@$handle',
+          'letter': handle.isNotEmpty ? handle[0].toUpperCase() : 'U',
+          'isPhoto': false,
+        });
+      }
+    } else {
+      contacts.addAll([
+        {
+          'id': 'itsokletssee123',
+          'name': 'itsokletssee123',
+          'handle': '@itsokletssee123',
+          'letter': 'I',
+          'isPhoto': false,
+        },
+        {
+          'id': 'ravinew2004',
+          'name': 'ravinew2004',
+          'handle': '@ravinew2004',
+          'letter': 'R',
+          'isPhoto': true,
+        },
+      ]);
+    }
 
     return Container(
       width: 430,
@@ -3184,10 +3224,14 @@ class _CasboxInteractiveWidgetState
                   const SizedBox(width: 8),
                   // Connected pill button
                   GestureDetector(
-                    onTap: () {
+                    onTap: () async {
                       setState(() {
                         _contactConnectionStatus[id] = true;
+                        if (!_authorizedContacts.contains(id)) {
+                          _authorizedContacts.add(id);
+                        }
                       });
+                      await CasboxRepository.updateAuthorizedContacts(_authorizedContacts);
                     },
                     child: Container(
                       padding: const EdgeInsets.symmetric(
@@ -3241,10 +3285,12 @@ class _CasboxInteractiveWidgetState
                   const SizedBox(width: 6),
                   // Disconnected button
                   GestureDetector(
-                    onTap: () {
+                    onTap: () async {
                       setState(() {
                         _contactConnectionStatus[id] = false;
+                        _authorizedContacts.remove(id);
                       });
+                      await CasboxRepository.updateAuthorizedContacts(_authorizedContacts);
                     },
                     child: Container(
                       padding: const EdgeInsets.symmetric(
@@ -4487,6 +4533,9 @@ class _CasboxInteractiveWidgetState
                 ref
                     .read(casboxMessagesProvider.notifier)
                     .fetchThreadMessages(chat.contactEmail);
+                ref
+                    .read(casboxMessagesProvider.notifier)
+                    .markThreadAsSeen(chat.contactEmail);
               }
               for (final m in chat.threadMsgs) {
                 if (!isSentByMe(m) && !m.isRead) {
@@ -4970,14 +5019,23 @@ class _CasboxInteractiveWidgetState
                                 ),
                               ),
                               const SizedBox(height: 4),
-                              Text(
-                                time,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: isDark
-                                      ? Colors.white38
-                                      : Colors.grey.shade400,
-                                ),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    time,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: isDark
+                                          ? Colors.white38
+                                          : Colors.grey.shade400,
+                                    ),
+                                  ),
+                                  if (byMe) ...[
+                                    const SizedBox(width: 4),
+                                    _buildChatTick(m, isDark),
+                                  ],
+                                ],
                               ),
                             ],
                           ),
@@ -5089,6 +5147,29 @@ class _CasboxInteractiveWidgetState
       await ref.read(casboxMessagesProvider.notifier).fetchThreadMessages(to);
     }
     _scrollToBottom();
+  }
+
+  Widget _buildChatTick(CasboxMessage msg, bool isDark) {
+    final status = msg.status.trim().toUpperCase();
+    if (msg.isRead || status == 'SEEN' || status == 'READ') {
+      return const Icon(
+        Icons.done_all_rounded,
+        size: 13,
+        color: Color(0xFF195BAC),
+      );
+    } else if (status == 'DELIVERED') {
+      return Icon(
+        Icons.done_all_rounded,
+        size: 13,
+        color: isDark ? Colors.white38 : Colors.grey.shade500,
+      );
+    } else {
+      return Icon(
+        Icons.done_rounded,
+        size: 13,
+        color: isDark ? Colors.white38 : Colors.grey.shade500,
+      );
+    }
   }
 
   Widget _buildMessageListContent(
@@ -6025,7 +6106,7 @@ class _CasboxDetailPageState extends ConsumerState<_CasboxDetailPage> {
 
     if (initialMsg.id.isNotEmpty && !initialMsg.id.startsWith('local_')) {
       CasboxRepository.markDelivered(initialMsg.id);
-      CasboxRepository.updateStatus(initialMsg.id, 'READ');
+      CasboxRepository.updateStatus(initialMsg.id, 'SEEN');
     }
     _startThreadPolling();
   }

@@ -618,11 +618,36 @@ class CasboxMessage {
         json['updatedAt'];
     final date = _parseTimestamp(rawDate);
 
-    final rawAttachments = json['attachments'] as List<dynamic>? ?? [];
-    final attachments = rawAttachments
-        .whereType<Map<String, dynamic>>()
-        .map((a) => AttachmentModel.fromJson(a))
-        .toList();
+    List<AttachmentModel> attachments = [];
+    if (json['attachmentsJson'] != null) {
+      final rawAttachJson = json['attachmentsJson'].toString().trim();
+      if (rawAttachJson.isNotEmpty && rawAttachJson != 'null') {
+        try {
+          final decoded = jsonDecode(rawAttachJson);
+          if (decoded is List) {
+            attachments = decoded
+                .whereType<Map>()
+                .map((a) =>
+                    AttachmentModel.fromJson(Map<String, dynamic>.from(a)))
+                .toList();
+          }
+        } catch (_) {}
+      }
+    }
+    if (attachments.isEmpty) {
+      final rawAttachments = json['attachments'] as List<dynamic>? ?? [];
+      attachments = rawAttachments
+          .whereType<Map>()
+          .map((a) =>
+              AttachmentModel.fromJson(Map<String, dynamic>.from(a)))
+          .toList();
+    }
+
+    final rawStatus = (json['status']?.toString() ?? 'SENT').trim().toUpperCase();
+    final isReadMsg = (json['isRead'] as bool? ?? false) ||
+        rawStatus == 'SEEN' ||
+        rawStatus == 'READ' ||
+        rawStatus == 'ACCEPTED';
 
     return CasboxMessage(
       id:
@@ -631,20 +656,20 @@ class CasboxMessage {
           json['_id']?.toString() ??
           DateTime.now().millisecondsSinceEpoch.toString(),
       sender:
-          _parseEmailString(json['sender'] ?? json['contactEmail'] ?? json['from'] ?? json['senderEmail'] ?? json['userEmail']) ??
+          _parseEmailString(json['senderEmail'] ?? json['sender'] ?? json['contactEmail'] ?? json['from'] ?? json['userEmail']) ??
           'Support',
-      to: _parseEmailString(json['to'] ?? json['recipient'] ?? json['receiverEmail'] ?? json['contactEmail']) ?? '',
+      to: _parseEmailString(json['receiverEmail'] ?? json['to'] ?? json['recipient'] ?? json['contactEmail']) ?? '',
       subject: json['subject']?.toString() ?? '(No Subject)',
       body:
-          json['message']?.toString() ??
           json['body']?.toString() ??
+          json['message']?.toString() ??
           json['content']?.toString() ??
           json['text']?.toString() ??
           '',
       timestamp: date,
       isStarred: json['isStarred'] as bool? ?? false,
-      isRead: json['isRead'] as bool? ?? false,
-      status: json['status']?.toString() ?? 'PENDING',
+      isRead: isReadMsg,
+      status: rawStatus,
       attachments: attachments,
     );
   }
@@ -703,6 +728,7 @@ class CasboxMessagesNotifier extends StateNotifier<List<CasboxMessage>> {
 
   Future<void> fetchMessages([List<EmailModel>? mailboxEmails]) async {
     isLoading = true;
+    CasboxRepository.markAllDelivered();
     final acceptedIds = await TokenService.getAcceptedCasboxIds();
     final rejectedIds = await TokenService.getRejectedCasboxIds();
     final acceptedSenders = await TokenService.getAcceptedCasboxSenders();
@@ -738,10 +764,14 @@ class CasboxMessagesNotifier extends StateNotifier<List<CasboxMessage>> {
 
       var m = rawMsg;
 
-      if (allAcceptedSenders.contains(senderEmail) ||
+      final isAcceptedContact = allAcceptedSenders.contains(senderEmail) ||
           acceptedIds.contains(m.id) ||
-          _isAcceptedStatus(m.status)) {
-        m = m.copyWith(status: 'ACCEPTED');
+          _isAcceptedStatus(m.status);
+
+      if (isAcceptedContact) {
+        if (m.status.toUpperCase() == 'PENDING' || m.status.toUpperCase() == 'REQUEST') {
+          m = m.copyWith(status: 'ACCEPTED');
+        }
       } else {
         m = m.copyWith(status: 'PENDING');
       }
@@ -762,10 +792,14 @@ class CasboxMessagesNotifier extends StateNotifier<List<CasboxMessage>> {
         if (allRejectedSenders.contains(msgSender) || rejectedIds.contains(e.id)) continue;
         var msg = CasboxMessage.fromEmailModel(e);
 
-        if (allAcceptedSenders.contains(msgSender) ||
+        final isAcceptedContact = allAcceptedSenders.contains(msgSender) ||
             acceptedIds.contains(msg.id) ||
-            _isAcceptedStatus(msg.status)) {
-          msg = msg.copyWith(status: 'ACCEPTED');
+            _isAcceptedStatus(msg.status);
+
+        if (isAcceptedContact) {
+          if (msg.status.toUpperCase() == 'PENDING' || msg.status.toUpperCase() == 'REQUEST') {
+            msg = msg.copyWith(status: 'ACCEPTED');
+          }
         } else {
           msg = msg.copyWith(status: 'PENDING');
         }
@@ -921,6 +955,12 @@ class CasboxMessagesNotifier extends StateNotifier<List<CasboxMessage>> {
     final senderEmail = target?.sender.trim().toLowerCase() ?? '';
     if (senderEmail.isNotEmpty) {
       await TokenService.saveAcceptedCasboxSender(senderEmail);
+      try {
+        final currentAccepted = await CasboxRepository.getAuthorizedContacts();
+        if (!currentAccepted.contains(senderEmail)) {
+          await CasboxRepository.updateAuthorizedContacts([...currentAccepted, senderEmail]);
+        }
+      } catch (_) {}
     }
 
     final idsToAccept = <dynamic>[];
@@ -957,6 +997,13 @@ class CasboxMessagesNotifier extends StateNotifier<List<CasboxMessage>> {
     final senderEmail = target?.sender.trim().toLowerCase() ?? '';
     if (senderEmail.isNotEmpty) {
       await TokenService.saveRejectedCasboxSender(senderEmail);
+      try {
+        final currentAccepted = await CasboxRepository.getAuthorizedContacts();
+        if (currentAccepted.contains(senderEmail)) {
+          final updated = currentAccepted.where((e) => e != senderEmail).toList();
+          await CasboxRepository.updateAuthorizedContacts(updated);
+        }
+      } catch (_) {}
     }
 
     final idsToReject = <dynamic>[];
@@ -992,14 +1039,37 @@ class CasboxMessagesNotifier extends StateNotifier<List<CasboxMessage>> {
     TokenService.markCasboxRead(strId);
     state = state.map((m) {
       if (m.id == strId) {
-        return m.copyWith(isRead: true, status: 'READ');
+        return m.copyWith(isRead: true, status: 'SEEN');
       }
       return m;
     }).toList();
     try {
-      CasboxRepository.updateStatus(strId, 'READ');
+      CasboxRepository.updateStatus(strId, 'SEEN');
     } catch (e) {
       print('[CASBOX WARNING] markAsRead failed: $e');
+    }
+  }
+
+  void markThreadAsSeen(String contactEmail) {
+    final cleanContact = contactEmail.trim().toLowerCase();
+    final idsToMark = <dynamic>[];
+    state = state.map((m) {
+      final isFromContact = m.sender.trim().toLowerCase() == cleanContact;
+      if (isFromContact && (!m.isRead || m.status.toUpperCase() != 'SEEN')) {
+        idsToMark.add(m.id);
+        _readIds.add(m.id);
+        TokenService.markCasboxRead(m.id);
+        return m.copyWith(isRead: true, status: 'SEEN');
+      }
+      return m;
+    }).toList();
+
+    if (idsToMark.isNotEmpty) {
+      try {
+        CasboxRepository.updateMessagesStatus(idsToMark, 'SEEN');
+      } catch (e) {
+        print('[CASBOX WARNING] markThreadAsSeen failed: $e');
+      }
     }
   }
 

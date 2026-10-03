@@ -1,0 +1,333 @@
+# BNX Mail - Casbox API & WebSocket Documentation
+
+The **Casbox** module in **BNX Mail** provides direct, real-time messaging capabilities between email accounts. It supports threaded messaging, delivery & read receipts (`SENT`, `DELIVERED`, `SEEN`), message attachments, and bi-directional real-time push over WebSockets (STOMP).
+
+---
+
+## 1. Global Specifications
+
+| Property | Details |
+|---|---|
+| **Base REST URL** | `http(s)://<server>:8080/api/casbox` |
+| **WebSocket URL** | `ws://<server>:8080/ws` (STOMP over WebSocket / SockJS) |
+| **Authentication** | Bearer JWT Token in `Authorization` header (`Authorization: Bearer <accessToken>`) |
+| **Content-Type** | `application/json` |
+| **Backend Controller** | `com.btctech.mailapp.controller.CasboxController` |
+| **Service Layer** | `com.btctech.mailapp.service.CasboxService` |
+| **Database Table** | `casbox_messages` |
+
+---
+
+## 2. REST API Endpoints
+
+### 2.1 Send Message
+
+Sends a new Casbox message to a recipient. The sender's email address is automatically identified from the authenticated JWT security context.
+
+- **Endpoint:** `POST /api/casbox/send`
+- **Authentication:** Required (Bearer Token)
+- **Content-Type:** `application/json`
+
+#### Request Payload (`CasboxSendRequest`)
+```json
+{
+  "receiverEmail": "jane.doe@bnxmail.com",
+  "subject": "Project sync note",
+  "body": "Hey Jane, please review the attached document.",
+  "attachmentsJson": "[{\"fileName\":\"document.pdf\",\"fileSize\":1048576,\"url\":\"/api/vault/45/download\"}]"
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `receiverEmail` | `string` | **Yes** | Destination user's email address. |
+| `subject` | `string` | No | Optional subject line / topic for the message. |
+| `body` | `string` | **Yes** | Text or HTML message content. |
+| `attachmentsJson` | `string` | No | Serialized JSON array of attachment metadata objects. |
+
+#### Response (`200 OK`)
+Returns the newly created `CasboxMessageDto`:
+```json
+{
+  "id": 101,
+  "senderEmail": "john.smith@bnxmail.com",
+  "receiverEmail": "jane.doe@bnxmail.com",
+  "subject": "Project sync note",
+  "body": "Hey Jane, please review the attached document.",
+  "attachmentsJson": "[{\"fileName\":\"document.pdf\",\"fileSize\":1048576,\"url\":\"/api/vault/45/download\"}]",
+  "status": "SENT",
+  "timestamp": "2026-10-03T12:45:00"
+}
+```
+
+> **WebSocket Broadcast:**
+> - Pushes payload to receiver: `/user/{receiverEmail}/queue/casbox/messages`
+> - Pushes payload to sender (multi-device sync): `/user/{senderEmail}/queue/casbox/messages`
+
+---
+
+### 2.2 Get Conversation Thread
+
+Retrieves all historical messages between the authenticated user and a specific counterpart in chronological order.
+
+- **Endpoint:** `GET /api/casbox/thread/{contactEmail}`
+- **Authentication:** Required (Bearer Token)
+- **Path Parameter:**
+  - `contactEmail` (`string`): Counterpart email address (URL-encoded).
+
+#### Response (`200 OK`)
+Returns `Array<CasboxMessageDto>` sorted chronologically (`timestamp ASC`):
+```json
+[
+  {
+    "id": 85,
+    "senderEmail": "jane.doe@bnxmail.com",
+    "receiverEmail": "john.smith@bnxmail.com",
+    "subject": null,
+    "body": "Hello John!",
+    "attachmentsJson": null,
+    "status": "SEEN",
+    "timestamp": "2026-10-03T09:12:00"
+  },
+  {
+    "id": 101,
+    "senderEmail": "john.smith@bnxmail.com",
+    "receiverEmail": "jane.doe@bnxmail.com",
+    "subject": "Project sync note",
+    "body": "Hey Jane, please review the attached document.",
+    "attachmentsJson": "[...]",
+    "status": "SENT",
+    "timestamp": "2026-10-03T12:45:00"
+  }
+]
+```
+
+---
+
+### 2.3 Get All User Messages
+
+Retrieves all Casbox messages involving the authenticated user (as either sender or recipient).
+
+- **Endpoint:** `GET /api/casbox`
+- **Authentication:** Required (Bearer Token)
+
+#### Response (`200 OK`)
+Returns `Array<CasboxMessageDto>` sorted by most recent first (`timestamp DESC`):
+```json
+[
+  {
+    "id": 101,
+    "senderEmail": "john.smith@bnxmail.com",
+    "receiverEmail": "jane.doe@bnxmail.com",
+    "subject": "Project sync note",
+    "body": "Hey Jane, please review the attached document.",
+    "attachmentsJson": "[...]",
+    "status": "SENT",
+    "timestamp": "2026-10-03T12:45:00"
+  },
+  {
+    "id": 98,
+    "senderEmail": "alex@bnxmail.com",
+    "receiverEmail": "john.smith@bnxmail.com",
+    "subject": "Quick question",
+    "body": "Are we still meeting today?",
+    "attachmentsJson": null,
+    "status": "DELIVERED",
+    "timestamp": "2026-10-03T11:20:00"
+  }
+]
+```
+
+---
+
+### 2.4 Update Message Status (Receipts)
+
+Updates the status (e.g. `SEEN` or `DELIVERED`) for a list of message IDs. Only messages where the current user is the **receiver** are updated.
+
+- **Endpoint:** `PATCH /api/casbox/status`
+- **Authentication:** Required (Bearer Token)
+- **Content-Type:** `application/json`
+
+#### Request Payload (`CasboxStatusRequest`)
+```json
+{
+  "messageIds": [98, 101],
+  "status": "SEEN"
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `messageIds` | `List<number>` | No | List of message IDs to update. |
+| `status` | `string` | **Yes** | Target status value (e.g., `"DELIVERED"`, `"SEEN"`). |
+
+#### Response (`200 OK`)
+- HTTP `200 OK` (Empty response body).
+
+> **WebSocket Broadcast:**
+> - Sends status update to the sender of each updated message on `/user/{senderEmail}/queue/casbox/status`.
+
+---
+
+### 2.5 Mark Pending Messages as Delivered
+
+Automatically marks all incoming messages in `"SENT"` state destined for the current user as `"DELIVERED"`. Typically called when the client application opens the inbox or establishes connection.
+
+- **Endpoint:** `POST /api/casbox/delivered`
+- **Authentication:** Required (Bearer Token)
+
+#### Response (`200 OK`)
+- HTTP `200 OK` (Empty response body).
+
+> **WebSocket Broadcast:**
+> - Notifies the respective sender(s) on `/user/{senderEmail}/queue/casbox/status`.
+
+---
+
+## 3. Real-Time WebSocket & STOMP Reference
+
+The backend uses Spring STOMP over WebSocket to provide instant message delivery and status notifications.
+
+### 3.1 Connection
+- **Endpoint:** `http(s)://<server>:8080/ws` (SockJS) or `ws://<server>:8080/ws`
+- **User Destination Prefix:** `/user`
+- **Broker Prefixes:** `/queue`, `/topic`
+
+### 3.2 Client Subscription Channels
+
+| Destination | Direction | Payload | Description |
+|---|---|---|---|
+| `/user/queue/casbox/messages` | Inbound to Client | `CasboxMessageDto` | Triggered when a new message is received or sent from any active session. |
+| `/user/queue/casbox/status` | Inbound to Client | `CasboxMessageDto` | Triggered when the recipient updates message status (e.g., delivered, seen). |
+
+#### STOMP Client Example (JavaScript / Web / React Native)
+```javascript
+import { Client } from '@stomp/stompjs';
+import SockJS from 'sockjs-client';
+
+const client = new Client({
+  webSocketFactory: () => new SockJS('http://localhost:8080/ws'),
+  connectHeaders: {
+    Authorization: `Bearer ${accessToken}`
+  },
+  onConnect: () => {
+    // 1. Subscribe to incoming Casbox messages
+    client.subscribe('/user/queue/casbox/messages', (message) => {
+      const data = JSON.parse(message.body);
+      console.log('New Casbox message received:', data);
+    });
+
+    // 2. Subscribe to status updates (Delivered / Seen)
+    client.subscribe('/user/queue/casbox/status', (message) => {
+      const updatedMessage = JSON.parse(message.body);
+      console.log('Casbox message status updated:', updatedMessage.id, updatedMessage.status);
+    });
+  }
+});
+
+client.activate();
+```
+
+---
+
+## 4. User Settings: Authorized Contacts (`casboxAccepted`)
+
+Users can manage allowed Casbox contacts via the User Settings API (`/api/users/settings`).
+
+### 4.1 Get Settings
+- **Endpoint:** `GET /api/users/settings`
+- **Auth:** Required
+- **Response Sample:**
+```json
+{
+  "success": true,
+  "data": {
+    "casboxAccepted": [
+      "jane.doe@bnxmail.com",
+      "support@bnxmail.com"
+    ]
+  }
+}
+```
+
+### 4.2 Update Settings
+- **Endpoint:** `PUT /api/users/settings`
+- **Auth:** Required
+- **Request Sample:**
+```json
+{
+  "casboxAccepted": [
+    "jane.doe@bnxmail.com",
+    "support@bnxmail.com",
+    "alex@bnxmail.com"
+  ]
+}
+```
+
+---
+
+## 5. Data Models & TypeScript Interfaces
+
+### `CasboxMessageDto`
+```typescript
+export interface CasboxMessageDto {
+  id: number;
+  senderEmail: string;
+  receiverEmail: string;
+  subject?: string | null;
+  body: string;
+  attachmentsJson?: string | null;
+  status: "SENT" | "DELIVERED" | "SEEN";
+  timestamp: string; // ISO-8601 (e.g. "2026-10-03T12:45:00")
+}
+```
+
+### `CasboxSendRequest`
+```typescript
+export interface CasboxSendRequest {
+  receiverEmail: string;
+  subject?: string;
+  body: string;
+  attachmentsJson?: string;
+}
+```
+
+### `CasboxStatusRequest`
+```typescript
+export interface CasboxStatusRequest {
+  messageIds: number[];
+  status: "DELIVERED" | "SEEN" | string;
+}
+```
+
+---
+
+## 6. Status Flow Diagram
+
+```
++----------------+
+|  POST /send    |
++----------------+
+        |
+        v
+    [ SENT ] --------------------------------------------+
+        |                                                |
+        | (Receiver connects / POST /delivered)          |
+        v                                                |
+  [ DELIVERED ]                                          |
+        |                                                |
+        | (Receiver reads thread / PATCH /status)        |
+        v                                                v
+    [ SEEN ]                                         [ SEEN ]
+```
+
+---
+
+## 7. HTTP Status & Error Codes
+
+| Status Code | Description | Typical Cause |
+|---|---|---|
+| `200 OK` | Success | Operation completed successfully. |
+| `400 Bad Request` | Validation Error | Missing `receiverEmail`, missing `body`, or missing `status`. |
+| `401 Unauthorized` | Authentication Error | Missing or invalid `Authorization: Bearer <token>`. |
+| `500 Internal Server Error` | Server Error | Unhandled backend exception or database issue. |

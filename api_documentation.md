@@ -235,23 +235,10 @@ Categories include: `primary`, `social`, `promotions`, `updates`.
 
 ---
 
-## 6. Business APIs
+## 6. Business APIs [REMOVED]
 
-### `POST /api/business/register`
-
-**Body:** `{ "businessName": "...", "domain": "..." }`
-
-### `GET /api/business/domains`
-
-Lists registered business domains.
-
-### `POST /api/business/domain/{id}/verify`
-
-Triggers domain verification process.
-
-### `POST /api/business/onboard`
-
-**Body:** `{ "industry": "...", "companySize": "...", "businessWebsite": "..." }`
+> [!NOTE]
+> Business and Organization APIs have been completely removed from the application flow.
 
 ---
 
