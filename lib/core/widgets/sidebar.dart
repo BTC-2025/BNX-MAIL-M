@@ -9,6 +9,7 @@ import '../../data/email_provider.dart';
 import '../../data/account_provider.dart';
 import '../../data/storage_provider.dart';
 import '../../data/repositories/storage_repository.dart';
+import '../../data/repositories/mail_repository.dart';
 import '../../models/email_model.dart';
 import '../../models/label_model.dart';
 import '../theme/colors.dart';
@@ -144,13 +145,15 @@ class _SidebarState extends ConsumerState<Sidebar> {
               !e.memberOfFolders.contains('Trash'),
         )
         .length;
-    final int starredCount = emails
+    final int localStarredCount = emails
         .where(
           (e) =>
               (e.isStarred || e.memberOfFolders.contains('Starred')) &&
               !e.isTrash,
         )
         .length;
+    final int starredCount =
+        MailRepository.serverFolderCounts['Starred'] ?? localStarredCount;
     final int spamCount = emails
         .where((e) => e.memberOfFolders.contains('Spam') && !e.isTrash)
         .length;

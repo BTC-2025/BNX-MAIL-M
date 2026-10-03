@@ -188,9 +188,14 @@ class EmailNotifier extends StateNotifier<EmailState> {
           updatedFolders.remove('Inbox');
         }
 
+        final bool isNowStarred =
+            existing.isStarred || e.isStarred || folderName == 'Starred';
+        if (isNowStarred) {
+          updatedFolders.add('Starred');
+        }
+
         merged[key] = existing.copyWith(
-          isStarred:
-              existing.isStarred || e.isStarred || folderName == 'Starred',
+          isStarred: isNowStarred,
           isSnoozed:
               existing.isSnoozed || e.isSnoozed || folderName == 'Snoozed',
           isScheduled:
@@ -373,23 +378,27 @@ class EmailNotifier extends StateNotifier<EmailState> {
               (e.isDateFallback && !existing.isDateFallback)
               ? existing.date
               : e.date;
-          merged[key] = existing.copyWith(
-            isStarred: existing.isStarred || e.isStarred,
-            isSnoozed: existing.isSnoozed || e.isSnoozed,
-            isScheduled: existing.isScheduled || e.isScheduled,
-            labels: (existing.labels.toSet()..addAll(e.labels)).toList(),
-            isSent: folder == 'Sent' ? true : existing.isSent,
-            isDraft: folder == 'Draft' ? true : existing.isDraft,
-            isTrash: folder == 'Trash' ? true : existing.isTrash,
-            isArchive: folder == 'Archive' ? true : existing.isArchive,
-            isSpam: folder == 'Spam' ? true : existing.isSpam,
-            date: effectiveDate,
-            isDateFallback: e.isDateFallback && existing.isDateFallback,
-            isRead: e.isRead,
-            memberOfFolders: existing.memberOfFolders.union(
+            final updatedFolders = existing.memberOfFolders.union(
               e.memberOfFolders.isEmpty ? {folder} : e.memberOfFolders,
-            ),
-          );
+            );
+            if (existing.isStarred || e.isStarred || folder == 'Starred') {
+              updatedFolders.add('Starred');
+            }
+            merged[key] = existing.copyWith(
+              isStarred: existing.isStarred || e.isStarred || folder == 'Starred',
+              isSnoozed: existing.isSnoozed || e.isSnoozed,
+              isScheduled: existing.isScheduled || e.isScheduled,
+              labels: (existing.labels.toSet()..addAll(e.labels)).toList(),
+              isSent: folder == 'Sent' ? true : existing.isSent,
+              isDraft: folder == 'Draft' ? true : existing.isDraft,
+              isTrash: folder == 'Trash' ? true : existing.isTrash,
+              isArchive: folder == 'Archive' ? true : existing.isArchive,
+              isSpam: folder == 'Spam' ? true : existing.isSpam,
+              date: effectiveDate,
+              isDateFallback: e.isDateFallback && existing.isDateFallback,
+              isRead: e.isRead,
+              memberOfFolders: updatedFolders,
+            );
         } else {
           merged[key] = e.copyWith(
             memberOfFolders: e.memberOfFolders.isEmpty
@@ -438,23 +447,27 @@ class EmailNotifier extends StateNotifier<EmailState> {
               ? existing.date
               : e.date;
 
-          merged[key] = existing.copyWith(
-            isStarred: existing.isStarred || e.isStarred,
-            isSnoozed: existing.isSnoozed || e.isSnoozed,
-            isScheduled: existing.isScheduled || e.isScheduled,
-            labels: (existing.labels.toSet()..addAll(e.labels)).toList(),
-            isSent: existing.isSent || e.isSent || folder == 'Sent',
-            isDraft: existing.isDraft || e.isDraft || folder == 'Draft',
-            isTrash: existing.isTrash || e.isTrash || folder == 'Trash',
-            isArchive: existing.isArchive || e.isArchive || folder == 'Archive',
-            isSpam: existing.isSpam || e.isSpam || folder == 'Spam',
-            date: effectiveDate,
-            isDateFallback: e.isDateFallback && existing.isDateFallback,
-            isRead: e.isRead,
-            memberOfFolders: existing.memberOfFolders.union(
+            final updatedFolders = existing.memberOfFolders.union(
               e.memberOfFolders.isEmpty ? {folder} : e.memberOfFolders,
-            ),
-          );
+            );
+            if (existing.isStarred || e.isStarred || folder == 'Starred') {
+              updatedFolders.add('Starred');
+            }
+            merged[key] = existing.copyWith(
+              isStarred: existing.isStarred || e.isStarred || folder == 'Starred',
+              isSnoozed: existing.isSnoozed || e.isSnoozed,
+              isScheduled: existing.isScheduled || e.isScheduled,
+              labels: (existing.labels.toSet()..addAll(e.labels)).toList(),
+              isSent: existing.isSent || e.isSent || folder == 'Sent',
+              isDraft: existing.isDraft || e.isDraft || folder == 'Draft',
+              isTrash: existing.isTrash || e.isTrash || folder == 'Trash',
+              isArchive: existing.isArchive || e.isArchive || folder == 'Archive',
+              isSpam: existing.isSpam || e.isSpam || folder == 'Spam',
+              date: effectiveDate,
+              isDateFallback: e.isDateFallback && existing.isDateFallback,
+              isRead: e.isRead,
+              memberOfFolders: updatedFolders,
+            );
         } else {
           merged[key] = e.copyWith(
             memberOfFolders: e.memberOfFolders.isEmpty
@@ -476,7 +489,6 @@ class EmailNotifier extends StateNotifier<EmailState> {
       // Silent on background refresh
     }
   }
-
 
   void _deduplicateDrafts(Map<String, EmailModel> merged) {
     final Set<String> idsToRemove = {};
@@ -745,10 +757,34 @@ class EmailNotifier extends StateNotifier<EmailState> {
   }
 
   void toggleStar(String emailId, String folder) {
-    _updateLocal(emailId, (e) => e.copyWith(isStarred: !e.isStarred));
+    _updateLocal(emailId, (e) {
+      final newStarred = !e.isStarred;
+      final newFolders = Set<String>.from(e.memberOfFolders);
+      if (newStarred) {
+        newFolders.add('Starred');
+      } else {
+        newFolders.remove('Starred');
+      }
+      return e.copyWith(
+        isStarred: newStarred,
+        memberOfFolders: newFolders,
+      );
+    });
     MailRepository.toggleStar(emailId, folder).catchError((_) {
       // Rollback on failure
-      _updateLocal(emailId, (e) => e.copyWith(isStarred: !e.isStarred));
+      _updateLocal(emailId, (e) {
+        final revertedStarred = !e.isStarred;
+        final revertedFolders = Set<String>.from(e.memberOfFolders);
+        if (revertedStarred) {
+          revertedFolders.add('Starred');
+        } else {
+          revertedFolders.remove('Starred');
+        }
+        return e.copyWith(
+          isStarred: revertedStarred,
+          memberOfFolders: revertedFolders,
+        );
+      });
     });
   }
 
@@ -837,7 +873,6 @@ class EmailNotifier extends StateNotifier<EmailState> {
       merged.remove(id);
     }
   }
-
 
   void deleteEmail(String emailId, String folder) {
     EmailModel? target;

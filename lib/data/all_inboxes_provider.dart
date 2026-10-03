@@ -22,13 +22,12 @@ class AllInboxesState {
     bool? isLoading,
     String? error,
     Set<String>? failedAccounts,
-  }) =>
-      AllInboxesState(
-        emails: emails ?? this.emails,
-        isLoading: isLoading ?? this.isLoading,
-        error: error,
-        failedAccounts: failedAccounts ?? this.failedAccounts,
-      );
+  }) => AllInboxesState(
+    emails: emails ?? this.emails,
+    isLoading: isLoading ?? this.isLoading,
+    error: error,
+    failedAccounts: failedAccounts ?? this.failedAccounts,
+  );
 }
 
 class AllInboxesNotifier extends StateNotifier<AllInboxesState> {
@@ -57,11 +56,14 @@ class AllInboxesNotifier extends StateNotifier<AllInboxesState> {
 
   /// Merges Inbox emails from all logged-in accounts into a single sorted virtual inbox list.
   /// When [silent] is true or [state.emails] is non-empty, updates seamlessly in the background without UI spinners.
-  Future<void> loadAllInboxes({bool forceRefresh = false, bool silent = false}) async {
+  Future<void> loadAllInboxes({
+    bool forceRefresh = false,
+    bool silent = false,
+  }) async {
     if (_isFetching) return;
 
     _isFetching = true;
-    
+
     // Only show full loading spinner if we have no cached emails in memory
     if (state.emails.isEmpty && !silent) {
       state = state.copyWith(isLoading: true, error: null);
@@ -75,7 +77,10 @@ class AllInboxesNotifier extends StateNotifier<AllInboxesState> {
       final accountsMap = <String, String>{};
 
       // 1. Include current active account session
-      if (activeEmail != null && activeEmail.isNotEmpty && activeToken != null && activeToken.isNotEmpty) {
+      if (activeEmail != null &&
+          activeEmail.isNotEmpty &&
+          activeToken != null &&
+          activeToken.isNotEmpty) {
         accountsMap[activeEmail.trim().toLowerCase()] = activeToken;
       }
 
@@ -94,27 +99,33 @@ class AllInboxesNotifier extends StateNotifier<AllInboxesState> {
         return;
       }
 
-      print('[ALL INBOXES AUTO-SYNC] Fetching Inbox in parallel for ${accountsMap.length} accounts: ${accountsMap.keys.toList()}');
+      print(
+        '[ALL INBOXES AUTO-SYNC] Fetching Inbox in parallel for ${accountsMap.length} accounts: ${accountsMap.keys.toList()}',
+      );
 
       final failedAccounts = <String>{};
       final entries = accountsMap.entries.toList();
 
       // Parallel execution across all logged-in accounts
-      final results = await Future.wait(entries.map((entry) async {
-        try {
-          final list = await MailRepository.fetchFolderWithToken(
-            entry.value,
-            'Inbox',
-            limit: 50,
-            ownerEmail: entry.key,
-          );
-          return MapEntry(entry.key, list);
-        } catch (e) {
-          print('[ALL INBOXES WARNING] Failed to fetch Inbox for account "${entry.key}": $e');
-          failedAccounts.add(entry.key);
-          return MapEntry(entry.key, <EmailModel>[]);
-        }
-      }));
+      final results = await Future.wait(
+        entries.map((entry) async {
+          try {
+            final list = await MailRepository.fetchFolderWithToken(
+              entry.value,
+              'Inbox',
+              limit: 50,
+              ownerEmail: entry.key,
+            );
+            return MapEntry(entry.key, list);
+          } catch (e) {
+            print(
+              '[ALL INBOXES WARNING] Failed to fetch Inbox for account "${entry.key}": $e',
+            );
+            failedAccounts.add(entry.key);
+            return MapEntry(entry.key, <EmailModel>[]);
+          }
+        }),
+      );
 
       final mergedMap = <String, EmailModel>{};
 
@@ -122,7 +133,8 @@ class AllInboxesNotifier extends StateNotifier<AllInboxesState> {
         final ownerEmail = result.key;
         final folderList = result.value;
         for (final email in folderList) {
-          final ownedEmail = email.ownerEmail == null || email.ownerEmail!.isEmpty
+          final ownedEmail =
+              email.ownerEmail == null || email.ownerEmail!.isEmpty
               ? email.copyWith(ownerEmail: ownerEmail)
               : email;
           final key = '${ownedEmail.ownerEmail}_${ownedEmail.canonicalKey}';
@@ -133,7 +145,9 @@ class AllInboxesNotifier extends StateNotifier<AllInboxesState> {
       final mergedList = mergedMap.values.toList()
         ..sort((a, b) => b.date.compareTo(a.date));
 
-      print('[ALL INBOXES SYNC COMPLETE] Total merged emails: ${mergedList.length} across ${accountsMap.length} accounts.');
+      print(
+        '[ALL INBOXES SYNC COMPLETE] Total merged emails: ${mergedList.length} across ${accountsMap.length} accounts.',
+      );
 
       state = state.copyWith(
         emails: mergedList,
@@ -170,5 +184,5 @@ class AllInboxesNotifier extends StateNotifier<AllInboxesState> {
 
 final allInboxesProvider =
     StateNotifierProvider<AllInboxesNotifier, AllInboxesState>((ref) {
-  return AllInboxesNotifier();
-});
+      return AllInboxesNotifier();
+    });

@@ -12,6 +12,7 @@ import '../../../models/label_model.dart';
 import '../../../models/account_model.dart';
 import '../../../data/account_provider.dart';
 import '../../../data/all_inboxes_provider.dart';
+import '../../../data/repositories/mail_repository.dart';
 import 'templates_view.dart';
 import 'subscriptions_view.dart';
 
@@ -487,7 +488,9 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
     }
 
     // Filter out Casbox secure messages from regular email folders (Primary, Starred, Sent, etc.)
-    if (uiState.activeFolder != 'All Mail' && uiState.activeFolder != 'Trash') {
+    if (uiState.activeFolder != 'All Mail' &&
+        uiState.activeFolder != 'Trash' &&
+        uiState.activeFolder != 'Starred') {
       filtered = filtered
           .where((e) => !e.labels.any((l) => l.toLowerCase() == 'casbox'))
           .toList();
@@ -533,7 +536,13 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
 
     // Desktop pagination: 20 emails per page
     const int pageSize = 20;
-    final int totalEmailCount = filtered.length;
+    final int serverReported =
+        MailRepository.serverFolderCounts[uiState.activeFolder] ?? 0;
+    final int totalEmailCount = (serverReported > filtered.length &&
+            uiState.searchQuery.isEmpty &&
+            uiState.activeLabel == null)
+        ? serverReported
+        : filtered.length;
     final int totalPages = totalEmailCount == 0
         ? 1
         : ((totalEmailCount + pageSize - 1) ~/ pageSize);
@@ -545,13 +554,16 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
     final int endIndex = (startIndex + pageSize > totalEmailCount)
         ? totalEmailCount
         : (startIndex + pageSize);
-    final int startItem = totalEmailCount == 0 ? 0 : (startIndex + 1);
-    final int endItem = endIndex;
+    final int startItem = filtered.isEmpty ? 0 : (startIndex + 1);
+    final int endItem = endIndex > filtered.length ? filtered.length : endIndex;
+
+    final int safeSliceStart = startIndex.clamp(0, filtered.length);
+    final int safeSliceEnd = endIndex.clamp(safeSliceStart, filtered.length);
 
     final List<EmailModel> desktopPagedList = isDesktopOS
         ? (filtered.isEmpty
               ? <EmailModel>[]
-              : filtered.sublist(startIndex, endIndex))
+              : filtered.sublist(safeSliceStart, safeSliceEnd))
         : filtered;
 
     print(
@@ -959,10 +971,7 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text(
-              '📬',
-              style: TextStyle(fontSize: 44),
-            ),
+            const Text('📬', style: TextStyle(fontSize: 44)),
             const SizedBox(height: 12),
             Text(
               'Your folder is empty',
