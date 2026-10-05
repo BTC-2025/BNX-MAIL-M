@@ -77,7 +77,7 @@ class AuthRepository {
     } catch (_) {
       // Always clear local tokens even if the server call fails
     } finally {
-      await TokenService.clearAll();
+      await TokenService.clearTokens();
     }
   }
 

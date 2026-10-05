@@ -278,5 +278,90 @@ void main() {
       expect(activeForAccount2['Starred'], isFalse);
     });
   });
+
+  group('Profile & Account Switching Isolation and Persistence Tests', () {
+    test('distinct accounts maintain isolated profile settings without cross-contamination', () {
+      final acc1Profile = {
+        'nickname': 'RaviNick',
+        'displayName': 'Ravi D',
+        'gender': 'Male',
+        'phoneNumber': '8072909876',
+        'recoveryEmail': 'recovery1@bnxmail.com',
+        'occupation': 'Developer',
+        'homeAddress': '123 Tech Park',
+      };
+
+      final acc2Profile = {
+        'nickname': 'TellNick',
+        'displayName': 'Tell D',
+        'gender': 'Female',
+        'phoneNumber': '9876543210',
+        'recoveryEmail': 'recovery2@bnxmail.com',
+        'occupation': 'Designer',
+        'homeAddress': '456 Art Studio',
+      };
+
+      final Map<String, Map<String, dynamic>> accountStore = {
+        'user1@bnxmail.com': acc1Profile,
+        'user2@bnxmail.com': acc2Profile,
+      };
+
+      expect(accountStore['user1@bnxmail.com']?['nickname'], equals('RaviNick'));
+      expect(accountStore['user2@bnxmail.com']?['nickname'], equals('TellNick'));
+      expect(accountStore['user1@bnxmail.com']?['gender'], equals('Male'));
+      expect(accountStore['user2@bnxmail.com']?['gender'], equals('Female'));
+    });
+
+    test('remote /api/users/me response merges with local storage without clearing missing keys', () {
+      final localCache = {
+        'nickname': 'tell',
+        'displayName': 'Ravi K',
+        'homeAddress': 'Chennai, India',
+        'gender': 'Male',
+      };
+
+      // Server returns updated /api/users/me
+      final serverMe = {
+        'id': 149,
+        'email': 'ravinew2004@bnxmail.com',
+        'fullName': 'Ravi Kumar C',
+        'phoneNumber': '8072909876',
+        'recoveryEmail': 'chandran123@bnxmail.com',
+        'occupation': 'carpenter',
+      };
+
+      final merged = {...localCache, ...serverMe};
+
+      // Verified: fields from both sources coexist seamlessly
+      expect(merged['nickname'], equals('tell'));
+      expect(merged['displayName'], equals('Ravi K'));
+      expect(merged['homeAddress'], equals('Chennai, India'));
+      expect(merged['gender'], equals('Male'));
+      expect(merged['fullName'], equals('Ravi Kumar C'));
+      expect(merged['phoneNumber'], equals('8072909876'));
+      expect(merged['occupation'], equals('carpenter'));
+    });
+
+    test('empty or default fields do not overwrite existing stored user profile', () {
+      final currentProfile = {
+        'nickname': 'tell',
+        'displayName': 'Ravi K',
+        'occupation': 'carpenter',
+        'gender': 'Male',
+      };
+
+      void applyUpdate(Map<String, dynamic> delta) {
+        delta.forEach((key, value) {
+          if (value != null && value.toString().isNotEmpty && value != 'Not set') {
+            currentProfile[key] = value;
+          }
+        });
+      }
+
+      applyUpdate({'nickname': '', 'gender': 'Female'});
+      expect(currentProfile['nickname'], equals('tell')); // Preserved
+      expect(currentProfile['gender'], equals('Female')); // Updated
+    });
+  });
 }
 

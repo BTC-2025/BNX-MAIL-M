@@ -9,26 +9,29 @@ import '../../models/user_model.dart';
 class UserRepository {
   // ── Current User Profile ─────────────────────────────────────────────────
 
-  static Future<UserModel?> getProfile() async {
+  static Future<UserModel?> getProfile({String? email, String? tempToken}) async {
     try {
-      // Primary official endpoint: GET /api/users/settings
-      var res = await ApiClient.get('/api/users/settings');
-      var data = res['data'] as Map<String, dynamic>? ?? res;
-      print('[PROFILE SETTINGS LOG] GET /api/users/settings returned: $data');
-
-      // Fallback
-      if (data.isEmpty) {
+      dynamic res;
+      Map<String, dynamic> data = {};
+      try {
+        res = await ApiClient.get('/api/users/me', tempToken: tempToken);
+        data = (res['data'] as Map<String, dynamic>?) ?? (res is Map<String, dynamic> ? res : {});
+      } catch (_) {
         try {
-          res = await ApiClient.get('/api/user/profile');
-          data = res['data'] as Map<String, dynamic>? ?? res;
-          print(
-            '[PROFILE SETTINGS LOG] Fallback GET /api/user/profile returned: $data',
-          );
+          res = await ApiClient.get('/api/users/settings', tempToken: tempToken);
+          data = (res['data'] as Map<String, dynamic>?) ?? (res is Map<String, dynamic> ? res : {});
         } catch (_) {}
       }
 
       if (data.isEmpty) return null;
       final user = UserModel.fromJson(data);
+      final cleanEmail = (email != null && email.isNotEmpty)
+          ? email.trim().toLowerCase()
+          : user.email.trim().toLowerCase();
+      if (cleanEmail.isNotEmpty) {
+        final existing = await TokenService.getUserSettings(cleanEmail) ?? {};
+        await TokenService.saveUserSettings(cleanEmail, {...existing, ...data});
+      }
       final savedAvatar = await TokenService.getUserAvatar(user.email);
       final loggedInEmail = await TokenService.getUserEmail() ?? '';
       final savedAvatarAlt = await TokenService.getUserAvatar(loggedInEmail);
@@ -50,27 +53,72 @@ class UserRepository {
     }
   }
 
-  static Future<void> updateProfile(Map<String, dynamic> fields) async {
-    final email = await TokenService.getUserEmail() ?? '';
-    if (email.isNotEmpty) {
-      final existing = await TokenService.getUserSettings(email) ?? {};
-      await TokenService.saveUserSettings(email, {...existing, ...fields});
+  /// Retrieves user profile fields (from /api/users/me or /api/users/settings, merged with local storage).
+  static Future<Map<String, dynamic>?> getProfileData({
+    String? email,
+    String? tempToken,
+  }) async {
+    final cleanEmail = (email ?? await TokenService.getUserEmail() ?? '')
+        .trim()
+        .toLowerCase();
+    final localSettings = cleanEmail.isNotEmpty
+        ? await TokenService.getUserSettings(cleanEmail) ?? {}
+        : <String, dynamic>{};
+
+    try {
+      final res = await ApiClient.get('/api/users/me', tempToken: tempToken);
+      final remoteData = (res['data'] as Map<String, dynamic>?) ?? res;
+      final merged = {...localSettings, ...remoteData};
+      if (cleanEmail.isNotEmpty && merged.isNotEmpty) {
+        await TokenService.saveUserSettings(cleanEmail, merged);
+      }
+      return merged.isNotEmpty ? merged : null;
+    } catch (_) {
+      try {
+        final res = await ApiClient.get('/api/users/settings', tempToken: tempToken);
+        final remoteData = (res['data'] as Map<String, dynamic>?) ?? res;
+        final merged = {...localSettings, ...remoteData};
+        if (cleanEmail.isNotEmpty && merged.isNotEmpty) {
+          await TokenService.saveUserSettings(cleanEmail, merged);
+        }
+        return merged.isNotEmpty ? merged : null;
+      } catch (_) {
+        return localSettings.isNotEmpty ? localSettings : null;
+      }
+    }
+  }
+
+  static Future<void> updateProfile(
+    Map<String, dynamic> fields, {
+    String? email,
+  }) async {
+    final cleanEmail = (email ?? await TokenService.getUserEmail() ?? '')
+        .trim()
+        .toLowerCase();
+    if (cleanEmail.isNotEmpty) {
+      final existing = await TokenService.getUserSettings(cleanEmail) ?? {};
+      await TokenService.saveUserSettings(cleanEmail, {...existing, ...fields});
     }
     try {
       // 5.7 Update Profile: PATCH /api/users/profile
-      try {
-        await ApiClient.patch('/api/users/profile', body: fields);
-      } catch (_) {
-        // Fallback 1: PATCH /api/users/settings
-        try {
-          await ApiClient.patch('/api/users/settings', body: fields);
-        } catch (_) {
-          // Fallback 2: PUT /api/user/profile
-          await ApiClient.put('/api/user/profile', body: fields);
-        }
+      final res = await ApiClient.patch('/api/users/profile', body: fields);
+      final data = res['data'];
+      if (data is Map<String, dynamic> && cleanEmail.isNotEmpty) {
+        final existing = await TokenService.getUserSettings(cleanEmail) ?? {};
+        await TokenService.saveUserSettings(cleanEmail, {...existing, ...data});
       }
-    } catch (e) {
-      print('[PROFILE UPDATE API LOG] $e');
+    } catch (_) {
+      try {
+        // Fallback 1: PATCH /api/users/settings
+        final res = await ApiClient.patch('/api/users/settings', body: fields);
+        final data = res['data'];
+        if (data is Map<String, dynamic> && cleanEmail.isNotEmpty) {
+          final existing = await TokenService.getUserSettings(cleanEmail) ?? {};
+          await TokenService.saveUserSettings(cleanEmail, {...existing, ...data});
+        }
+      } catch (e) {
+        print('[PROFILE UPDATE API LOG] $e');
+      }
     }
   }
 

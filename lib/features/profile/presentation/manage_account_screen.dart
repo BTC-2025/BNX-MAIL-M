@@ -25,6 +25,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
   bool _isLoading = false;
 
   // Personal Info local state
+  String? _lastLoadedEmail;
   String _nickname = 'Not set';
   String _displayName = 'Not set';
   String _gender = 'Rather not say';
@@ -97,46 +98,87 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
   // SECTION 5 API INTEGRATIONS
   // ═══════════════════════════════════════════════════════════════════════════
 
-  Future<void> _loadAccountData() async {
-    _loadProfileSettings();
+  Future<void> _loadAccountData([String? accountEmail]) async {
+    final email = accountEmail ?? ref.read(activeAccountProvider).email;
+    _lastLoadedEmail = email.trim().toLowerCase();
+    _loadProfileSettings(email);
     _loadConnectedEmails();
     _loadSubIds();
   }
 
-  Future<void> _loadProfileSettings() async {
+  Future<void> _loadProfileSettings([String? accountEmail]) async {
     try {
-      final settings = await UserRepository.getSettings();
+      final email = accountEmail ?? ref.read(activeAccountProvider).email;
+      final settings = await UserRepository.getProfileData(email: email);
       if (settings != null && mounted) {
         setState(() {
           if (settings['nickname'] != null &&
               settings['nickname'].toString().isNotEmpty) {
             _nickname = settings['nickname'].toString();
+          } else {
+            _nickname = 'Not set';
           }
           if (settings['displayName'] != null &&
               settings['displayName'].toString().isNotEmpty) {
             _displayName = settings['displayName'].toString();
+          } else {
+            _displayName = 'Not set';
           }
           if (settings['gender'] != null &&
               settings['gender'].toString().isNotEmpty) {
             _gender = settings['gender'].toString();
+          } else {
+            _gender = 'Rather not say';
           }
           if (settings['homeAddress'] != null &&
               settings['homeAddress'].toString().isNotEmpty) {
             _homeAddress = settings['homeAddress'].toString();
+          } else {
+            _homeAddress = 'None added';
           }
           if (settings['workAddress'] != null &&
               settings['workAddress'].toString().isNotEmpty) {
             _workAddress = settings['workAddress'].toString();
+          } else {
+            _workAddress = 'None added';
           }
           if (settings['occupation'] != null &&
               settings['occupation'].toString().isNotEmpty) {
             _occupation = settings['occupation'].toString();
+          } else {
+            _occupation = 'None added';
           }
           if (settings['bio'] != null &&
               settings['bio'].toString().isNotEmpty) {
             _bio = settings['bio'].toString();
+          } else {
+            _bio = 'Write a brief description about yourself';
           }
         });
+
+        // Also sync active account model fields if returned in settings
+        final activeAcc = ref.read(activeAccountProvider);
+        final phone =
+            (settings['phoneNumber'] ?? settings['phone'])?.toString();
+        final recEmail = settings['recoveryEmail']?.toString();
+        DateTime? dob;
+        final rawDob = settings['dob'] ?? settings['birthday'];
+        if (rawDob != null) {
+          dob = DateTime.tryParse(rawDob.toString());
+        }
+        final name = (settings['fullName'] ?? settings['name'])?.toString();
+        if ((phone != null && phone.isNotEmpty) ||
+            (recEmail != null && recEmail.isNotEmpty) ||
+            dob != null ||
+            (name != null && name.isNotEmpty)) {
+          ref.read(accountsProvider.notifier).updateAccountFields(
+                activeAcc.id,
+                phone: phone,
+                recoveryEmail: recEmail,
+                dob: dob,
+                name: name,
+              );
+        }
       }
     } catch (e) {
       print('[MANAGE_ACCOUNT] loadProfileSettings error: $e');
@@ -520,6 +562,13 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
   @override
   Widget build(BuildContext context) {
     final account = ref.watch(activeAccountProvider);
+    final currentEmail = account.email.trim().toLowerCase();
+    if (_lastLoadedEmail != currentEmail && currentEmail.isNotEmpty) {
+      _lastLoadedEmail = currentEmail;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _loadAccountData(currentEmail);
+      });
+    }
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 800;
@@ -2423,7 +2472,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
               icon: Icons.person_outline_rounded,
               label: 'NICKNAME',
               value: _nickname,
-              onTap: _editNickname,
+              onTap: () => _editNickname(account),
             ),
 
             // DISPLAY NAME ROW
@@ -2432,7 +2481,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
               icon: Icons.person_outline_rounded,
               label: 'DISPLAY NAME',
               value: _displayName,
-              onTap: _editDisplayName,
+              onTap: () => _editDisplayName(account),
             ),
 
             // BIRTHDAY ROW
@@ -2450,7 +2499,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
               icon: Icons.sentiment_satisfied_outlined,
               label: 'GENDER',
               value: _gender,
-              onTap: _selectGender,
+              onTap: () => _selectGender(account),
               showDivider: false,
             ),
           ],
@@ -2543,7 +2592,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
               icon: Icons.location_on_outlined,
               label: 'HOME ADDRESS',
               value: _homeAddress,
-              onTap: () => _editAddress(true),
+              onTap: () => _editAddress(true, account),
             ),
 
             // WORK ADDRESS
@@ -2552,7 +2601,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
               icon: Icons.location_on_outlined,
               label: 'WORK ADDRESS',
               value: _workAddress,
-              onTap: () => _editAddress(false),
+              onTap: () => _editAddress(false, account),
               showDivider: false,
             ),
           ],
@@ -2571,7 +2620,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
               icon: Icons.work_outline_rounded,
               label: 'OCCUPATION',
               value: _occupation,
-              onTap: _editOccupation,
+              onTap: () => _editOccupation(account),
             ),
 
             // BIO
@@ -2580,7 +2629,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
               icon: Icons.notes_rounded,
               label: 'BIO',
               value: _bio,
-              onTap: _editBio,
+              onTap: () => _editBio(account),
               showDivider: false,
             ),
           ],
@@ -3713,7 +3762,8 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
                   'firstName': first,
                   'lastName': last,
                   'name': newName,
-                });
+                  'fullName': newName,
+                }, email: account.email);
                 await ref
                     .read(accountsProvider.notifier)
                     .updateAccountFields(account.id, name: newName);
@@ -3726,7 +3776,8 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
     );
   }
 
-  void _editNickname() {
+  void _editNickname([AccountModel? account]) {
+    final targetEmail = account?.email ?? ref.read(activeAccountProvider).email;
     final controller = TextEditingController(
       text: _nickname == 'Not set' ? '' : _nickname,
     );
@@ -3754,7 +3805,8 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
                 _nickname = val.isEmpty ? 'Not set' : val;
               });
               Navigator.pop(ctx);
-              await UserRepository.updateProfile({'nickname': val});
+              await UserRepository.updateProfile({'nickname': val},
+                  email: targetEmail);
             },
             child: const Text('Save'),
           ),
@@ -3763,7 +3815,8 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
     );
   }
 
-  void _editDisplayName() {
+  void _editDisplayName([AccountModel? account]) {
+    final targetEmail = account?.email ?? ref.read(activeAccountProvider).email;
     final controller = TextEditingController(
       text: _displayName == 'Not set' ? '' : _displayName,
     );
@@ -3791,7 +3844,8 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
                 _displayName = val.isEmpty ? 'Not set' : val;
               });
               Navigator.pop(ctx);
-              await UserRepository.updateProfile({'displayName': val});
+              await UserRepository.updateProfile({'displayName': val},
+                  email: targetEmail);
             },
             child: const Text('Save'),
           ),
@@ -3809,43 +3863,56 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
       lastDate: DateTime.now(),
     );
     if (picked != null) {
+      await UserRepository.updateProfile(
+        {'dob': picked.toIso8601String(), 'birthday': picked.toIso8601String()},
+        email: account.email,
+      );
       await ref
           .read(accountsProvider.notifier)
           .updateAccountFields(account.id, dob: picked);
     }
   }
 
-  void _selectGender() {
+  void _selectGender([AccountModel? account]) {
+    final targetEmail = account?.email ?? ref.read(activeAccountProvider).email;
     showDialog(
       context: context,
       builder: (ctx) => SimpleDialog(
         title: const Text('Select Gender'),
         children: [
           SimpleDialogOption(
-            onPressed: () {
+            onPressed: () async {
               setState(() => _gender = 'Female');
               Navigator.pop(ctx);
+              await UserRepository.updateProfile({'gender': 'Female'},
+                  email: targetEmail);
             },
             child: const Text('Female'),
           ),
           SimpleDialogOption(
-            onPressed: () {
+            onPressed: () async {
               setState(() => _gender = 'Male');
               Navigator.pop(ctx);
+              await UserRepository.updateProfile({'gender': 'Male'},
+                  email: targetEmail);
             },
             child: const Text('Male'),
           ),
           SimpleDialogOption(
-            onPressed: () {
+            onPressed: () async {
               setState(() => _gender = 'Non-binary');
               Navigator.pop(ctx);
+              await UserRepository.updateProfile({'gender': 'Non-binary'},
+                  email: targetEmail);
             },
             child: const Text('Non-binary'),
           ),
           SimpleDialogOption(
-            onPressed: () {
+            onPressed: () async {
               setState(() => _gender = 'Rather not say');
               Navigator.pop(ctx);
+              await UserRepository.updateProfile({'gender': 'Rather not say'},
+                  email: targetEmail);
             },
             child: const Text('Rather not say'),
           ),
@@ -3856,7 +3923,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
 
   void _editRecoveryEmail(AccountModel account) {
     final controller = TextEditingController(
-      text: account.recoveryEmail ?? 'chandran123@bnxmail.com',
+      text: account.recoveryEmail ?? '',
     );
     showDialog(
       context: context,
@@ -3880,7 +3947,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
             onPressed: () async {
               final newEmail = controller.text.trim();
               Navigator.pop(ctx);
-              await UserRepository.updateProfile({'recoveryEmail': newEmail});
+              await UserRepository.updateProfile({'recoveryEmail': newEmail}, email: account.email);
               await ref
                   .read(accountsProvider.notifier)
                   .updateAccountFields(account.id, recoveryEmail: newEmail);
@@ -3894,7 +3961,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
 
   void _editPhone(AccountModel account) {
     final controller = TextEditingController(
-      text: account.phone ?? '8072909876',
+      text: account.phone ?? '',
     );
     showDialog(
       context: context,
@@ -3921,7 +3988,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
               await UserRepository.updateProfile({
                 'phoneNumber': newPhone,
                 'phone': newPhone,
-              });
+              }, email: account.email);
               await ref
                   .read(accountsProvider.notifier)
                   .updateAccountFields(account.id, phone: newPhone);
@@ -3933,7 +4000,8 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
     );
   }
 
-  void _editAddress(bool isHome) {
+  void _editAddress(bool isHome, [AccountModel? account]) {
+    final targetEmail = account?.email ?? ref.read(activeAccountProvider).email;
     final controller = TextEditingController(
       text: isHome
           ? (_homeAddress == 'None added' ? '' : _homeAddress)
@@ -3969,7 +4037,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
               Navigator.pop(ctx);
               await UserRepository.updateProfile({
                 isHome ? 'homeAddress' : 'workAddress': val,
-              });
+              }, email: targetEmail);
             },
             child: const Text('Save'),
           ),
@@ -3978,7 +4046,8 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
     );
   }
 
-  void _editOccupation() {
+  void _editOccupation([AccountModel? account]) {
+    final targetEmail = account?.email ?? ref.read(activeAccountProvider).email;
     final controller = TextEditingController(
       text: _occupation == 'None added' ? '' : _occupation,
     );
@@ -4006,7 +4075,8 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
                 _occupation = val.isEmpty ? 'None added' : val;
               });
               Navigator.pop(ctx);
-              await UserRepository.updateProfile({'occupation': val});
+              await UserRepository.updateProfile({'occupation': val},
+                  email: targetEmail);
             },
             child: const Text('Save'),
           ),
@@ -4015,7 +4085,8 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
     );
   }
 
-  void _editBio() {
+  void _editBio([AccountModel? account]) {
+    final targetEmail = account?.email ?? ref.read(activeAccountProvider).email;
     final controller = TextEditingController(
       text: _bio == 'Write a brief description about yourself' ? '' : _bio,
     );
@@ -4046,7 +4117,8 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
                     : val;
               });
               Navigator.pop(ctx);
-              await UserRepository.updateProfile({'bio': val});
+              await UserRepository.updateProfile({'bio': val},
+                  email: targetEmail);
             },
             child: const Text('Save'),
           ),

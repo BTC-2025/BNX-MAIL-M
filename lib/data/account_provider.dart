@@ -42,6 +42,7 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
       if (regEmail.isEmpty) continue;
       final regName = reg['name']?.toString() ?? regEmail.split('@').first;
       final savedAvatar = await TokenService.getUserAvatar(regEmail);
+      final cachedSettings = await TokenService.getUserSettings(regEmail) ?? {};
 
       final isCurrentActive =
           (loggedInEmail.isNotEmpty && regEmail == loggedInEmail);
@@ -57,6 +58,14 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
                       ? '/api/users/profile-picture/$regEmail'
                       : null));
 
+      final phone = cachedSettings['phoneNumber']?.toString() ??
+          cachedSettings['phone']?.toString() ??
+          (isCurrentActive ? userProfile?.phone : null);
+      final recovery = cachedSettings['recoveryEmail']?.toString() ??
+          (isCurrentActive ? userProfile?.recoveryEmail : null);
+      final dobStr = cachedSettings['dob']?.toString();
+      final dob = dobStr != null ? DateTime.tryParse(dobStr) : null;
+
       mergedList.add(
         AccountModel(
           id: regEmail,
@@ -71,6 +80,9 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
           isActive:
               isCurrentActive || (mergedList.isEmpty && loggedInEmail.isEmpty),
           avatarUrl: avatar,
+          phone: phone,
+          recoveryEmail: recovery,
+          dob: dob,
         ),
       );
     }
@@ -86,17 +98,29 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
                 (a) => a.email.trim().toLowerCase() == accEmail,
               )) {
             final savedAvatar = await TokenService.getUserAvatar(accEmail);
+            final cachedSettings = await TokenService.getUserSettings(accEmail) ?? {};
             final avatar = (savedAvatar != null && savedAvatar.isNotEmpty)
                 ? savedAvatar
                 : (acc.avatarUrl ??
                       (accEmail.isNotEmpty
                           ? '/api/users/profile-picture/$accEmail'
                           : null));
+            final phone = cachedSettings['phoneNumber']?.toString() ??
+                cachedSettings['phone']?.toString() ??
+                acc.phone;
+            final recovery = cachedSettings['recoveryEmail']?.toString() ??
+                acc.recoveryEmail;
+            final dobStr = cachedSettings['dob']?.toString();
+            final dob = dobStr != null ? DateTime.tryParse(dobStr) : acc.dob;
+
             mergedList.add(
               acc.copyWith(
                 id: accEmail,
                 isActive: accEmail == loggedInEmail,
                 avatarUrl: avatar,
+                phone: phone,
+                recoveryEmail: recovery,
+                dob: dob,
               ),
             );
           }
@@ -108,10 +132,19 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
     if (mergedList.isEmpty && loggedInEmail.isNotEmpty) {
       final name = await TokenService.getUserName() ?? 'User';
       final savedAvatar = await TokenService.getUserAvatar(loggedInEmail);
+      final cachedSettings = await TokenService.getUserSettings(loggedInEmail) ?? {};
       final avatar = (savedAvatar != null && savedAvatar.isNotEmpty)
           ? savedAvatar
           : (userProfile?.avatarUrl ??
                 '/api/users/profile-picture/$loggedInEmail');
+      final phone = cachedSettings['phoneNumber']?.toString() ??
+          cachedSettings['phone']?.toString() ??
+          userProfile?.phone;
+      final recovery = cachedSettings['recoveryEmail']?.toString() ??
+          userProfile?.recoveryEmail;
+      final dobStr = cachedSettings['dob']?.toString();
+      final dob = dobStr != null ? DateTime.tryParse(dobStr) : null;
+
       mergedList.add(
         AccountModel(
           id: loggedInEmail,
@@ -122,6 +155,9 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
           avatarColor: const Color(0xFF195BAC),
           isActive: true,
           avatarUrl: avatar,
+          phone: phone,
+          recoveryEmail: recovery,
+          dob: dob,
         ),
       );
     }
@@ -160,11 +196,31 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
     // 1. Instantly update tokens locally
     await TokenService.switchActiveAccountSession(cleanId);
 
+    final cached = await TokenService.getUserSettings(cleanId);
+    final phone = (cached?['phoneNumber'] ?? cached?['phone'])?.toString();
+    final recEmail = cached?['recoveryEmail']?.toString();
+    DateTime? dob;
+    if (cached?['dob'] != null || cached?['birthday'] != null) {
+      dob = DateTime.tryParse((cached!['dob'] ?? cached['birthday']).toString());
+    }
+    final name = (cached?['fullName'] ?? cached?['name'])?.toString();
+
     // 2. Update account list state immediately so activeAccount is up to date
     state = state.map((acc) {
       final accEmail = acc.email.trim().toLowerCase();
       final accId = acc.id.trim().toLowerCase();
       final isTarget = (accEmail == cleanId || accId == cleanId);
+      if (isTarget && cached != null) {
+        return acc.copyWith(
+          isActive: true,
+          phone: (phone != null && phone.isNotEmpty) ? phone : acc.phone,
+          recoveryEmail: (recEmail != null && recEmail.isNotEmpty)
+              ? recEmail
+              : acc.recoveryEmail,
+          dob: dob ?? acc.dob,
+          name: (name != null && name.isNotEmpty) ? name : acc.name,
+        );
+      }
       return acc.copyWith(isActive: isTarget);
     }).toList();
 
