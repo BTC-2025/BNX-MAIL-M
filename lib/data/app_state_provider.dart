@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/network/token_service.dart';
 import '../models/label_model.dart';
 import 'repositories/label_repository.dart';
 import 'email_provider.dart';
@@ -30,6 +31,21 @@ class AppUiState {
   final String composeDraftId;
   final Map<String, bool> sidebarLabelVisibility;
 
+  static const defaultSidebarVisibility = <String, bool>{
+    'Inbox': true,
+    'Starred': true,
+    'Snoozed': true,
+    'Sent': true,
+    'Draft': true,
+    'Trash': true,
+    'Bulk Mail': true,
+    'Notifications': true,
+    'Archive': true,
+    'Scheduled': true,
+    'Spam': true,
+    'All Mail': true,
+  };
+
   const AppUiState({
     required this.activeFolder,
     this.activeLabel,
@@ -47,14 +63,7 @@ class AppUiState {
     this.composeSubject = '',
     this.composeBody = '',
     this.composeDraftId = '',
-    this.sidebarLabelVisibility = const {
-      'Inbox': true,
-      'Starred': true,
-      'Snoozed': true,
-      'Sent': true,
-      'Draft': true,
-      'Trash': true,
-    },
+    this.sidebarLabelVisibility = defaultSidebarVisibility,
   });
 
   AppUiState copyWith({
@@ -123,16 +132,72 @@ class AppUiNotifier extends StateNotifier<AppUiState> {
           composeBody: '',
           composeDraftId: '',
         ),
-      );
+      ) {
+    _loadInitialSettings();
+  }
+
+  Future<void> _loadInitialSettings() async {
+    try {
+      final email = await TokenService.getUserEmail();
+      if (email != null && email.isNotEmpty) {
+        await loadUserSettings(email);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> loadUserSettings(String email) async {
+    final cleanEmail = email.trim().toLowerCase();
+    if (cleanEmail.isEmpty) return;
+    try {
+      final userSettings = await TokenService.getUserSettings(cleanEmail);
+      final Map<String, bool> accountLabels = {};
+      if (userSettings != null && userSettings['sidebarLabels'] is Map) {
+        final raw = userSettings['sidebarLabels'] as Map;
+        for (final entry in raw.entries) {
+          accountLabels[entry.key.toString()] = (entry.value == true);
+        }
+      }
+      resetSidebarLabels(accountLabels);
+    } catch (_) {}
+  }
+
+  void resetSidebarLabels(Map<String, bool> accountSpecificLabels) {
+    final updated = Map<String, bool>.from(AppUiState.defaultSidebarVisibility);
+    updated.addAll(accountSpecificLabels);
+    if (accountSpecificLabels.containsKey('Bulk Mail')) updated['Spam'] = accountSpecificLabels['Bulk Mail']!;
+    if (accountSpecificLabels.containsKey('Spam')) updated['Bulk Mail'] = accountSpecificLabels['Spam']!;
+    if (accountSpecificLabels.containsKey('Notifications')) updated['Subscriptions'] = accountSpecificLabels['Notifications']!;
+    if (accountSpecificLabels.containsKey('Subscriptions')) updated['Notifications'] = accountSpecificLabels['Subscriptions']!;
+    state = state.copyWith(sidebarLabelVisibility: updated);
+  }
 
   void setSidebarLabel(String label, bool isVisible) {
     final updated = Map<String, bool>.from(state.sidebarLabelVisibility);
     updated[label] = isVisible;
-    state = state.copyWith(sidebarLabelVisibility: updated);
+    if (label == 'Bulk Mail') updated['Spam'] = isVisible;
+    if (label == 'Spam') updated['Bulk Mail'] = isVisible;
+    if (label == 'Notifications') updated['Subscriptions'] = isVisible;
+    if (label == 'Subscriptions') updated['Notifications'] = isVisible;
+
+    String newFolder = state.activeFolder;
+    if (!isVisible &&
+        (state.activeFolder == label ||
+            (label == 'Bulk Mail' && state.activeFolder == 'Spam') ||
+            (label == 'Notifications' && state.activeFolder == 'Subscriptions'))) {
+      newFolder = 'Inbox';
+    }
+    state = state.copyWith(
+      sidebarLabelVisibility: updated,
+      activeFolder: newFolder,
+    );
   }
 
   void setSidebarLabels(Map<String, bool> labels) {
     final updated = Map<String, bool>.from(state.sidebarLabelVisibility)..addAll(labels);
+    if (labels.containsKey('Bulk Mail')) updated['Spam'] = labels['Bulk Mail']!;
+    if (labels.containsKey('Spam')) updated['Bulk Mail'] = labels['Spam']!;
+    if (labels.containsKey('Notifications')) updated['Subscriptions'] = labels['Notifications']!;
+    if (labels.containsKey('Subscriptions')) updated['Notifications'] = labels['Subscriptions']!;
     state = state.copyWith(sidebarLabelVisibility: updated);
   }
 
@@ -272,29 +337,62 @@ class CustomLabelsNotifier extends StateNotifier<List<LabelModel>> {
   final Ref ref;
 
   final Map<String, List<LabelModel>> _accountCaches = {};
-  String _currentAccountId = 'default';
+  String _currentAccountId = '';
 
   CustomLabelsNotifier(this.ref) : super(const []) {
-    fetchLabels();
+    _initInitialAccount();
+  }
+
+  Future<void> _initInitialAccount() async {
+    final email = await TokenService.getUserEmail();
+    if (email != null && email.isNotEmpty) {
+      _currentAccountId = email.trim().toLowerCase();
+      final local = await _loadLocalLabels(_currentAccountId);
+      if (local.isNotEmpty) {
+        state = local;
+      }
+    }
+    await fetchLabels();
+  }
+
+  Future<List<LabelModel>> _loadLocalLabels(String accountId) async {
+    final rawList = await TokenService.getUserCustomLabels(accountId);
+    return rawList.map((m) => LabelModel.fromJson(m)).toList();
+  }
+
+  Future<void> _persistLocalLabels(String accountId, List<LabelModel> labels) async {
+    final rawList = labels.map((l) => l.toJson()).toList();
+    await TokenService.saveUserCustomLabels(accountId, rawList);
   }
 
   Future<void> fetchLabels() async {
+    final activeEmail = _currentAccountId.isNotEmpty
+        ? _currentAccountId
+        : ((await TokenService.getUserEmail())?.trim().toLowerCase() ?? '');
     final remote = await LabelRepository.fetchLabels();
-    state = remote;
+    if (remote.isNotEmpty || state.isEmpty) {
+      state = remote;
+      if (activeEmail.isNotEmpty) {
+        _accountCaches[activeEmail] = remote;
+        await _persistLocalLabels(activeEmail, remote);
+      }
+    }
   }
 
   Future<void> switchAccountContext(String accountId) async {
+    final cleanId = accountId.trim().toLowerCase();
     if (_currentAccountId.isNotEmpty) {
       _accountCaches[_currentAccountId] = state;
+      await _persistLocalLabels(_currentAccountId, state);
     }
-    _currentAccountId = accountId;
-    if (_accountCaches.containsKey(accountId)) {
-      state = _accountCaches[accountId]!;
-      fetchLabels(); // Background fetch
+    _currentAccountId = cleanId;
+    if (_accountCaches.containsKey(cleanId)) {
+      state = _accountCaches[cleanId]!;
     } else {
-      state = const [];
-      fetchLabels();
+      final local = await _loadLocalLabels(cleanId);
+      state = local;
     }
+    await fetchLabels();
   }
 
   void clear() {
@@ -313,6 +411,10 @@ class CustomLabelsNotifier extends StateNotifier<List<LabelModel>> {
     } else {
       state = [...state, LabelModel(id: tempId, name: name, color: color)];
     }
+    if (_currentAccountId.isNotEmpty) {
+      _accountCaches[_currentAccountId] = state;
+      await _persistLocalLabels(_currentAccountId, state);
+    }
   }
 
   Future<void> editLabel(String id, String newName, Color newColor) async {
@@ -327,6 +429,10 @@ class CustomLabelsNotifier extends StateNotifier<List<LabelModel>> {
     final updated = await LabelRepository.updateLabel(id, newName, hexColor);
     if (updated != null) {
       state = state.map((l) => l.id == id ? updated : l).toList();
+    }
+    if (_currentAccountId.isNotEmpty) {
+      _accountCaches[_currentAccountId] = state;
+      await _persistLocalLabels(_currentAccountId, state);
     }
   }
 
@@ -349,6 +455,10 @@ class CustomLabelsNotifier extends StateNotifier<List<LabelModel>> {
     }
 
     state = state.where((l) => l.id != idOrName && l.name.toLowerCase() != idOrName.toLowerCase()).toList();
+    if (_currentAccountId.isNotEmpty) {
+      _accountCaches[_currentAccountId] = state;
+      await _persistLocalLabels(_currentAccountId, state);
+    }
 
     // 1. Instantly remove deleted label from all emails in state and disk storage
     ref.read(emailProvider.notifier).onLabelDeleted(targetId, targetName);

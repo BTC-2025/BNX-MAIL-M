@@ -312,7 +312,11 @@ class MailRepository {
           queryParams: {'folder': folder},
           tempToken: tempToken,
         );
-      } catch (_) {
+      } on ApiException catch (e) {
+        // If the email is specifically not found on the server, do NOT perform a redundant retry without folder
+        if (e.isNotFound) {
+          rethrow;
+        }
         res = await ApiClient.get(
           '/api/mail/email/$cleanId',
           tempToken: tempToken,
@@ -323,6 +327,15 @@ class MailRepository {
           : <String, dynamic>{};
       print('[FETCH EMAIL SUCCESS] $cleanId returned keys: ${data.keys.toList()}');
       return EmailModel.fromJson(data, folder: folder);
+    } on ApiException catch (e) {
+      if (e.isNotFound) {
+        print(
+          '[FETCH EMAIL STALE] /api/mail/email/$cleanId not found on server ($folder): ${e.message}',
+        );
+        rethrow;
+      }
+      print('[FETCH EMAIL ERROR] /api/mail/email/$cleanId failed: $e');
+      return null;
     } catch (e) {
       print('[FETCH EMAIL ERROR] /api/mail/email/$cleanId failed: $e');
       return null;

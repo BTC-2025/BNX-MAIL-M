@@ -19,20 +19,35 @@ class SubscriptionRepository {
   }
 
   /// Blocks a sender / marks them as unsubscribed.
-  /// POST /api/blocked-contacts
-  /// Body: {"email": "..."}
+  /// POST /api/mail/unsubscribe?senderEmail=... (with fallback to POST /api/blocked-contacts)
   static Future<void> unsubscribe(String email) async {
-    await ApiClient.post(
-      '/api/blocked-contacts',
-      body: {'email': email.trim()},
-    );
+    final cleanEmail = email.trim();
+    try {
+      await ApiClient.post(
+        '/api/mail/unsubscribe',
+        queryParams: {'senderEmail': cleanEmail},
+      );
+    } catch (_) {
+      await ApiClient.post(
+        '/api/blocked-contacts',
+        body: {'email': cleanEmail},
+      );
+    }
   }
 
   /// Unblocks a sender / resubscribes to them.
-  /// DELETE /api/blocked-contacts/{email}
+  /// POST /api/mail/subscribe?senderEmail=... (with fallback to DELETE /api/blocked-contacts/{email})
   static Future<void> subscribe(String email) async {
-    final encodedEmail = Uri.encodeComponent(email.trim());
-    await ApiClient.delete('/api/blocked-contacts/$encodedEmail');
+    final cleanEmail = email.trim();
+    try {
+      await ApiClient.post(
+        '/api/mail/subscribe',
+        queryParams: {'senderEmail': cleanEmail},
+      );
+    } catch (_) {
+      final encodedEmail = Uri.encodeComponent(cleanEmail);
+      await ApiClient.delete('/api/blocked-contacts/$encodedEmail');
+    }
   }
 
   /// Checks the blocked status of an individual contact (optional helper).

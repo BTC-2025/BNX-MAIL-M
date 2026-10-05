@@ -9,6 +9,12 @@ class ApiException implements Exception {
   /// Whether this exception represents an expired / invalid token.
   bool get isAuthError => statusCode == 401;
 
+  /// Whether this exception represents a missing / stale resource (e.g. "Email with UID X not found").
+  bool get isNotFound =>
+      statusCode == 404 ||
+      message.toLowerCase().contains('not found') ||
+      message.toLowerCase().contains('does not exist');
+
   @override
   String toString() => 'ApiException($statusCode): $message';
 }

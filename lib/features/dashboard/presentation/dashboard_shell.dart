@@ -73,11 +73,15 @@ class DashboardShell extends ConsumerWidget {
                     : BNXConstants.sidebarExpandedWidth));
 
     final bool showRightRail = !isMobile;
-    final bool isRightRailVisible = (currentRoute == '/help' || currentRoute == '/settings')
-        ? false
-        : (isDesktopOS
-            ? ref.watch(desktopRightRailVisibleProvider)
-            : showRightRail);
+    final bool isRightRailVisible =
+        (currentRoute == '/help' ||
+                currentRoute == '/settings' ||
+                currentRoute == '/manage-account' ||
+                currentRoute == '/profile')
+            ? false
+            : (isDesktopOS
+                ? ref.watch(desktopRightRailVisibleProvider)
+                : showRightRail);
     final bool showRightPanel =
         uiState.activeRightUtility != 'none' && !isMobile && screenWidth > 950;
 

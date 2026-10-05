@@ -71,6 +71,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final TextEditingController _backupPhoneController = TextEditingController();
 
   // ── Labels & Sidebar State ─────────────────────────────────────────────────
+  static const List<String> _standardSystemFolders = [
+    'Inbox',
+    'Starred',
+    'Snoozed',
+    'Sent',
+    'Draft',
+    'Trash',
+    'Bulk Mail',
+    'Notifications',
+    'Archive',
+  ];
+
   final Map<String, bool> _sidebarLabels = {
     'Inbox': true,
     'Starred': true,
@@ -382,6 +394,49 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
+  void _resetFieldsForNewAccount() {
+    setState(() {
+      _jobTitleController.clear();
+      _locationController.clear();
+      _phoneContactController.clear();
+      _backupPhoneController.clear();
+      _recoveryEmailController.clear();
+      _customWallpaperController.clear();
+      _signatureNameController.clear();
+      _signatureContentController.clear();
+      _selectedWallpaperUrl = '';
+      _signatureItems.clear();
+      _selectedSignatureIndex = 0;
+      _activeDeviceSessions.clear();
+      _recentActivityLogs.clear();
+      _sidebarLabels.clear();
+      _sidebarLabels.addAll({
+        'Inbox': true,
+        'Starred': true,
+        'Snoozed': true,
+        'Sent': true,
+        'Draft': true,
+        'Trash': true,
+        'Bulk Mail': true,
+        'Notifications': true,
+        'Archive': true,
+      });
+      _displayLanguage = 'English';
+      _density = 'Default';
+      _emailsPerPage = 20;
+      _accentColor = '#4F46E5';
+      _visualTheme = 'Classic';
+      _readingPaneMode = 'No Split (Full List)';
+      _undoSendDelay = 'Disabled (Send instantly)';
+      _enableSpellingCheck = true;
+      _enableGrammarCheck = true;
+      _enableAutoCorrect = true;
+      _enableWritingSuggestions = true;
+      _enable2FA = false;
+      _enableBiometrics = false;
+    });
+  }
+
   Future<void> _loadBackendData() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
@@ -450,6 +505,38 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
       // 7. Refresh live storage quota
       ref.read(storageQuotaProvider.notifier).refresh();
+
+      // 8. Load user settings & sidebar visibility
+      final email = ref.read(activeAccountProvider).email;
+      if (email.isNotEmpty) {
+        final savedSettings = await TokenService.getUserSettings(email);
+        final defaultMap = Map<String, bool>.from({
+          'Inbox': true,
+          'Starred': true,
+          'Snoozed': true,
+          'Sent': true,
+          'Draft': true,
+          'Trash': true,
+          'Bulk Mail': true,
+          'Notifications': true,
+          'Archive': true,
+        });
+        if (savedSettings != null && savedSettings['sidebarLabels'] is Map) {
+          final loaded = Map<String, bool>.from(
+            (savedSettings['sidebarLabels'] as Map).map(
+              (k, v) => MapEntry(k.toString(), v == true),
+            ),
+          );
+          defaultMap.addAll(loaded);
+        }
+        if (mounted) {
+          setState(() {
+            _sidebarLabels.clear();
+            _sidebarLabels.addAll(defaultMap);
+          });
+          ref.read(appUiProvider.notifier).resetSidebarLabels(defaultMap);
+        }
+      }
     } catch (e) {
       print('[SETTINGS] _loadBackendData error: $e');
     } finally {
@@ -542,6 +629,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         // Trigger a fresh load for the new account after the current frame.
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
+          _resetFieldsForNewAccount();
           _loadBackendData();
         });
       }
@@ -5463,6 +5551,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   // ── 6. Labels & Sidebar Tab ───────────────────────────────────────────────
   Widget _buildLabelsSidebarTab(bool isDark) {
     final customLabels = ref.watch(customLabelsProvider);
+    final uiState = ref.watch(appUiProvider);
+    final vis = uiState.sidebarLabelVisibility;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -5519,8 +5609,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   return Wrap(
                     spacing: spacing,
                     runSpacing: spacing,
-                    children: _sidebarLabels.keys.map((label) {
-                      final isChecked = _sidebarLabels[label] ?? true;
+                    children: _standardSystemFolders.map((label) {
+                      final isChecked = vis[label] ?? _sidebarLabels[label] ?? true;
                       return SizedBox(
                         width: itemWidth,
                         child: Container(
@@ -5574,14 +5664,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                       .setSidebarLabel(label, val);
                                   final email =
                                       ref.read(activeAccountProvider).email;
+                                  final updatedMap =
+                                      ref.read(appUiProvider).sidebarLabelVisibility;
                                   if (email.isNotEmpty) {
                                     await TokenService.saveUserSettings(email, {
-                                      'sidebarLabels': _sidebarLabels,
+                                      'sidebarLabels': updatedMap,
                                     });
                                   }
                                   try {
                                     await UserRepository.updateSettings({
-                                      'sidebarLabels': _sidebarLabels,
+                                      'sidebarLabels': updatedMap,
                                     });
                                   } catch (_) {}
                                 },
@@ -5717,7 +5809,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       spacing: spacing,
                       runSpacing: spacing,
                       children: customLabels.map((lbl) {
-                        final isVisible = _sidebarLabels[lbl.name] ?? true;
+                        final isVisible = vis[lbl.name] ?? _sidebarLabels[lbl.name] ?? true;
                         return SizedBox(
                           width: itemWidth,
                           child: Container(
@@ -5789,6 +5881,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                     await ref
                                         .read(customLabelsProvider.notifier)
                                         .deleteLabel(lbl.id);
+                                    setState(() {
+                                      _sidebarLabels.remove(lbl.name);
+                                    });
+                                    final email =
+                                        ref.read(activeAccountProvider).email;
+                                    final updatedMap = Map<String, bool>.from(
+                                      ref.read(appUiProvider).sidebarLabelVisibility,
+                                    )..remove(lbl.name);
+                                    ref
+                                        .read(appUiProvider.notifier)
+                                        .resetSidebarLabels(updatedMap);
+                                    if (email.isNotEmpty) {
+                                      await TokenService.saveUserSettings(email, {
+                                        'sidebarLabels': updatedMap,
+                                      });
+                                    }
+                                    try {
+                                      await UserRepository.updateSettings({
+                                        'sidebarLabels': updatedMap,
+                                      });
+                                    } catch (_) {}
                                     _showSnackBar('Label "${lbl.name}" deleted');
                                   },
                                 ),
@@ -5801,14 +5914,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                         .setSidebarLabel(lbl.name, val);
                                     final email =
                                         ref.read(activeAccountProvider).email;
+                                    final updatedMap =
+                                        ref.read(appUiProvider).sidebarLabelVisibility;
                                     if (email.isNotEmpty) {
                                       await TokenService.saveUserSettings(email, {
-                                        'sidebarLabels': _sidebarLabels,
+                                        'sidebarLabels': updatedMap,
                                       });
                                     }
                                     try {
                                       await UserRepository.updateSettings({
-                                        'sidebarLabels': _sidebarLabels,
+                                        'sidebarLabels': updatedMap,
                                       });
                                     } catch (_) {}
                                   },

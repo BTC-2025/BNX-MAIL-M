@@ -6,7 +6,6 @@ import '../../features/dashboard/presentation/splash_screen.dart';
 import '../../features/inbox/presentation/email_list_screen.dart';
 import '../../features/dashboard/presentation/colab_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
-import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/help/presentation/help_support_screen.dart';
 import '../../features/ai/presentation/analytics_screen.dart';
 import '../../features/inbox/presentation/compose_screen.dart';
@@ -83,14 +82,9 @@ final goRouter = GoRouter(
         ),
         GoRoute(
           path: '/profile',
-          redirect: (context, state) {
-            if (defaultTargetPlatform == TargetPlatform.macOS) {
-              return '/manage-account';
-            }
-            return null;
-          },
+          redirect: (context, state) => '/manage-account',
           builder: (context, state) {
-            return const ProfileScreen();
+            return const ManageAccountScreen();
           },
         ),
         GoRoute(

@@ -301,13 +301,14 @@ class _SidebarState extends ConsumerState<Sidebar> {
         collapsed: isCollapsed,
         onTap: () => navigateToFolder('Purchases', '/'),
       ),
-      _buildPillTile(
-        icon: Icons.schedule_send_outlined,
-        title: 'Scheduled',
-        isSelected: uiState.activeFolder == 'Scheduled',
-        collapsed: isCollapsed,
-        onTap: () => navigateToFolder('Scheduled', '/'),
-      ),
+      if (labelsVis['Scheduled'] ?? true)
+        _buildPillTile(
+          icon: Icons.schedule_send_outlined,
+          title: 'Scheduled',
+          isSelected: uiState.activeFolder == 'Scheduled',
+          collapsed: isCollapsed,
+          onTap: () => navigateToFolder('Scheduled', '/'),
+        ),
       _buildPillTile(
         icon: Icons.outbox_outlined,
         title: 'Outbox',
@@ -324,14 +325,15 @@ class _SidebarState extends ConsumerState<Sidebar> {
           collapsed: isCollapsed,
           onTap: () => navigateToFolder('Archive', '/'),
         ),
-      _buildPillTile(
-        icon: Icons.mail_outline_rounded,
-        title: 'All Mail',
-        isSelected: uiState.activeFolder == 'All Mail',
-        collapsed: isCollapsed,
-        onTap: () => navigateToFolder('All Mail', '/'),
-      ),
-      if (isDesktopOS)
+      if (labelsVis['All Mail'] ?? true)
+        _buildPillTile(
+          icon: Icons.mail_outline_rounded,
+          title: 'All Mail',
+          isSelected: uiState.activeFolder == 'All Mail',
+          collapsed: isCollapsed,
+          onTap: () => navigateToFolder('All Mail', '/'),
+        ),
+      if (isDesktopOS && (labelsVis['All Inboxes'] ?? (labelsVis['All inboxes'] ?? true)))
         _buildPillTile(
           icon: Icons.all_inbox_rounded,
           title: 'All inboxes',
@@ -824,60 +826,66 @@ class _SidebarState extends ConsumerState<Sidebar> {
                         ),
                       ]
                     : [
-                        _buildPillTile(
-                          icon: Icons.inbox_rounded,
-                          title: 'Inbox',
-                          isSelected:
-                              uiState.activeFolder == 'Inbox' &&
-                              uiState.activeLabel == null,
-                          collapsed: isCollapsed,
-                          onTap: () => navigateToFolder('Inbox', '/home'),
-                        ),
-                        _buildPillTile(
-                          icon: Icons.star_border_rounded,
-                          title: 'Starred',
-                          isSelected:
-                              uiState.activeFolder == 'Starred' &&
-                              uiState.activeLabel == null,
-                          collapsed: isCollapsed,
-                          onTap: () => navigateToFolder('Starred', '/home'),
-                        ),
-                        _buildPillTile(
-                          icon: Icons.access_time_rounded,
-                          title: 'Snoozed',
-                          isSelected:
-                              uiState.activeFolder == 'Snoozed' &&
-                              uiState.activeLabel == null,
-                          collapsed: isCollapsed,
-                          onTap: () => navigateToFolder('Snoozed', '/home'),
-                        ),
-                        _buildPillTile(
-                          icon: Icons.send_outlined,
-                          title: 'Sent',
-                          isSelected:
-                              uiState.activeFolder == 'Sent' &&
-                              uiState.activeLabel == null,
-                          collapsed: isCollapsed,
-                          onTap: () => navigateToFolder('Sent', '/home'),
-                        ),
-                        _buildPillTile(
-                          icon: Icons.description_outlined,
-                          title: 'Draft',
-                          isSelected:
-                              uiState.activeFolder == 'Draft' &&
-                              uiState.activeLabel == null,
-                          collapsed: isCollapsed,
-                          onTap: () => navigateToFolder('Draft', '/home'),
-                        ),
-                        _buildPillTile(
-                          icon: Icons.delete_outline_rounded,
-                          title: 'Trash',
-                          isSelected:
-                              uiState.activeFolder == 'Trash' &&
-                              uiState.activeLabel == null,
-                          collapsed: isCollapsed,
-                          onTap: () => navigateToFolder('Trash', '/home'),
-                        ),
+                        if (labelsVis['Inbox'] ?? true)
+                          _buildPillTile(
+                            icon: Icons.inbox_rounded,
+                            title: 'Inbox',
+                            isSelected:
+                                uiState.activeFolder == 'Inbox' &&
+                                uiState.activeLabel == null,
+                            collapsed: isCollapsed,
+                            onTap: () => navigateToFolder('Inbox', '/home'),
+                          ),
+                        if (labelsVis['Starred'] ?? true)
+                          _buildPillTile(
+                            icon: Icons.star_border_rounded,
+                            title: 'Starred',
+                            isSelected:
+                                uiState.activeFolder == 'Starred' &&
+                                uiState.activeLabel == null,
+                            collapsed: isCollapsed,
+                            onTap: () => navigateToFolder('Starred', '/home'),
+                          ),
+                        if (labelsVis['Snoozed'] ?? true)
+                          _buildPillTile(
+                            icon: Icons.access_time_rounded,
+                            title: 'Snoozed',
+                            isSelected:
+                                uiState.activeFolder == 'Snoozed' &&
+                                uiState.activeLabel == null,
+                            collapsed: isCollapsed,
+                            onTap: () => navigateToFolder('Snoozed', '/home'),
+                          ),
+                        if (labelsVis['Sent'] ?? true)
+                          _buildPillTile(
+                            icon: Icons.send_outlined,
+                            title: 'Sent',
+                            isSelected:
+                                uiState.activeFolder == 'Sent' &&
+                                uiState.activeLabel == null,
+                            collapsed: isCollapsed,
+                            onTap: () => navigateToFolder('Sent', '/home'),
+                          ),
+                        if (labelsVis['Draft'] ?? true)
+                          _buildPillTile(
+                            icon: Icons.description_outlined,
+                            title: 'Draft',
+                            isSelected:
+                                uiState.activeFolder == 'Draft' &&
+                                uiState.activeLabel == null,
+                            collapsed: isCollapsed,
+                            onTap: () => navigateToFolder('Draft', '/home'),
+                          ),
+                        if (labelsVis['Trash'] ?? true)
+                          _buildPillTile(
+                            icon: Icons.delete_outline_rounded,
+                            title: 'Trash',
+                            isSelected:
+                                uiState.activeFolder == 'Trash' &&
+                                uiState.activeLabel == null,
+                            collapsed: isCollapsed,
+                            onTap: () => navigateToFolder('Trash', '/home'),
+                          ),
                         if (!_isMoreExpanded)
                           _buildPillTile(
                             icon: Icons.keyboard_arrow_down_rounded,
@@ -895,54 +903,60 @@ class _SidebarState extends ConsumerState<Sidebar> {
                             onTap: () =>
                                 setState(() => _isMoreExpanded = false),
                           ),
-                          _buildPillTile(
-                            icon: Icons.schedule_rounded,
-                            title: 'Scheduled',
-                            isSelected: uiState.activeFolder == 'Scheduled',
-                            collapsed: isCollapsed,
-                            onTap: () => navigateToFolder('Scheduled', '/home'),
-                          ),
-                          _buildPillTile(
-                            icon: Icons.error_outline_rounded,
-                            title: 'Spam',
-                            isSelected: uiState.activeFolder == 'Spam',
-                            collapsed: isCollapsed,
-                            onTap: () => navigateToFolder('Spam', '/home'),
-                          ),
-                          _buildPillTile(
-                            icon: Icons.mail_outline_rounded,
-                            title: 'All Mail',
-                            isSelected: uiState.activeFolder == 'All Mail',
-                            collapsed: isCollapsed,
-                            onTap: () => navigateToFolder('All Mail', '/home'),
-                          ),
-                          _buildPillTile(
-                            icon: Icons.all_inbox_rounded,
-                            title: 'All inboxes',
-                            isSelected:
-                                uiState.activeFolder == 'All Inboxes' ||
-                                uiState.activeFolder == 'All inboxes',
-                            badgeText: allInboxesCount > 0
-                                ? '$allInboxesCount'
-                                : null,
-                            collapsed: isCollapsed,
-                            onTap: () =>
-                                navigateToFolder('All Inboxes', '/home'),
-                          ),
-                          _buildPillTile(
-                            icon: Icons.archive_outlined,
-                            title: 'Archive',
-                            isSelected: uiState.activeFolder == 'Archive',
-                            collapsed: isCollapsed,
-                            onTap: () => navigateToFolder('Archive', '/home'),
-                          ),
-                          _buildPillTile(
-                            icon: Icons.mark_email_unread_outlined,
-                            title: 'Unread',
-                            isSelected: uiState.activeFolder == 'Unread',
-                            collapsed: isCollapsed,
-                            onTap: () => navigateToFolder('Unread', '/home'),
-                          ),
+                          if (labelsVis['Scheduled'] ?? true)
+                            _buildPillTile(
+                              icon: Icons.schedule_rounded,
+                              title: 'Scheduled',
+                              isSelected: uiState.activeFolder == 'Scheduled',
+                              collapsed: isCollapsed,
+                              onTap: () => navigateToFolder('Scheduled', '/home'),
+                            ),
+                          if ((labelsVis['Spam'] ?? true) && (labelsVis['Bulk Mail'] ?? true))
+                            _buildPillTile(
+                              icon: Icons.error_outline_rounded,
+                              title: 'Spam',
+                              isSelected: uiState.activeFolder == 'Spam',
+                              collapsed: isCollapsed,
+                              onTap: () => navigateToFolder('Spam', '/home'),
+                            ),
+                          if (labelsVis['All Mail'] ?? true)
+                            _buildPillTile(
+                              icon: Icons.mail_outline_rounded,
+                              title: 'All Mail',
+                              isSelected: uiState.activeFolder == 'All Mail',
+                              collapsed: isCollapsed,
+                              onTap: () => navigateToFolder('All Mail', '/home'),
+                            ),
+                          if (labelsVis['All Inboxes'] ?? (labelsVis['All inboxes'] ?? true))
+                            _buildPillTile(
+                              icon: Icons.all_inbox_rounded,
+                              title: 'All inboxes',
+                              isSelected:
+                                  uiState.activeFolder == 'All Inboxes' ||
+                                  uiState.activeFolder == 'All inboxes',
+                              badgeText: allInboxesCount > 0
+                                  ? '$allInboxesCount'
+                                  : null,
+                              collapsed: isCollapsed,
+                              onTap: () =>
+                                  navigateToFolder('All Inboxes', '/home'),
+                            ),
+                          if (labelsVis['Archive'] ?? true)
+                            _buildPillTile(
+                              icon: Icons.archive_outlined,
+                              title: 'Archive',
+                              isSelected: uiState.activeFolder == 'Archive',
+                              collapsed: isCollapsed,
+                              onTap: () => navigateToFolder('Archive', '/home'),
+                            ),
+                          if (labelsVis['Unread'] ?? true)
+                            _buildPillTile(
+                              icon: Icons.mark_email_unread_outlined,
+                              title: 'Unread',
+                              isSelected: uiState.activeFolder == 'Unread',
+                              collapsed: isCollapsed,
+                              onTap: () => navigateToFolder('Unread', '/home'),
+                            ),
                           _buildPillTile(
                             icon: Icons.assignment_outlined,
                             title: 'Templates',
@@ -958,14 +972,15 @@ class _SidebarState extends ConsumerState<Sidebar> {
                             onTap: () =>
                                 navigateToFolder('Analytics', '/analytics'),
                           ),
-                          _buildPillTile(
-                            icon: Icons.notifications_none_rounded,
-                            title: 'Subscriptions',
-                            isSelected: uiState.activeFolder == 'Subscriptions',
-                            collapsed: isCollapsed,
-                            onTap: () =>
-                                navigateToFolder('Subscriptions', '/home'),
-                          ),
+                          if ((labelsVis['Subscriptions'] ?? true) && (labelsVis['Notifications'] ?? true))
+                            _buildPillTile(
+                              icon: Icons.notifications_none_rounded,
+                              title: 'Subscriptions',
+                              isSelected: uiState.activeFolder == 'Subscriptions',
+                              collapsed: isCollapsed,
+                              onTap: () =>
+                                  navigateToFolder('Subscriptions', '/home'),
+                            ),
                           _buildPillTile(
                             icon: Icons.cloud_upload_outlined,
                             title: 'Mail Backup',

@@ -4,10 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:file_picker/file_picker.dart';
-import '../../../core/theme/colors.dart';
+import '../../../core/network/api_exception.dart';
 import '../../../core/widgets/avatar_widget.dart';
 import '../../../data/account_provider.dart';
-import '../../../data/app_state_provider.dart';
+import '../../../data/repositories/user_repository.dart';
 import '../../../models/account_model.dart';
 
 class ManageAccountScreen extends ConsumerStatefulWidget {
@@ -19,87 +19,414 @@ class ManageAccountScreen extends ConsumerStatefulWidget {
       _ManageAccountScreenState();
 }
 
-class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
-    with SingleTickerProviderStateMixin {
+class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
   late int _selectedTab;
-  late AnimationController _animController;
-  late Animation<double> _fadeAnim;
+  int _homeSubPage = 0; // 0 = Overview grid, 1 = Emails & Identities, 2 = Data & Privacy, 3 = Signing in to BNX
+  bool _isLoading = false;
 
-  // Subscription State
-  String _subPlanName = 'Cliks Business';
-  String _subPrice = '\$29/month';
-  final String _subRenewalDate = 'Aug 15, 2026';
-  String _subPaymentMethod = '•••• 4242 (Visa)';
-  int _subTeamSeats = 25;
+  // Personal Info local state
+  String _nickname = 'Not set';
+  String _displayName = 'Not set';
+  String _gender = 'Rather not say';
+  String _homeAddress = 'None added';
+  String _workAddress = 'None added';
+  String _occupation = 'None added';
+  String _bio = 'Write a brief description about yourself';
+  bool _isProfileMenuOpen = false;
 
-  static const _brandBlue = Color(0xFF195BAC);
-  static const _brandBlueLight = Color(0xFF3B82F6);
-  static const _accentGreen = Color(0xFF16A34A);
+  // Section 5.1 & 5.3: Connected Mail Accounts state
+  List<Map<String, dynamic>> _connectedEmails = [];
+  bool _isLoadingEmails = false;
+
+  // Section 5.5: Sub-IDs state
+  List<Map<String, dynamic>> _apiSubIds = [];
+  bool _isLoadingSubIds = false;
+
+  // Sub-IDs fallback state
+  final List<Map<String, String>> _subIds = [
+    {
+      'username': 'sales.ravinew2004',
+      'name': 'ravi kumar',
+      'type': 'BUSINESS',
+    },
+  ];
 
   final List<_TabItem> _tabs = const [
     _TabItem(
       title: 'Home',
-      icon: Icons.grid_view_rounded,
-      selectedIcon: Icons.grid_view_rounded,
+      icon: Icons.home_outlined,
+      selectedIcon: Icons.home_outlined,
     ),
     _TabItem(
-      title: 'Personal information',
+      title: 'Personal info',
       icon: Icons.person_outline_rounded,
-      selectedIcon: Icons.person_rounded,
+      selectedIcon: Icons.person_outline_rounded,
     ),
     _TabItem(
-      title: 'Payment and subscription',
-      icon: Icons.card_membership_rounded,
-      selectedIcon: Icons.card_membership_rounded,
+      title: 'Payment &\nsubscription',
+      icon: Icons.credit_card_outlined,
+      selectedIcon: Icons.credit_card_outlined,
+    ),
+    _TabItem(
+      title: 'Team & Sub-IDs',
+      icon: Icons.people_outline_rounded,
+      selectedIcon: Icons.people_outline_rounded,
     ),
     _TabItem(
       title: 'Account storage',
-      icon: Icons.cloud_outlined,
-      selectedIcon: Icons.cloud_rounded,
+      icon: Icons.inventory_2_outlined,
+      selectedIcon: Icons.inventory_2_outlined,
     ),
     _TabItem(
-      title: 'B2 auth',
-      icon: Icons.security_outlined,
-      selectedIcon: Icons.security_rounded,
+      title: 'B2Auth',
+      icon: Icons.verified_user_outlined,
+      selectedIcon: Icons.verified_user_outlined,
     ),
   ];
 
   @override
   void initState() {
     super.initState();
-    _selectedTab = widget.initialTab;
-    _animController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
-    _fadeAnim = CurvedAnimation(
-      parent: _animController,
-      curve: Curves.easeOutCubic,
-    );
-    _animController.forward();
+    _selectedTab = widget.initialTab.clamp(0, _tabs.length - 1);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadAccountData();
+    });
   }
 
-  @override
-  void dispose() {
-    _animController.dispose();
-    super.dispose();
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SECTION 5 API INTEGRATIONS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  Future<void> _loadAccountData() async {
+    _loadProfileSettings();
+    _loadConnectedEmails();
+    _loadSubIds();
   }
 
+  Future<void> _loadProfileSettings() async {
+    try {
+      final settings = await UserRepository.getSettings();
+      if (settings != null && mounted) {
+        setState(() {
+          if (settings['nickname'] != null &&
+              settings['nickname'].toString().isNotEmpty) {
+            _nickname = settings['nickname'].toString();
+          }
+          if (settings['displayName'] != null &&
+              settings['displayName'].toString().isNotEmpty) {
+            _displayName = settings['displayName'].toString();
+          }
+          if (settings['gender'] != null &&
+              settings['gender'].toString().isNotEmpty) {
+            _gender = settings['gender'].toString();
+          }
+          if (settings['homeAddress'] != null &&
+              settings['homeAddress'].toString().isNotEmpty) {
+            _homeAddress = settings['homeAddress'].toString();
+          }
+          if (settings['workAddress'] != null &&
+              settings['workAddress'].toString().isNotEmpty) {
+            _workAddress = settings['workAddress'].toString();
+          }
+          if (settings['occupation'] != null &&
+              settings['occupation'].toString().isNotEmpty) {
+            _occupation = settings['occupation'].toString();
+          }
+          if (settings['bio'] != null &&
+              settings['bio'].toString().isNotEmpty) {
+            _bio = settings['bio'].toString();
+          }
+        });
+      }
+    } catch (e) {
+      print('[MANAGE_ACCOUNT] loadProfileSettings error: $e');
+    }
+  }
+
+  /// 5.1 List Connected Mail Accounts (GET /api/emails/list)
+  Future<void> _loadConnectedEmails() async {
+    if (!mounted) return;
+    setState(() => _isLoadingEmails = true);
+    try {
+      final list = await UserRepository.getConnectedEmails();
+      if (mounted) {
+        setState(() {
+          _connectedEmails = list;
+          _isLoadingEmails = false;
+        });
+      }
+    } catch (e) {
+      print('[MANAGE_ACCOUNT] loadConnectedEmails error: $e');
+      if (mounted) setState(() => _isLoadingEmails = false);
+    }
+  }
+
+  /// 5.3 Switch Primary Mailbox (POST /api/emails/{emailId}/set-primary)
+  Future<void> _switchPrimaryEmail(dynamic emailId) async {
+    setState(() => _isLoadingEmails = true);
+    final success = await UserRepository.switchPrimaryMailbox(emailId);
+    if (mounted) {
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Primary email switched successfully'),
+            backgroundColor: Color(0xFF1E8E3E),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        await _loadConnectedEmails();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to switch primary email'),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        setState(() => _isLoadingEmails = false);
+      }
+    }
+  }
+
+  /// 5.2 Create New Mailbox / Alias (POST /api/emails/create)
+  void _openCreateMailboxDialog(bool isDark) {
+    final nameCtrl = TextEditingController();
+    final passCtrl = TextEditingController();
+    bool obscure = true;
+    bool isSubmitting = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final surfaceColor = isDark ? const Color(0xFF23262B) : Colors.white;
+          final borderColor =
+              isDark ? const Color(0xFF383C44) : const Color(0xFFE2E4E8);
+
+          return Dialog(
+            backgroundColor: surfaceColor,
+            elevation: 12,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: borderColor, width: 1),
+            ),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Create New Mailbox / Alias',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color:
+                                isDark ? Colors.white : const Color(0xFF202124),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded, size: 20),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Create a new linked mailbox identity for your account.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color:
+                            isDark ? Colors.white60 : const Color(0xFF5F6368),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    TextField(
+                      controller: nameCtrl,
+                      decoration: InputDecoration(
+                        labelText: 'Mailbox Name / Prefix',
+                        hintText: 'e.g. support or ashwin_work',
+                        suffixText: '@bnxmail.com',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: passCtrl,
+                      obscureText: obscure,
+                      decoration: InputDecoration(
+                        labelText: 'Password',
+                        hintText: 'Enter secure password',
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            obscure ? Icons.visibility_off : Icons.visibility,
+                            size: 20,
+                          ),
+                          onPressed: () =>
+                              setDialogState(() => obscure = !obscure),
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('Cancel'),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton(
+                          onPressed: isSubmitting
+                              ? null
+                              : () async {
+                                  final name = nameCtrl.text.trim();
+                                  final pass = passCtrl.text.trim();
+                                  if (name.isEmpty || pass.isEmpty) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Please fill all fields'),
+                                        behavior: SnackBarBehavior.floating,
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  setDialogState(() => isSubmitting = true);
+                                  final messenger = ScaffoldMessenger.of(context);
+                                  try {
+                                    await UserRepository.createMailbox(
+                                      emailName: name,
+                                      password: pass,
+                                    );
+                                    if (ctx.mounted) Navigator.pop(ctx);
+                                    if (mounted) {
+                                      messenger.showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                              'Mailbox "$name@bnxmail.com" created successfully'),
+                                          backgroundColor:
+                                              const Color(0xFF1E8E3E),
+                                          behavior: SnackBarBehavior.floating,
+                                        ),
+                                      );
+                                      await _loadConnectedEmails();
+                                    }
+                                  } catch (e) {
+                                    setDialogState(() => isSubmitting = false);
+                                    if (mounted) {
+                                      messenger.showSnackBar(
+                                        SnackBar(
+                                          content:
+                                              Text('Failed to create mailbox: $e'),
+                                          backgroundColor: Colors.redAccent,
+                                          behavior: SnackBarBehavior.floating,
+                                        ),
+                                      );
+                                    }
+                                  }
+                                },
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF1A73E8),
+                          ),
+                          child: isSubmitting
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Text('Create Mailbox'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// 5.5 List Sub-ID Accounts (GET /api/subid/list)
+  Future<void> _loadSubIds() async {
+    if (!mounted) return;
+    setState(() => _isLoadingSubIds = true);
+    try {
+      final list = await UserRepository.listSubIds();
+      if (mounted) {
+        setState(() {
+          _apiSubIds = list;
+          _isLoadingSubIds = false;
+        });
+      }
+    } catch (e) {
+      print('[MANAGE_ACCOUNT] loadSubIds error: $e');
+      if (mounted) setState(() => _isLoadingSubIds = false);
+    }
+  }
+
+  /// 5.6 Parent Approval for Child Accounts (PATCH /api/users/{id}/approve)
+  Future<void> _approveChildAccount(dynamic subId) async {
+    final success = await UserRepository.approveChildAccount(subId);
+    if (mounted) {
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Child account approved successfully'),
+            backgroundColor: Color(0xFF1E8E3E),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        await _loadSubIds();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to approve child account'),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PHOTO UPLOAD & REMOVE
+  // ═══════════════════════════════════════════════════════════════════════════
   Future<void> _pickAndUploadPhoto() async {
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.image,
         allowMultiple: false,
       );
-      if (result != null && result.files.single.path != null) {
-        final filePath = result.files.single.path!;
-        final file = File(filePath);
-        if (await file.exists()) {
-          final bytes = await file.readAsBytes();
-          final ext = filePath.split('.').last.toLowerCase();
-          final mime = (ext == 'png') ? 'image/png' : 'image/jpeg';
-          final base64String = 'data:$mime;base64,${base64Encode(bytes)}';
 
+      if (result != null && result.files.isNotEmpty) {
+        setState(() => _isLoading = true);
+        final file = result.files.first;
+        String? base64String;
+
+        if (file.bytes != null) {
+          base64String = base64Encode(file.bytes!);
+        } else if (file.path != null) {
+          final bytes = await File(file.path!).readAsBytes();
+          base64String = base64Encode(bytes);
+        }
+
+        if (base64String != null) {
           final activeAccount = ref.read(activeAccountProvider);
           await ref
               .read(accountsProvider.notifier)
@@ -107,13 +434,9 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
 
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: const Text('Profile photo updated!'),
-                backgroundColor: _brandBlue,
+              const SnackBar(
+                content: Text('Profile photo updated successfully'),
                 behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
               ),
             );
           }
@@ -123,23 +446,29 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to update image: $e'),
+            content: Text('Failed to update photo: $e'),
             backgroundColor: Colors.red,
             behavior: SnackBarBehavior.floating,
           ),
         );
       }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _handleSignOut() async {
+  Future<void> _removePhoto() async {
+    final activeAccount = ref.read(activeAccountProvider);
+    if (activeAccount.avatarUrl == null || activeAccount.avatarUrl!.isEmpty) {
+      return;
+    }
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Sign Out'),
+        title: const Text('Remove Photo'),
         content: const Text(
-          'Are you sure you want to sign out of your account?',
+          'Are you sure you want to remove your profile photo?',
         ),
         actions: [
           TextButton(
@@ -148,61 +477,95 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text(
-              'Sign Out',
-              style: TextStyle(color: Colors.redAccent),
-            ),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Remove'),
           ),
         ],
       ),
     );
-    if (confirmed != true) return;
-    if (!mounted) return;
 
-    final activeAccount = ref.read(activeAccountProvider);
-    final activeEmail = activeAccount.email.isNotEmpty
-        ? activeAccount.email
-        : activeAccount.id;
-    await ref
-        .read(accountsProvider.notifier)
-        .signOutSingleAccount(
-          targetEmail: activeEmail,
-          ref: ref,
-          context: context,
-        );
+    if (confirmed == true) {
+      setState(() => _isLoading = true);
+      try {
+        await ref
+            .read(accountsProvider.notifier)
+            .updateAvatar(activeAccount.id, '');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Profile photo removed'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to remove photo: $e'),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
+    }
   }
 
-  void _switchTab(int index) {
-    if (_selectedTab == index) return;
-    setState(() => _selectedTab = index);
-    _animController.reset();
-    _animController.forward();
-  }
-
+  // ═══════════════════════════════════════════════════════════════════════════
+  // BUILD ENTRY POINT
+  // ═══════════════════════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
-    final uiState = ref.watch(appUiProvider);
-    final isDark = uiState.isDarkMode;
-    final activeAccount = ref.watch(activeAccountProvider);
+    final account = ref.watch(activeAccountProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 800;
 
-    final bgColor = isDark ? BNXColors.darkBg : const Color(0xFFE9F4FF);
-    final surfaceColor = isDark ? BNXColors.darkSurface : Colors.white;
+    final bgColor = isDark ? const Color(0xFF1E2022) : Colors.white;
 
     return Scaffold(
       backgroundColor: bgColor,
       body: SafeArea(
         child: Column(
           children: [
-            // ── Top Header ──
-            _buildAppBar(isDark, surfaceColor),
+            // Top Google Account Style Bar (Exact match to screenshots)
+            _buildTopAppBar(account, isDark, isMobile),
 
-            // ── Main Content Area ──
+            // Mobile Horizontal Tab Bar (For responsive screens)
+            if (isMobile) _buildMobileTabBar(isDark),
+
+            // Content Area (Split Sidebar + Body on Desktop)
             Expanded(
               child: isMobile
-                  ? _buildMobileLayout(activeAccount, isDark, surfaceColor)
-                  : _buildDesktopLayout(activeAccount, isDark, surfaceColor),
+                  ? _buildScrollableContent(account, isDark, isMobile)
+                  : Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Left Sidebar
+                        _buildDesktopSidebar(isDark),
+
+                        // Vertical Divider
+                        VerticalDivider(
+                          width: 1,
+                          thickness: 1,
+                          color: isDark
+                              ? const Color(0xFF3C4043)
+                              : const Color(0xFFE8EAED),
+                        ),
+
+                        // Main Scrollable Area
+                        Expanded(
+                          child: _buildScrollableContent(
+                            account,
+                            isDark,
+                            isMobile,
+                          ),
+                        ),
+                      ],
+                    ),
             ),
           ],
         ),
@@ -211,380 +574,549 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // TOP APP BAR
+  // TOP BAR (Screenshots 1-5: [B BETA] Account  ...  (?) [:::] [Avatar Ravi v])
   // ═══════════════════════════════════════════════════════════════════════════
-  Widget _buildAppBar(bool isDark, Color surfaceColor) {
+  Widget _buildTopAppBar(AccountModel account, bool isDark, bool isMobile) {
+    final displayName = account.name.isNotEmpty ? account.name : 'Ravi Kumar C';
+
     return Container(
-      height: 56,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      height: 64,
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 24),
       decoration: BoxDecoration(
-        color: surfaceColor,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
+        color: isDark ? const Color(0xFF24272B) : Colors.white,
+        border: Border(
+          bottom: BorderSide(
+            color: isDark ? const Color(0xFF3C4043) : const Color(0xFFE8EAED),
+            width: 1,
           ),
-        ],
+        ),
       ),
       child: Row(
         children: [
-          IconButton(
-            onPressed: () => context.pop(),
-            icon: Icon(
-              Icons.arrow_back_ios_new_rounded,
-              size: 18,
-              color: isDark ? Colors.white70 : const Color(0xFF475569),
+          // On mobile, show back button if can pop
+          if (isMobile && Navigator.of(context).canPop()) ...[
+            IconButton(
+              icon: Icon(
+                Icons.arrow_back_rounded,
+                color: isDark ? Colors.white70 : const Color(0xFF5F6368),
+                size: 20,
+              ),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+              tooltip: 'Back',
+              onPressed: () => Navigator.of(context).pop(),
             ),
-            tooltip: 'Back',
-          ),
-          Container(
-            width: 30,
-            height: 30,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.08),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image.asset(
-                'assets/beta_logo.jpg',
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _brandBlue,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Text(
-                    'Beta',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
+            const SizedBox(width: 4),
+          ],
+
+          // Logo (B Beta) + "Account" title
+          InkWell(
+            onTap: () {
+              if (Navigator.of(context).canPop()) {
+                Navigator.of(context).pop();
+              } else {
+                context.go('/');
+              }
+            },
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: Image.asset(
+                      'assets/beta_logo.jpg',
+                      height: 32,
+                      width: 32,
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) => const Icon(
+                        Icons.account_circle,
+                        size: 32,
+                        color: Color(0xFF1A73E8),
+                      ),
                     ),
                   ),
-                ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Account',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w400,
+                      color: isDark ? Colors.white70 : const Color(0xFF5F6368),
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'My Account',
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-                color: isDark ? Colors.white : const Color(0xFF1E293B),
-                letterSpacing: -0.3,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
+
+          const Spacer(),
+
+          // Help Icon (?)
           IconButton(
             icon: Icon(
               Icons.help_outline_rounded,
-              size: 20,
-              color: isDark ? Colors.white54 : const Color(0xFF64748B),
+              color: isDark ? Colors.white70 : const Color(0xFF5F6368),
+              size: 22,
             ),
             tooltip: 'Help',
             onPressed: () {},
           ),
+
+          // Apps Launcher Icon (3x3 grid)
+          IconButton(
+            icon: Icon(
+              Icons.apps_rounded,
+              color: isDark ? Colors.white70 : const Color(0xFF5F6368),
+              size: 22,
+            ),
+            tooltip: 'BNX Apps',
+            onPressed: () {},
+          ),
+
+          const SizedBox(width: 6),
+
+          // User Profile Dropdown Pill
+          _buildUserProfilePill(account, displayName, isDark, isMobile),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUserProfilePill(
+    AccountModel account,
+    String displayName,
+    bool isDark,
+    bool isMobile,
+  ) {
+    return PopupMenuButton<String>(
+      tooltip: 'Account Info',
+      offset: const Offset(0, 52),
+      elevation: 6,
+      padding: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+        side: BorderSide(
+          color: isDark ? const Color(0xFF3C4043) : const Color(0xFFDADCE0),
+        ),
+      ),
+      color: isDark ? const Color(0xFF24272B) : Colors.white,
+      onOpened: () => setState(() => _isProfileMenuOpen = true),
+      onCanceled: () => setState(() => _isProfileMenuOpen = false),
+      onSelected: (value) {
+        setState(() => _isProfileMenuOpen = false);
+        if (value == 'sign_out') {
+          _handleSignOut();
+        } else if (value == 'add_account') {
+          context.go('/auth/login');
+        }
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem<String>(
+          enabled: false,
+          padding: EdgeInsets.zero,
+          child: Container(
+            width: 270,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Top Center Avatar
+                AvatarWidget(
+                  name: displayName,
+                  avatarUrl: account.avatarUrl,
+                  size: 64,
+                  fontSize: 26,
+                ),
+                const SizedBox(height: 12),
+                // Name
+                Text(
+                  displayName,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white : const Color(0xFF202124),
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 3),
+                // Email
+                Text(
+                  account.email.isNotEmpty
+                      ? account.email
+                      : 'ravinew2004@bnxmail.com',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: isDark ? Colors.white60 : const Color(0xFF5F6368),
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: isDark
+                      ? const Color(0xFF3C4043)
+                      : const Color(0xFFE8EAED),
+                ),
+                const SizedBox(height: 14),
+
+                // Action 1: Add another account
+                InkWell(
+                  onTap: () {
+                    Navigator.pop(context);
+                    context.go('/auth/login');
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.add,
+                          size: 19,
+                          color: isDark ? Colors.white : const Color(0xFF202124),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Add another account',
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? Colors.white : const Color(0xFF202124),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+
+                // Action 2: Sign out of all accounts
+                InkWell(
+                  onTap: () {
+                    Navigator.pop(context);
+                    _handleSignOut();
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.logout_rounded,
+                          size: 19,
+                          color: isDark ? Colors.white : const Color(0xFF202124),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Sign out of all accounts',
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? Colors.white : const Color(0xFF202124),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: isDark ? const Color(0xFF3C4043) : const Color(0xFFDADCE0),
+          ),
+          color: Colors.transparent,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AvatarWidget(
+              name: displayName,
+              avatarUrl: account.avatarUrl,
+              size: 30,
+              fontSize: 12,
+            ),
+            if (!isMobile) ...[
+              const SizedBox(width: 8),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 140),
+                child: Text(
+                  displayName,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: isDark ? Colors.white : const Color(0xFF3C4043),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Icon(
+                _isProfileMenuOpen
+                    ? Icons.keyboard_arrow_up_rounded
+                    : Icons.keyboard_arrow_down_rounded,
+                size: 18,
+                color: isDark ? Colors.white54 : const Color(0xFF5F6368),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // DESKTOP LEFT SIDEBAR (Exact match to Screenshots 1-5)
+  // ═══════════════════════════════════════════════════════════════════════════
+  Widget _buildDesktopSidebar(bool isDark) {
+    return Container(
+      width: 250,
+      color: isDark ? const Color(0xFF1E2022) : Colors.white,
+      padding: const EdgeInsets.only(top: 16, bottom: 20, left: 16, right: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Sidebar Tabs
+          ...List.generate(_tabs.length, (index) {
+            final tab = _tabs[index];
+            final isSelected = _selectedTab == index;
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: InkWell(
+                onTap: () {
+                  if (index == 4) {
+                    context.push('/storage');
+                    return;
+                  }
+                  setState(() {
+                    _selectedTab = index;
+                    if (index == 0) _homeSubPage = 0;
+                  });
+                },
+                borderRadius: BorderRadius.circular(24),
+                child: Container(
+                  constraints: const BoxConstraints(minHeight: 48),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? (isDark
+                            ? const Color(0xFF1A73E8).withValues(alpha: 0.15)
+                            : const Color(0xFFE8F0FE))
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(24),
+                    border: isSelected
+                        ? Border.all(
+                            color: const Color(0xFF1A73E8),
+                            width: 1.5,
+                          )
+                        : null,
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        isSelected ? tab.selectedIcon : tab.icon,
+                        size: 20,
+                        color: isSelected
+                            ? const Color(0xFF1A73E8)
+                            : (isDark
+                                ? Colors.white60
+                                : const Color(0xFF5F6368)),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Text(
+                          tab.title,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: isSelected
+                                ? FontWeight.w500
+                                : FontWeight.w400,
+                            color: isSelected
+                                ? const Color(0xFF1A73E8)
+                                : (isDark
+                                    ? Colors.white70
+                                    : const Color(0xFF3C4043)),
+                            height: 1.25,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }),
+
+          const Spacer(),
+
+          // Bottom Sign out button (Exact match to Screenshots)
+          InkWell(
+            onTap: _handleSignOut,
+            borderRadius: BorderRadius.circular(24),
+            child: Container(
+              height: 44,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.logout_rounded,
+                    size: 20,
+                    color: isDark ? Colors.white60 : const Color(0xFF5F6368),
+                  ),
+                  const SizedBox(width: 16),
+                  Text(
+                    'Sign out',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
+                      color:
+                          isDark ? Colors.white70 : const Color(0xFF3C4043),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // CREATIVE MOBILE LAYOUT WITH GLASS TAB DOCK
+  // MOBILE TAB BAR
   // ═══════════════════════════════════════════════════════════════════════════
-  Widget _buildMobileLayout(
-    AccountModel account,
-    bool isDark,
-    Color surfaceColor,
-  ) {
-    return Column(
-      children: [
-        // ── Modern Floating Segmented Tab Bar ──
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: surfaceColor,
-            border: Border(
-              bottom: BorderSide(
-                color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
-                width: 1,
-              ),
-            ),
+  Widget _buildMobileTabBar(bool isDark) {
+    return Container(
+      height: 52,
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF24272B) : Colors.white,
+        border: Border(
+          bottom: BorderSide(
+            color: isDark ? const Color(0xFF3C4043) : const Color(0xFFE8EAED),
           ),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            child: Row(
-              children: List.generate(_tabs.length, (index) {
-                final tab = _tabs[index];
-                final isSelected = _selectedTab == index;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: GestureDetector(
-                    onTap: () => _switchTab(index),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 220),
-                      curve: Curves.easeInOut,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        gradient: isSelected
-                            ? const LinearGradient(
-                                colors: [_brandBlue, _brandBlueLight],
-                              )
-                            : null,
+        ),
+      ),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        itemCount: _tabs.length,
+        itemBuilder: (context, index) {
+          final tab = _tabs[index];
+          final isSelected = _selectedTab == index;
+          // Flatten multi-line title for horizontal tab
+          final singleLineTitle = tab.title.replaceAll('\n', ' ');
+
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: InkWell(
+              onTap: () {
+                if (index == 4) {
+                  context.push('/storage');
+                  return;
+                }
+                setState(() {
+                  _selectedTab = index;
+                  if (index == 0) _homeSubPage = 0;
+                });
+              },
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? (isDark
+                          ? const Color(0xFF1A73E8).withValues(alpha: 0.2)
+                          : const Color(0xFFE8F0FE))
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(20),
+                  border: isSelected
+                      ? Border.all(color: const Color(0xFF1A73E8), width: 1.5)
+                      : Border.all(
+                          color: isDark
+                              ? const Color(0xFF3C4043)
+                              : const Color(0xFFE8EAED),
+                        ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isSelected ? tab.selectedIcon : tab.icon,
+                      size: 16,
+                      color: isSelected
+                          ? const Color(0xFF1A73E8)
+                          : (isDark
+                              ? Colors.white60
+                              : const Color(0xFF5F6368)),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      singleLineTitle,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight:
+                            isSelected ? FontWeight.w600 : FontWeight.w500,
                         color: isSelected
-                            ? null
+                            ? const Color(0xFF1A73E8)
                             : (isDark
-                                  ? Colors.white.withValues(alpha: 0.06)
-                                  : const Color(0xFFF1F5F9)),
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: isSelected
-                            ? [
-                                BoxShadow(
-                                  color: _brandBlue.withValues(alpha: 0.3),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 3),
-                                ),
-                              ]
-                            : null,
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            isSelected ? tab.selectedIcon : tab.icon,
-                            size: 16,
-                            color: isSelected
-                                ? Colors.white
-                                : (isDark
-                                      ? Colors.white54
-                                      : const Color(0xFF64748B)),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            tab.title,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: isSelected
-                                  ? FontWeight.w700
-                                  : FontWeight.w500,
-                              color: isSelected
-                                  ? Colors.white
-                                  : (isDark
-                                        ? Colors.white70
-                                        : const Color(0xFF475569)),
-                            ),
-                          ),
-                        ],
+                                ? Colors.white70
+                                : const Color(0xFF3C4043)),
                       ),
                     ),
-                  ),
-                );
-              }),
-            ),
-          ),
-        ),
-
-        // ── Tab Content Container ──
-        Expanded(
-          child: FadeTransition(
-            opacity: _fadeAnim,
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-              child: _buildActiveTabContent(account, isDark, true),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // DESKTOP LAYOUT WITH SIDEBAR
-  // ═══════════════════════════════════════════════════════════════════════════
-  Widget _buildDesktopLayout(
-    AccountModel account,
-    bool isDark,
-    Color surfaceColor,
-  ) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // ── Left Sidebar Navigation ──
-        SizedBox(
-          width: 220,
-          child: Container(
-            color: surfaceColor,
-            child: Column(
-              children: [
-                const SizedBox(height: 16),
-                ...List.generate(_tabs.length, (index) {
-                  final tab = _tabs[index];
-                  final isSelected = _selectedTab == index;
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 3,
-                    ),
-                    child: InkWell(
-                      onTap: () => _switchTab(index),
-                      borderRadius: BorderRadius.circular(14),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                        decoration: BoxDecoration(
-                          gradient: isSelected
-                              ? LinearGradient(
-                                  colors: [
-                                    _brandBlue.withValues(
-                                      alpha: isDark ? 0.25 : 0.1,
-                                    ),
-                                    _brandBlueLight.withValues(
-                                      alpha: isDark ? 0.15 : 0.05,
-                                    ),
-                                  ],
-                                )
-                              : null,
-                          borderRadius: BorderRadius.circular(14),
-                          border: isSelected
-                              ? Border.all(
-                                  color: _brandBlue.withValues(
-                                    alpha: isDark ? 0.4 : 0.2,
-                                  ),
-                                  width: 1,
-                                )
-                              : null,
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              isSelected ? tab.selectedIcon : tab.icon,
-                              size: 20,
-                              color: isSelected
-                                  ? (isDark ? _brandBlueLight : _brandBlue)
-                                  : (isDark
-                                        ? Colors.white54
-                                        : const Color(0xFF64748B)),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                tab.title,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: isSelected
-                                      ? FontWeight.w700
-                                      : FontWeight.w500,
-                                  color: isSelected
-                                      ? (isDark ? _brandBlueLight : _brandBlue)
-                                      : (isDark
-                                            ? Colors.white70
-                                            : const Color(0xFF334155)),
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                }),
-                const Spacer(),
-                Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: InkWell(
-                    onTap: _handleSignOut,
-                    borderRadius: BorderRadius.circular(14),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.red.withValues(
-                          alpha: isDark ? 0.12 : 0.06,
-                        ),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: const Row(
-                        children: [
-                          Icon(
-                            Icons.logout_rounded,
-                            size: 20,
-                            color: Colors.redAccent,
-                          ),
-                          SizedBox(width: 12),
-                          Text(
-                            'Sign Out',
-                            style: TextStyle(
-                              color: Colors.redAccent,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-              ],
-            ),
-          ),
-        ),
-
-        // ── Right Main Content ──
-        Expanded(
-          child: FadeTransition(
-            opacity: _fadeAnim,
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 820),
-                child: SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 32,
-                    vertical: 24,
-                  ),
-                  child: _buildActiveTabContent(account, isDark, false),
+                  ],
                 ),
               ),
             ),
-          ),
-        ),
-      ],
+          );
+        },
+      ),
     );
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // TAB ROUTER
+  // MAIN SCROLLABLE CONTENT (Zero overflow on all OSs & screens)
   // ═══════════════════════════════════════════════════════════════════════════
+  Widget _buildScrollableContent(
+    AccountModel account,
+    bool isDark,
+    bool isMobile,
+  ) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 16 : 36,
+        vertical: 24,
+      ),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 960),
+          child: _buildActiveTabContent(account, isDark, isMobile),
+        ),
+      ),
+    );
+  }
+
   Widget _buildActiveTabContent(
     AccountModel account,
     bool isDark,
@@ -598,8 +1130,10 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
       case 2:
         return _buildPaymentAndSubscriptionTab(account, isDark, isMobile);
       case 3:
-        return _buildAccountStorageTab(account, isDark, isMobile);
+        return _buildTeamAndSubIdsTab(account, isDark, isMobile);
       case 4:
+        return _buildAccountStorageTab(account, isDark, isMobile);
+      case 5:
         return _buildB2AuthTab(account, isDark, isMobile);
       default:
         return _buildHomeTab(account, isDark, isMobile);
@@ -607,7 +1141,2394 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // 3. ACCOUNT STORAGE TAB
+  // 1. HOME TAB (Screenshots 1 & 2)
+  // ═══════════════════════════════════════════════════════════════════════════
+  Widget _buildHomeTab(AccountModel account, bool isDark, bool isMobile) {
+    if (_homeSubPage == 1) {
+      return _buildEmailIdentitiesView(account, isDark, isMobile);
+    } else if (_homeSubPage == 2) {
+      return _buildDataAndPrivacyView(account, isDark, isMobile);
+    } else if (_homeSubPage == 3) {
+      return _buildSigningInToBnxView(account, isDark, isMobile);
+    }
+
+    final emailAddress = account.email.isNotEmpty
+        ? account.email
+        : 'ravinew2004@bnxmail.com';
+
+    // Card 1: Emails & Identities -> Navigates to Screenshot 1 ("Your Email Identities")
+    final card1 = _buildHomeCard(
+      isDark: isDark,
+      icon: Icons.mail_outline_rounded,
+      title: 'Emails & Identities',
+      subtitle:
+          'Manage your primary and secondary email addresses associated with this account',
+      middleWidget: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E2124) : const Color(0xFFF8F9FA),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.check_circle_outline_rounded,
+              color: Color(0xFF1E8E3E),
+              size: 16,
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                emailAddress,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: isDark ? Colors.white70 : const Color(0xFF3C4043),
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+      actionLabel: 'Manage your emails',
+      onAction: () => setState(() => _homeSubPage = 1),
+    );
+
+    // Card 2: Privacy & personalization -> Navigates to Screenshot 2 ("Data & privacy")
+    final card2 = _buildHomeCard(
+      isDark: isDark,
+      icon: Icons.shield_outlined,
+      title: 'Privacy & personalization',
+      subtitle:
+          'See the data in your BNX Account and choose what activity is saved to personalize your BNX experience',
+      middleWidget: const SizedBox(height: 38),
+      actionLabel: 'Manage your data & privacy',
+      onAction: () => setState(() => _homeSubPage = 2),
+    );
+
+    // Card 3: Account & Security -> Navigates to Screenshot 3 ("Signing in to BNX")
+    final card3 = _buildHomeCard(
+      isDark: isDark,
+      icon: Icons.verified_user_outlined,
+      title: 'Account & Security',
+      subtitle:
+          'Security checkup and recommendations for your ${(account.accountType.isNotEmpty ? account.accountType : "BUSINESS").toUpperCase()} account.',
+      middleWidget: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1A2A4A) : const Color(0xFFE8F0FE),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.language_rounded,
+              color: Color(0xFF1A73E8),
+              size: 16,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              '${(account.accountType.isNotEmpty ? account.accountType : "BUSINESS").toUpperCase()} Account',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF1A73E8),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actionLabel: 'Protect your account',
+      onAction: () => setState(() => _homeSubPage = 3),
+    );
+
+    // Card 4: Account storage -> Navigates to "Account storage" tab (Storage page)
+    final card4 = _buildHomeCard(
+      isDark: isDark,
+      icon: Icons.inventory_2_outlined,
+      title: 'Account storage',
+      subtitle:
+          'Your account storage is shared across BNX services, like BNX Mail and Drive',
+      middleWidget: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: 0.05,
+              minHeight: 4,
+              backgroundColor: isDark
+                  ? const Color(0xFF3C4043)
+                  : const Color(0xFFE8EAED),
+              valueColor: const AlwaysStoppedAnimation<Color>(
+                Color(0xFF1A73E8),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '8.88 MB of 5 GB used',
+            style: TextStyle(
+              fontSize: 12,
+              color: isDark ? Colors.white60 : const Color(0xFF5F6368),
+            ),
+          ),
+        ],
+      ),
+      actionLabel: 'Manage storage',
+      onAction: () => context.push('/storage'),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        _buildHomeHeader(account, isDark, showBackButton: false),
+
+        // 2x2 Grid of Cards (or 1-column on mobile)
+        if (isMobile) ...[
+          card1,
+          const SizedBox(height: 20),
+          card2,
+          const SizedBox(height: 20),
+          card3,
+          const SizedBox(height: 20),
+          card4,
+        ] else ...[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  children: [
+                    card1,
+                    const SizedBox(height: 24),
+                    card3,
+                  ],
+                ),
+              ),
+              const SizedBox(width: 24),
+              Expanded(
+                child: Column(
+                  children: [
+                    card2,
+                    const SizedBox(height: 24),
+                    card4,
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+
+        const SizedBox(height: 40),
+      ],
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Shared Home Header (Avatar + Welcome Text)
+  // ─────────────────────────────────────────────────────────────────────────
+  Widget _buildHomeHeader(
+    AccountModel account,
+    bool isDark, {
+    bool showBackButton = false,
+  }) {
+    final firstName =
+        account.name.isNotEmpty ? account.name.split(' ').first : 'Ravi';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        if (showBackButton) ...[
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 780),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: InkWell(
+                    onTap: () => setState(() => _homeSubPage = 0),
+                    borderRadius: BorderRadius.circular(20),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.arrow_back_rounded,
+                            size: 18,
+                            color: isDark
+                                ? Colors.white70
+                                : const Color(0xFF5F6368),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Back to Home overview',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: isDark
+                                  ? Colors.white70
+                                  : const Color(0xFF5F6368),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ] else ...[
+          const SizedBox(height: 8),
+        ],
+
+        // Large Profile Avatar (Screenshot 1, 2, 3)
+        AvatarWidget(
+          name: account.name.isNotEmpty ? account.name : 'Ravi Kumar C',
+          avatarUrl: account.avatarUrl,
+          size: 84,
+          fontSize: 34,
+        ),
+        const SizedBox(height: 16),
+
+        // Welcome Header
+        Text(
+          'Welcome, $firstName',
+          style: TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.w500,
+            color: isDark ? Colors.white : const Color(0xFF202124),
+            letterSpacing: -0.3,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 8),
+
+        // Subtitle
+        Text(
+          'Manage your info, privacy, and security to make B2Auth work better for you.',
+          style: TextStyle(
+            fontSize: 14,
+            color: isDark ? Colors.white60 : const Color(0xFF5F6368),
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 36),
+      ],
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // SUBPAGE 1: Your Email Identities (Section 5.1, 5.2, 5.3 API Integrated)
+  // ─────────────────────────────────────────────────────────────────────────
+  Widget _buildEmailIdentitiesView(
+    AccountModel account,
+    bool isDark,
+    bool isMobile,
+  ) {
+    final fallbackEmail = account.email.isNotEmpty
+        ? account.email
+        : 'ravinew2004@bnxmail.com';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        _buildHomeHeader(account, isDark, showBackButton: true),
+
+        Center(
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 780),
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF24272B) : Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isDark
+                    ? const Color(0xFF3C4043)
+                    : const Color(0xFFDADCE0),
+              ),
+            ),
+            padding: EdgeInsets.all(isMobile ? 18 : 28),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Title and Add Mailbox action row
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Your Email Identities',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? Colors.white : const Color(0xFF202124),
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Your primary email is used for account-related notifications and as your default identity.',
+                            style: TextStyle(
+                              fontSize: 13.5,
+                              color: isDark ? Colors.white60 : const Color(0xFF5F6368),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    FilledButton.icon(
+                      onPressed: () => _openCreateMailboxDialog(isDark),
+                      icon: const Icon(Icons.add, size: 16),
+                      label: const Text(
+                        'Add Mailbox',
+                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+                      ),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF1A73E8),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                if (_isLoadingEmails)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Center(
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  ),
+
+                // Connected emails list from Section 5.1
+                if (_connectedEmails.isNotEmpty) ...[
+                  ..._connectedEmails.map((item) {
+                    final isPrimary = item['isPrimary'] == true;
+                    final emailStr = item['email']?.toString() ??
+                        item['emailName']?.toString() ??
+                        fallbackEmail;
+                    final emailId = item['id'];
+
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Container(
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: isPrimary
+                              ? (isDark
+                                  ? const Color(0xFF1B2A4A)
+                                  : const Color(0xFFE8F2FD))
+                              : (isDark
+                                  ? const Color(0xFF1E2124)
+                                  : const Color(0xFFF8F9FA)),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border(
+                            left: BorderSide(
+                              color: isPrimary
+                                  ? const Color(0xFF1A73E8)
+                                  : (isDark ? const Color(0xFF3C4043) : const Color(0xFFDADCE0)),
+                              width: isPrimary ? 4 : 1,
+                            ),
+                            top: BorderSide(
+                              color: isPrimary
+                                  ? (isDark ? const Color(0xFF2A3B5C) : const Color(0xFFD3E3FD))
+                                  : (isDark ? const Color(0xFF3C4043) : const Color(0xFFDADCE0)),
+                            ),
+                            right: BorderSide(
+                              color: isPrimary
+                                  ? (isDark ? const Color(0xFF2A3B5C) : const Color(0xFFD3E3FD))
+                                  : (isDark ? const Color(0xFF3C4043) : const Color(0xFFDADCE0)),
+                            ),
+                            bottom: BorderSide(
+                              color: isPrimary
+                                  ? (isDark ? const Color(0xFF2A3B5C) : const Color(0xFFD3E3FD))
+                                  : (isDark ? const Color(0xFF3C4043) : const Color(0xFFDADCE0)),
+                            ),
+                          ),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF24272B) : Colors.white,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: isDark
+                                      ? const Color(0xFF3C4043)
+                                      : const Color(0xFFDADCE0),
+                                ),
+                              ),
+                              child: Icon(
+                                Icons.mail_outline_rounded,
+                                size: 20,
+                                color: isDark
+                                    ? Colors.white70
+                                    : const Color(0xFF5F6368),
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    emailStr,
+                                    style: TextStyle(
+                                      fontSize: 14.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: isDark
+                                          ? Colors.white
+                                          : const Color(0xFF202124),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    isPrimary ? 'Primary email' : 'Connected mailbox / alias',
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      color: isDark
+                                          ? Colors.white60
+                                          : const Color(0xFF5F6368),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            if (isPrimary)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF137333),
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: const Text(
+                                  'Primary',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              )
+                            else
+                              OutlinedButton(
+                                onPressed: emailId != null
+                                    ? () => _switchPrimaryEmail(emailId)
+                                    : null,
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: const Color(0xFF1A73E8),
+                                  side: const BorderSide(color: Color(0xFF1A73E8)),
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                ),
+                                child: const Text(
+                                  'Set as Primary',
+                                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
+                ] else ...[
+                  // Fallback primary identity box
+                  Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? const Color(0xFF1B2A4A)
+                          : const Color(0xFFE8F2FD),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border(
+                        left: const BorderSide(
+                          color: Color(0xFF1A73E8),
+                          width: 4,
+                        ),
+                        top: BorderSide(
+                          color: isDark
+                              ? const Color(0xFF2A3B5C)
+                              : const Color(0xFFD3E3FD),
+                        ),
+                        right: BorderSide(
+                          color: isDark
+                              ? const Color(0xFF2A3B5C)
+                              : const Color(0xFFD3E3FD),
+                        ),
+                        bottom: BorderSide(
+                          color: isDark
+                              ? const Color(0xFF2A3B5C)
+                              : const Color(0xFFD3E3FD),
+                        ),
+                      ),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 16,
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF24272B) : Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: isDark
+                                  ? const Color(0xFF3C4043)
+                                  : const Color(0xFFDADCE0),
+                            ),
+                          ),
+                          child: Icon(
+                            Icons.mail_outline_rounded,
+                            size: 20,
+                            color: isDark
+                                ? Colors.white70
+                                : const Color(0xFF5F6368),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                fallbackEmail,
+                                style: TextStyle(
+                                  fontSize: 14.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: isDark
+                                      ? Colors.white
+                                      : const Color(0xFF202124),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                'Primary email',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  color: isDark
+                                      ? Colors.white60
+                                      : const Color(0xFF5F6368),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF137333),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: const Text(
+                            'Primary',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 16),
+
+                // Bottom note with info icon
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.info_outline_rounded,
+                      size: 18,
+                      color: isDark ? Colors.white60 : const Color(0xFF5F6368),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'To add a new email address, you can create a mailbox alias above or register it through BNX Mail.',
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          color: isDark
+                              ? Colors.white70
+                              : const Color(0xFF3C4043),
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 40),
+      ],
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // SUBPAGE 2: Data & privacy (Exact match to Screenshot 2)
+  // ─────────────────────────────────────────────────────────────────────────
+  Widget _buildDataAndPrivacyView(
+    AccountModel account,
+    bool isDark,
+    bool isMobile,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        _buildHomeHeader(account, isDark, showBackButton: true),
+
+        Center(
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 780),
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF24272B) : Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isDark
+                    ? const Color(0xFF3C4043)
+                    : const Color(0xFFDADCE0),
+              ),
+            ),
+            padding: EdgeInsets.all(isMobile ? 18 : 28),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Title
+                Text(
+                  'Data & privacy',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white : const Color(0xFF202124),
+                    letterSpacing: -0.2,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                // Subtitle
+                Text(
+                  'Key settings, and data from your use of BNX services',
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    color: isDark ? Colors.white60 : const Color(0xFF5F6368),
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // List container (Screenshot 2)
+                Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isDark
+                          ? const Color(0xFF3C4043)
+                          : const Color(0xFFDADCE0),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      // Row 1: Web & App Activity
+                      InkWell(
+                        onTap: () {},
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(11),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 16,
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.language_rounded,
+                                size: 22,
+                                color: isDark
+                                    ? Colors.white70
+                                    : const Color(0xFF5F6368),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Web & App Activity',
+                                      style: TextStyle(
+                                        fontSize: 14.5,
+                                        fontWeight: FontWeight.w500,
+                                        color: isDark
+                                            ? Colors.white
+                                            : const Color(0xFF202124),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      'Saves your activity on BNX sites and apps.',
+                                      style: TextStyle(
+                                        fontSize: 12.5,
+                                        color: isDark
+                                            ? Colors.white60
+                                            : const Color(0xFF5F6368),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Text(
+                                    'On',
+                                    style: TextStyle(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w500,
+                                      color: Color(0xFF137333),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Icon(
+                                    Icons.chevron_right_rounded,
+                                    size: 20,
+                                    color: isDark
+                                        ? Colors.white54
+                                        : const Color(0xFF5F6368),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      Divider(
+                        height: 1,
+                        thickness: 1,
+                        color: isDark
+                            ? const Color(0xFF3C4043)
+                            : const Color(0xFFE8EAED),
+                      ),
+
+                      // Row 2: Delete your account
+                      InkWell(
+                        onTap: () {},
+                        borderRadius: const BorderRadius.vertical(
+                          bottom: Radius.circular(11),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 16,
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.delete_outline_rounded,
+                                size: 22,
+                                color: isDark
+                                    ? Colors.white70
+                                    : const Color(0xFF5F6368),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Delete your account',
+                                      style: TextStyle(
+                                        fontSize: 14.5,
+                                        fontWeight: FontWeight.w500,
+                                        color: isDark
+                                            ? Colors.white
+                                            : const Color(0xFF202124),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      'Permanently delete your B2Auth account and data.',
+                                      style: TextStyle(
+                                        fontSize: 12.5,
+                                        color: isDark
+                                            ? Colors.white60
+                                            : const Color(0xFF5F6368),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Icon(
+                                Icons.chevron_right_rounded,
+                                size: 20,
+                                color: isDark
+                                    ? Colors.white54
+                                    : const Color(0xFF5F6368),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 40),
+      ],
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // SUBPAGE 3: Signing in to BNX (Exact match to Screenshot 3)
+  // ─────────────────────────────────────────────────────────────────────────
+  Widget _buildSigningInToBnxView(
+    AccountModel account,
+    bool isDark,
+    bool isMobile,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        _buildHomeHeader(account, isDark, showBackButton: true),
+
+        Center(
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 780),
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF24272B) : Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isDark
+                    ? const Color(0xFF3C4043)
+                    : const Color(0xFFDADCE0),
+              ),
+            ),
+            padding: EdgeInsets.all(isMobile ? 18 : 28),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Title
+                Text(
+                  'Signing in to BNX',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white : const Color(0xFF202124),
+                    letterSpacing: -0.2,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                // Subtitle
+                Text(
+                  'Settings and recommendations to help you keep your account secure',
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    color: isDark ? Colors.white60 : const Color(0xFF5F6368),
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // List container (Screenshot 3)
+                Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isDark
+                          ? const Color(0xFF3C4043)
+                          : const Color(0xFFDADCE0),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      // Row 1: 2-Step Verification
+                      InkWell(
+                        onTap: () {},
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(11),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 16,
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.phone_android_rounded,
+                                size: 22,
+                                color: isDark
+                                    ? Colors.white70
+                                    : const Color(0xFF5F6368),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '2-Step Verification',
+                                      style: TextStyle(
+                                        fontSize: 14.5,
+                                        fontWeight: FontWeight.w500,
+                                        color: isDark
+                                            ? Colors.white
+                                            : const Color(0xFF202124),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      'Protect your account with an extra layer of security.',
+                                      style: TextStyle(
+                                        fontSize: 12.5,
+                                        color: isDark
+                                            ? Colors.white60
+                                            : const Color(0xFF5F6368),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              // Outlined button "Set up"
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: isDark
+                                        ? const Color(0xFF5F6368)
+                                        : const Color(0xFFDADCE0),
+                                  ),
+                                ),
+                                child: const Text(
+                                  'Set up',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                    color: Color(0xFF1A73E8),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      Divider(
+                        height: 1,
+                        thickness: 1,
+                        color: isDark
+                            ? const Color(0xFF3C4043)
+                            : const Color(0xFFE8EAED),
+                      ),
+
+                      // Row 2: Password
+                      InkWell(
+                        onTap: () {},
+                        borderRadius: const BorderRadius.vertical(
+                          bottom: Radius.circular(11),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 16,
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.vpn_key_outlined,
+                                size: 22,
+                                color: isDark
+                                    ? Colors.white70
+                                    : const Color(0xFF5F6368),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Password',
+                                      style: TextStyle(
+                                        fontSize: 14.5,
+                                        fontWeight: FontWeight.w500,
+                                        color: isDark
+                                            ? Colors.white
+                                            : const Color(0xFF202124),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      'Last changed 11/07/2026',
+                                      style: TextStyle(
+                                        fontSize: 12.5,
+                                        color: isDark
+                                            ? Colors.white60
+                                            : const Color(0xFF5F6368),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Icon(
+                                Icons.chevron_right_rounded,
+                                size: 20,
+                                color: isDark
+                                    ? Colors.white54
+                                    : const Color(0xFF5F6368),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 40),
+      ],
+    );
+  }
+
+  Widget _buildHomeCard({
+    required bool isDark,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Widget middleWidget,
+    required String actionLabel,
+    required VoidCallback onAction,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF24272B) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? const Color(0xFF3C4043) : const Color(0xFFDADCE0),
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          onTap: onAction,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Top Icon
+                Icon(icon, size: 30, color: const Color(0xFF1A73E8)),
+                const SizedBox(height: 16),
+
+                // Title
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white : const Color(0xFF202124),
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                // Subtitle
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isDark ? Colors.white60 : const Color(0xFF5F6368),
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Middle Interactive Element
+                middleWidget,
+                const SizedBox(height: 20),
+
+                // Divider
+                Divider(
+                  height: 1,
+                  color: isDark ? const Color(0xFF3C4043) : const Color(0xFFE8EAED),
+                ),
+                const SizedBox(height: 16),
+
+                // Action Link
+                Text(
+                  actionLabel,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF1A73E8),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 2. PERSONAL INFO TAB (Screenshots 3, 4, 5)
+  // ═══════════════════════════════════════════════════════════════════════════
+  Widget _buildPersonalInfoTab(
+    AccountModel account,
+    bool isDark,
+    bool isMobile,
+  ) {
+    final firstName =
+        account.name.isNotEmpty ? account.name.split(' ').first : 'Ravi';
+
+    final displayName = account.name.isNotEmpty ? account.name : 'Ravi Kumar C';
+
+    final dobText = account.dob != null
+        ? '${account.dob!.day}/${account.dob!.month}/${account.dob!.year}'
+        : 'Not set';
+
+    final primaryEmail = account.email.isNotEmpty
+        ? account.email
+        : 'ravinew2004@bnxmail.com';
+
+    final recoveryEmail = (account.recoveryEmail != null &&
+            account.recoveryEmail!.isNotEmpty)
+        ? account.recoveryEmail!
+        : 'chandran123@bnxmail.com';
+
+    final phone = (account.phone != null && account.phone!.isNotEmpty)
+        ? account.phone!
+        : '8072909876';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Welcome Header (Screenshot 3: No avatar above title on Personal info)
+        Center(
+          child: Column(
+            children: [
+              Text(
+                'Welcome, $firstName',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w500,
+                  color: isDark ? Colors.white : const Color(0xFF202124),
+                  letterSpacing: -0.3,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Manage your info, privacy, and security to make B2Auth work better for you.',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: isDark ? Colors.white60 : const Color(0xFF5F6368),
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 28),
+
+        // CARD 1: Basic info (Screenshot 3)
+        _buildInfoCard(
+          isDark: isDark,
+          title: 'Basic info',
+          subtitle:
+              'Some info may be visible to other people using BNX services. Click any row to update.',
+          children: [
+            // PHOTO ROW (Exact match to Screenshot 3)
+            _buildPhotoRow(account, displayName, isDark),
+
+            // NAME ROW
+            _SettingRow(
+              isDark: isDark,
+              icon: Icons.person_outline_rounded,
+              label: 'NAME',
+              value: displayName,
+              onTap: () => _editFullName(account),
+            ),
+
+            // NICKNAME ROW
+            _SettingRow(
+              isDark: isDark,
+              icon: Icons.person_outline_rounded,
+              label: 'NICKNAME',
+              value: _nickname,
+              onTap: _editNickname,
+            ),
+
+            // DISPLAY NAME ROW
+            _SettingRow(
+              isDark: isDark,
+              icon: Icons.person_outline_rounded,
+              label: 'DISPLAY NAME',
+              value: _displayName,
+              onTap: _editDisplayName,
+            ),
+
+            // BIRTHDAY ROW
+            _SettingRow(
+              isDark: isDark,
+              icon: Icons.calendar_today_outlined,
+              label: 'BIRTHDAY',
+              value: dobText,
+              onTap: () => _selectBirthday(account),
+            ),
+
+            // GENDER ROW
+            _SettingRow(
+              isDark: isDark,
+              icon: Icons.sentiment_satisfied_outlined,
+              label: 'GENDER',
+              value: _gender,
+              onTap: _selectGender,
+              showDivider: false,
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
+
+        // CARD 2: Contact info (Screenshot 4)
+        _buildInfoCard(
+          isDark: isDark,
+          title: 'Contact info',
+          subtitle:
+              'Your contact information used for communication and recovery. Click to edit.',
+          children: [
+            // PRIMARY EMAIL (Screenshot 4: No chevron)
+            _SettingRow(
+              isDark: isDark,
+              icon: Icons.mail_outline_rounded,
+              label: 'PRIMARY EMAIL',
+              showChevron: false,
+              valueWidget: Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  Text(
+                    primaryEmail,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
+                      color: isDark ? Colors.white : const Color(0xFF202124),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? const Color(0xFF133E24)
+                          : const Color(0xFFE6F4EA),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Text(
+                      'Primary',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF137333),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              showDivider: true,
+            ),
+
+            // RECOVERY EMAIL
+            _SettingRow(
+              isDark: isDark,
+              icon: Icons.mail_outline_rounded,
+              label: 'RECOVERY EMAIL',
+              value: recoveryEmail,
+              onTap: () => _editRecoveryEmail(account),
+            ),
+
+            // PHONE NUMBER
+            _SettingRow(
+              isDark: isDark,
+              icon: Icons.phone_outlined,
+              label: 'PHONE NUMBER',
+              value: phone,
+              onTap: () => _editPhone(account),
+              showDivider: false,
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
+
+        // CARD 3: Addresses (Screenshots 4 & 5)
+        _buildInfoCard(
+          isDark: isDark,
+          title: 'Addresses',
+          subtitle:
+              'Your physical addresses for billing and shipping. Click to edit.',
+          children: [
+            // HOME ADDRESS (Screenshot 5: Hover turns circle solid blue & chevron blue)
+            _SettingRow(
+              isDark: isDark,
+              icon: Icons.location_on_outlined,
+              label: 'HOME ADDRESS',
+              value: _homeAddress,
+              onTap: () => _editAddress(true),
+            ),
+
+            // WORK ADDRESS
+            _SettingRow(
+              isDark: isDark,
+              icon: Icons.location_on_outlined,
+              label: 'WORK ADDRESS',
+              value: _workAddress,
+              onTap: () => _editAddress(false),
+              showDivider: false,
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
+
+        // CARD 4: About me (Screenshot 5)
+        _buildInfoCard(
+          isDark: isDark,
+          title: 'About me',
+          subtitle: 'Your profile description and occupation. Click to edit.',
+          children: [
+            // OCCUPATION
+            _SettingRow(
+              isDark: isDark,
+              icon: Icons.work_outline_rounded,
+              label: 'OCCUPATION',
+              value: _occupation,
+              onTap: _editOccupation,
+            ),
+
+            // BIO
+            _SettingRow(
+              isDark: isDark,
+              icon: Icons.notes_rounded,
+              label: 'BIO',
+              value: _bio,
+              onTap: _editBio,
+              showDivider: false,
+            ),
+          ],
+        ),
+        const SizedBox(height: 40),
+      ],
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PHOTO ROW (Exact match to Screenshot 3)
+  // Left: Camera circle | Column: "PHOTO" -> Row with [Avatar, CHANGE PHOTO, Remove]
+  // ═══════════════════════════════════════════════════════════════════════════
+  Widget _buildPhotoRow(AccountModel account, String displayName, bool isDark) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Light Blue Circle Icon Badge
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? const Color(0xFF1A2A4A)
+                      : const Color(0xFFE8F0FE),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.camera_alt_outlined,
+                  color: Color(0xFF1A73E8),
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 16),
+
+              // Content Column
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'PHOTO',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: isDark
+                            ? Colors.white60
+                            : const Color(0xFF5F6368),
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Avatar + CHANGE PHOTO + Remove Buttons
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 12,
+                      runSpacing: 8,
+                      children: [
+                        AvatarWidget(
+                          name: displayName,
+                          avatarUrl: account.avatarUrl,
+                          size: 44,
+                          fontSize: 18,
+                        ),
+                        OutlinedButton(
+                          onPressed: _pickAndUploadPhoto,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: isDark
+                                ? Colors.white70
+                                : const Color(0xFF3C4043),
+                            side: BorderSide(
+                              color: isDark
+                                  ? const Color(0xFF5F6368)
+                                  : const Color(0xFFDADCE0),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                          child: const Text(
+                            'CHANGE PHOTO',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                        OutlinedButton(
+                          onPressed: _removePhoto,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFFD93025),
+                            side: const BorderSide(
+                              color: Color(0xFFF28B82),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                          child: const Text(
+                            'Remove',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        Divider(
+          height: 1,
+          color: isDark ? const Color(0xFF3C4043) : const Color(0xFFE8EAED),
+        ),
+      ],
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CARD CONTAINER
+  // ═══════════════════════════════════════════════════════════════════════════
+  Widget _buildInfoCard({
+    required bool isDark,
+    required String title,
+    required String subtitle,
+    required List<Widget> children,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF24272B) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? const Color(0xFF3C4043) : const Color(0xFFDADCE0),
+        ),
+      ),
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w500,
+              color: isDark ? Colors.white : const Color(0xFF202124),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            style: TextStyle(
+              fontSize: 13.5,
+              color: isDark ? Colors.white60 : const Color(0xFF5F6368),
+            ),
+          ),
+          const SizedBox(height: 16),
+          ...children,
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 3. PAYMENT & SUBSCRIPTION TAB (Image 1: Cliks Business Subscription)
+  // ═══════════════════════════════════════════════════════════════════════════
+  Widget _buildPaymentAndSubscriptionTab(
+    AccountModel account,
+    bool isDark,
+    bool isMobile,
+  ) {
+    final firstName =
+        account.name.isNotEmpty ? account.name.split(' ').first : 'Ravi';
+    final billedEmail = account.email.isNotEmpty
+        ? account.email
+        : 'ravinew2004@bnxmail.com';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // Top Profile Avatar (Image 1)
+        AvatarWidget(
+          name: account.name.isNotEmpty ? account.name : 'Ravi Kumar C',
+          avatarUrl: account.avatarUrl,
+          size: 84,
+          fontSize: 34,
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'Welcome, $firstName',
+          style: TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.w500,
+            color: isDark ? Colors.white : const Color(0xFF202124),
+            letterSpacing: -0.3,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Manage your info, privacy, and security to make B2Auth work better for you.',
+          style: TextStyle(
+            fontSize: 14,
+            color: isDark ? Colors.white60 : const Color(0xFF5F6368),
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 36),
+
+        // Main Subscription Card (Image 1)
+        Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF24272B) : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isDark ? const Color(0xFF3C4043) : const Color(0xFFDADCE0),
+            ),
+          ),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Cliks Business Subscription',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white : const Color(0xFF202124),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Manage your active Cliks Business subscriptions and billing details.',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: isDark ? Colors.white60 : const Color(0xFF5F6368),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Nested Blue Container
+              Container(
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? const Color(0xFF1B2A4A)
+                      : const Color(0xFFE8F2FD),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: isDark
+                        ? const Color(0xFF2B4272)
+                        : const Color(0xFFD6E6F9),
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    // Top Section
+                    Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'ACTIVE PLAN',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF1A73E8),
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Elite Suite',
+                                style: TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark
+                                      ? Colors.white
+                                      : const Color(0xFF202124),
+                                ),
+                              ),
+                            ],
+                          ),
+                          // Active Chip
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? const Color(0xFF133E24)
+                                  : Colors.white,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: isDark
+                                    ? const Color(0xFF1E8E3E)
+                                    : const Color(0xFFDADCE0),
+                              ),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.check_circle_outline_rounded,
+                                  color: Color(0xFF1E8E3E),
+                                  size: 16,
+                                ),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Active',
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF1E8E3E),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Bottom White Details Card
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF24272B) : Colors.white,
+                        borderRadius: const BorderRadius.vertical(
+                          bottom: Radius.circular(16),
+                        ),
+                      ),
+                      child: isMobile
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildSubDetailItem(
+                                  icon: Icons.calendar_today_outlined,
+                                  label: 'SUBSCRIBED ON',
+                                  value: '11/07/2026',
+                                  isDark: isDark,
+                                ),
+                                const SizedBox(height: 16),
+                                _buildSubDetailItem(
+                                  icon: Icons.access_time_rounded,
+                                  label: 'NEXT DUE DATE',
+                                  value: '11/07/2027',
+                                  extra: '279 days remaining',
+                                  isDark: isDark,
+                                ),
+                                const SizedBox(height: 16),
+                                _buildSubDetailItem(
+                                  label: 'BILLED TO',
+                                  value: billedEmail,
+                                  isDark: isDark,
+                                ),
+                              ],
+                            )
+                          : Row(
+                              children: [
+                                Expanded(
+                                  child: _buildSubDetailItem(
+                                    icon: Icons.calendar_today_outlined,
+                                    label: 'SUBSCRIBED ON',
+                                    value: '11/07/2026',
+                                    isDark: isDark,
+                                  ),
+                                ),
+                                Expanded(
+                                  child: _buildSubDetailItem(
+                                    icon: Icons.access_time_rounded,
+                                    label: 'NEXT DUE DATE',
+                                    value: '11/07/2027',
+                                    extra: '279 days remaining',
+                                    isDark: isDark,
+                                  ),
+                                ),
+                                Expanded(
+                                  child: _buildSubDetailItem(
+                                    label: 'BILLED TO',
+                                    value: billedEmail,
+                                    isDark: isDark,
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 40),
+      ],
+    );
+  }
+
+  Widget _buildSubDetailItem({
+    IconData? icon,
+    required String label,
+    required String value,
+    String? extra,
+    required bool isDark,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (icon != null) ...[
+          Icon(
+            icon,
+            size: 18,
+            color: isDark ? Colors.white60 : const Color(0xFF5F6368),
+          ),
+          const SizedBox(width: 8),
+        ],
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white60 : const Color(0xFF5F6368),
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white : const Color(0xFF202124),
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (extra != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  extra,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFFD93025),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 4. TEAM & SUB-IDS TAB (Image 2: Table + "+ Create Sub-ID" button)
+  // ═══════════════════════════════════════════════════════════════════════════
+  Widget _buildTeamAndSubIdsTab(
+    AccountModel account,
+    bool isDark,
+    bool isMobile,
+  ) {
+    final firstName =
+        account.name.isNotEmpty ? account.name.split(' ').first : 'Ravi';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // Top Avatar circle (Image 2)
+        AvatarWidget(
+          name: account.name.isNotEmpty ? account.name : 'Ravi Kumar C',
+          avatarUrl: account.avatarUrl,
+          size: 84,
+          fontSize: 34,
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'Welcome, $firstName',
+          style: TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.w500,
+            color: isDark ? Colors.white : const Color(0xFF202124),
+            letterSpacing: -0.3,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Manage your info, privacy, and security to make B2Auth work better for you.',
+          style: TextStyle(
+            fontSize: 14,
+            color: isDark ? Colors.white60 : const Color(0xFF5F6368),
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 36),
+
+        // Header Row: Team & Sub-IDs + "+ Create Sub-ID" button
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Team & Sub-IDs',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white : const Color(0xFF202124),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Manage isolated Sub-IDs and delegate access.',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isDark ? Colors.white60 : const Color(0xFF5F6368),
+                  ),
+                ),
+              ],
+            ),
+            FilledButton.icon(
+              onPressed: () => _openCreateSubIdDialog(account, isDark),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text(
+                'Create Sub-ID',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF1A73E8),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Table Container (Image 2)
+        Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF24272B) : Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isDark ? const Color(0xFF3C4043) : const Color(0xFFE8EAED),
+            ),
+          ),
+          child: Column(
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? const Color(0xFF1E2124)
+                      : const Color(0xFFF8F9FA),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                  border: Border(
+                    bottom: BorderSide(
+                      color: isDark
+                          ? const Color(0xFF3C4043)
+                          : const Color(0xFFE8EAED),
+                    ),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: 4,
+                      child: Text(
+                        'Username',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white70 : const Color(0xFF5F6368),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 3,
+                      child: Text(
+                        'Name',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white70 : const Color(0xFF5F6368),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 2,
+                      child: Text(
+                        'Type',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white70 : const Color(0xFF5F6368),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 2,
+                      child: Text(
+                        'Status',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white70 : const Color(0xFF5F6368),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(
+                      width: 50,
+                      child: Text(
+                        'Actions',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF5F6368),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              if (_isLoadingSubIds)
+                const Padding(
+                  padding: EdgeInsets.all(28),
+                  child: Center(
+                    child: SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                ),
+
+              // Rows
+              if (!_isLoadingSubIds && _apiSubIds.isEmpty && _subIds.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Text(
+                    'No sub-IDs created yet.',
+                    style: TextStyle(
+                      color: isDark ? Colors.white60 : const Color(0xFF5F6368),
+                    ),
+                  ),
+                )
+              else if (!_isLoadingSubIds)
+                ...() {
+                  final activeList = _apiSubIds.isNotEmpty
+                      ? _apiSubIds
+                      : _subIds.map((e) => Map<String, dynamic>.from(e)).toList();
+
+                  return List.generate(activeList.length, (index) {
+                    final item = activeList[index];
+                    final isLast = index == activeList.length - 1;
+                    final username = item['username']?.toString() ??
+                        item['email']?.toString() ??
+                        '';
+                    final name = item['name']?.toString() ??
+                        ('${item['firstName'] ?? ''} ${item['lastName'] ?? ''}')
+                            .trim();
+                    final type = item['accountType']?.toString() ??
+                        item['type']?.toString() ??
+                        'MANAGED';
+                    final isApproved = item['approved'] == true;
+                    final subId = item['id'];
+
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 14),
+                      decoration: BoxDecoration(
+                        border: isLast
+                            ? null
+                            : Border(
+                                bottom: BorderSide(
+                                  color: isDark
+                                      ? const Color(0xFF3C4043)
+                                      : const Color(0xFFE8EAED),
+                                ),
+                              ),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: 4,
+                            child: Text(
+                              username,
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: isDark
+                                    ? Colors.white
+                                    : const Color(0xFF202124),
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Expanded(
+                            flex: 3,
+                            child: Text(
+                              name.isNotEmpty ? name : 'Sub-Account',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: isDark
+                                    ? Colors.white70
+                                    : const Color(0xFF202124),
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? const Color(0xFF1A2A4A)
+                                      : const Color(0xFFE8F0FE),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  type,
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF1A73E8),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: isApproved
+                                  ? Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFE6F4EA),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: const Text(
+                                        'Approved',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: Color(0xFF137333),
+                                        ),
+                                      ),
+                                    )
+                                  : (subId != null
+                                      ? OutlinedButton(
+                                          onPressed: () =>
+                                              _approveChildAccount(subId),
+                                          style: OutlinedButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 8, vertical: 2),
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                            side: const BorderSide(
+                                                color: Color(0xFF1A73E8)),
+                                          ),
+                                          child: const Text(
+                                            'Approve',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              color: Color(0xFF1A73E8),
+                                            ),
+                                          ),
+                                        )
+                                      : const Text(
+                                          'Active',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Color(0xFF137333),
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        )),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 50,
+                            child: IconButton(
+                              icon: const Icon(
+                                Icons.delete_outline_rounded,
+                                size: 19,
+                                color: Color(0xFF5F6368),
+                              ),
+                              tooltip: 'Delete Sub-ID',
+                              onPressed: () => _confirmDeleteSubId(item),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  });
+                }(),
+            ],
+          ),
+        ),
+        const SizedBox(height: 40),
+      ],
+    );
+  }
+
+  void _openCreateSubIdDialog(AccountModel account, bool isDark) {
+    showDialog(
+      context: context,
+      builder: (ctx) => _CreateSubIdDialog(
+        account: account,
+        isDark: isDark,
+        onCreated: (newSubId) {
+          _loadSubIds();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content:
+                  Text('Sub-ID ${newSubId['username']} created successfully'),
+              behavior: SnackBarBehavior.floating,
+              backgroundColor: const Color(0xFF1E8E3E),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _confirmDeleteSubId(Map<String, dynamic> item) async {
+    final rawId = item['id'];
+    final id = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '');
+    final username = item['username']?.toString() ??
+        item['email']?.toString() ??
+        'this Sub-ID';
+
+    print('[SUBID DELETE] Selected Sub-ID: $item');
+    print('[SUBID DELETE] ID: $id');
+    print('[SUBID DELETE] Username: $username');
+
+    if (id == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content:
+              Text('Unable to delete this Sub-ID because its ID is missing.'),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Sub-ID'),
+        content: Text('Are you sure you want to delete $username?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        print('[SUBID DELETE] Calling DELETE endpoint for ID: $id');
+        await UserRepository.deleteSubId(id);
+        print('[SUBID DELETE] Successfully deleted Sub-ID ID: $id');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Sub-ID $username deleted successfully'),
+              backgroundColor: const Color(0xFF1E8E3E),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          print('[SUBID DELETE] Refreshing Sub-ID list:');
+          await _loadSubIds();
+        }
+      } catch (e) {
+        print('[SUBID DELETE ERROR] $e');
+        if (mounted) {
+          final errorMessage = e is ApiException ? e.message : e.toString();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to delete Sub-ID: $errorMessage'),
+              backgroundColor: Colors.redAccent,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 5. ACCOUNT STORAGE TAB
   // ═══════════════════════════════════════════════════════════════════════════
   Widget _buildAccountStorageTab(
     AccountModel account,
@@ -617,304 +3538,161 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildGlassCard(
+        _buildInfoCard(
           isDark: isDark,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildSectionHeader(
-                'Storage Overview',
-                Icons.cloud_outlined,
-                isDark,
-              ),
-              const SizedBox(height: 16),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: LinearProgressIndicator(
-                  value: 0.05,
-                  minHeight: 12,
-                  backgroundColor: isDark
-                      ? Colors.white12
-                      : const Color(0xFFE2E8F0),
-                  valueColor: const AlwaysStoppedAnimation<Color>(
-                    Color(0xFF195BAC),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          title: 'Account storage',
+          subtitle:
+              'Storage used across BNX services like Mail, Drive, and Media.',
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: 0.05,
+                      minHeight: 8,
+                      backgroundColor: isDark
+                          ? const Color(0xFF3C4043)
+                          : const Color(0xFFE8EAED),
+                      valueColor: const AlwaysStoppedAnimation<Color>(
+                        Color(0xFF1A73E8),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   Text(
-                    '0.0 GB used',
+                    '8.88 MB of 5 GB used (0.18%)',
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: isDark ? Colors.white : const Color(0xFF1E293B),
-                    ),
-                  ),
-                  Text(
-                    '15.0 GB total',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: isDark ? Colors.white70 : Colors.grey.shade600,
+                      color: isDark ? Colors.white : const Color(0xFF202124),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 24),
-              _buildActionTile(
-                isDark: isDark,
-                icon: Icons.unarchive_outlined,
-                iconColor: const Color(0xFF10B981),
-                title: 'Clean up space',
-                subtitle: 'Remove large files and old emails',
-                onTap: () {},
+            ),
+            const Divider(),
+            _SettingRow(
+              isDark: isDark,
+              icon: Icons.mail_outline_rounded,
+              label: 'BNX MAIL',
+              value: '8.88 MB',
+            ),
+            _SettingRow(
+              isDark: isDark,
+              icon: Icons.cloud_outlined,
+              label: 'BNX DRIVE',
+              value: '0 MB',
+            ),
+            _SettingRow(
+              isDark: isDark,
+              icon: Icons.perm_media_outlined,
+              label: 'MEDIA & BACKUPS',
+              value: '0 MB',
+              showDivider: false,
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: () => context.push('/storage'),
+              icon: const Icon(Icons.storage_rounded, size: 18),
+              label: const Text('Open Storage Manager'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1A73E8),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
-              _buildActionTile(
-                isDark: isDark,
-                icon: Icons.add_shopping_cart_rounded,
-                iconColor: const Color(0xFF8B5CF6),
-                title: 'Upgrade storage',
-                subtitle: 'Get more space for your account',
-                onTap: () {},
-                showDivider: false,
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
+        const SizedBox(height: 40),
       ],
     );
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // 4. B2 AUTH TAB
+  // 6. B2AUTH TAB
   // ═══════════════════════════════════════════════════════════════════════════
   Widget _buildB2AuthTab(AccountModel account, bool isDark, bool isMobile) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: isDark
-                  ? [const Color(0xFF0F172A), const Color(0xFF1E3A5F)]
-                  : [const Color(0xFF0284C7), const Color(0xFF1E40AF)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF0284C7).withValues(alpha: 0.25),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+        _buildInfoCard(
+          isDark: isDark,
+          title: 'Account & Security',
+          subtitle: 'Security checkup and recommendations for your account.',
+          children: [
+            _SettingRow(
+              isDark: isDark,
+              icon: Icons.security_rounded,
+              label: '2-STEP VERIFICATION',
+              valueWidget: Row(
                 children: [
+                  const Text('On'),
+                  const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(16),
+                      color: const Color(0xFFE6F4EA),
+                      borderRadius: BorderRadius.circular(6),
                     ),
-                    child: const Icon(
-                      Icons.security_rounded,
-                      color: Colors.white,
-                      size: 28,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
-                        Text(
-                          'B2 Auth Suite',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          'Unified Identity & Security Management',
-                          style: TextStyle(fontSize: 13, color: Colors.white70),
-                        ),
-                      ],
+                    child: const Text(
+                      'Secured',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF137333),
+                      ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 24),
-              ElevatedButton.icon(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Opening B2 Auth App...'),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                label: const Text(
-                  'Open B2 Auth App',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: const Color(0xFF1E40AF),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 12,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  minimumSize: const Size(double.infinity, 48),
-                ),
-              ),
-            ],
-          ),
+            ),
+            _SettingRow(
+              isDark: isDark,
+              icon: Icons.key_rounded,
+              label: 'PASSKEYS & SECURITY KEYS',
+              value: '1 passkey registered',
+            ),
+            _SettingRow(
+              isDark: isDark,
+              icon: Icons.password_rounded,
+              label: 'PASSWORD',
+              value: 'Last changed 2 weeks ago',
+              showDivider: false,
+            ),
+          ],
         ),
+        const SizedBox(height: 40),
       ],
     );
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // PROFILE HERO CARD
+  // DIALOGS & ACTION HANDLERS (Safe frontend data updates)
   // ═══════════════════════════════════════════════════════════════════════════
-  Widget _buildProfileHero(AccountModel account, bool isDark) {
-    final username = account.email.split('@').first;
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 20),
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: isDark
-              ? [const Color(0xFF1E3A5F), const Color(0xFF0F172A)]
-              : [const Color(0xFF195BAC), const Color(0xFF2563EB)],
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: _brandBlue.withValues(alpha: isDark ? 0.2 : 0.25),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          // Avatar
-          Container(
-            padding: const EdgeInsets.all(2),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.5),
-                width: 2,
-              ),
-            ),
-            child: AvatarWidget(
-              name: account.name,
-              avatarUrl: account.avatarUrl,
-              size: 48,
-              fontSize: 18,
-            ),
-          ),
-          const SizedBox(width: 14),
-          // Username and Email
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  username,
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                    letterSpacing: -0.3,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  account.email,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.white.withValues(alpha: 0.75),
-                    fontWeight: FontWeight.w500,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.18),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Text(
-                    'BUSINESS',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Sign Out Icon
-          IconButton(
-            onPressed: _handleSignOut,
-            icon: Icon(
-              Icons.logout_rounded,
-              color: Colors.white.withValues(alpha: 0.7),
-              size: 20,
-            ),
-            tooltip: 'Sign Out',
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // EDIT DIALOG HELPERS
-  // ═══════════════════════════════════════════════════════════════════════════
-
   void _editFullName(AccountModel account) {
-    final ctrl = TextEditingController(text: account.name);
+    final controller = TextEditingController(text: account.name);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Edit Full Name'),
+        title: const Text('Update Full Name'),
         content: TextField(
-          controller: ctrl,
+          controller: controller,
           decoration: const InputDecoration(
             labelText: 'Full Name',
-            hintText: 'Enter full name',
+            border: OutlineInputBorder(),
           ),
           autofocus: true,
         ),
@@ -923,26 +3701,24 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Cancel'),
           ),
-          ElevatedButton(
-            onPressed: () {
-              final newName = ctrl.text.trim();
+          FilledButton(
+            onPressed: () async {
+              final newName = controller.text.trim();
               if (newName.isNotEmpty) {
-                ref
+                Navigator.pop(ctx);
+                final parts = newName.split(' ');
+                final first = parts.first;
+                final last = parts.length > 1 ? parts.sublist(1).join(' ') : '';
+                await UserRepository.updateProfile({
+                  'firstName': first,
+                  'lastName': last,
+                  'name': newName,
+                });
+                await ref
                     .read(accountsProvider.notifier)
                     .updateAccountFields(account.id, name: newName);
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Name updated!'),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
               }
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _brandBlue,
-              foregroundColor: Colors.white,
-            ),
             child: const Text('Save'),
           ),
         ],
@@ -950,20 +3726,19 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
     );
   }
 
-  void _editUsername(AccountModel account) {
-    final currentUsername = account.email.contains('@')
-        ? account.email.split('@').first
-        : account.email;
-    final ctrl = TextEditingController(text: currentUsername);
+  void _editNickname() {
+    final controller = TextEditingController(
+      text: _nickname == 'Not set' ? '' : _nickname,
+    );
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Edit Username'),
+        title: const Text('Update Nickname'),
         content: TextField(
-          controller: ctrl,
+          controller: controller,
           decoration: const InputDecoration(
-            labelText: 'Username',
-            hintText: 'Enter username',
+            labelText: 'Nickname',
+            border: OutlineInputBorder(),
           ),
           autofocus: true,
         ),
@@ -972,68 +3747,15 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Cancel'),
           ),
-          ElevatedButton(
-            onPressed: () {
-              final newUsername = ctrl.text.trim();
-              if (newUsername.isNotEmpty) {
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Username set to "@$newUsername"!'),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _brandBlue,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _editRecoveryEmail(AccountModel account) {
-    final ctrl = TextEditingController(text: account.recoveryEmail ?? '');
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Edit Recovery Email'),
-        content: TextField(
-          controller: ctrl,
-          keyboardType: TextInputType.emailAddress,
-          decoration: const InputDecoration(
-            labelText: 'Recovery Email',
-            hintText: 'user@example.com',
-          ),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final newMail = ctrl.text.trim();
-              ref
-                  .read(accountsProvider.notifier)
-                  .updateAccountFields(account.id, recoveryEmail: newMail);
+          FilledButton(
+            onPressed: () async {
+              final val = controller.text.trim();
+              setState(() {
+                _nickname = val.isEmpty ? 'Not set' : val;
+              });
               Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Recovery email updated!'),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
+              await UserRepository.updateProfile({'nickname': val});
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _brandBlue,
-              foregroundColor: Colors.white,
-            ),
             child: const Text('Save'),
           ),
         ],
@@ -1041,18 +3763,19 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
     );
   }
 
-  void _editPhone(AccountModel account) {
-    final ctrl = TextEditingController(text: account.phone ?? '');
+  void _editDisplayName() {
+    final controller = TextEditingController(
+      text: _displayName == 'Not set' ? '' : _displayName,
+    );
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Edit Phone Number'),
+        title: const Text('Update Display Name'),
         content: TextField(
-          controller: ctrl,
-          keyboardType: TextInputType.phone,
+          controller: controller,
           decoration: const InputDecoration(
-            labelText: 'Phone Number',
-            hintText: '+1 234 567 8900',
+            labelText: 'Display Name',
+            border: OutlineInputBorder(),
           ),
           autofocus: true,
         ),
@@ -1061,24 +3784,15 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Cancel'),
           ),
-          ElevatedButton(
-            onPressed: () {
-              final newPhone = ctrl.text.trim();
-              ref
-                  .read(accountsProvider.notifier)
-                  .updateAccountFields(account.id, phone: newPhone);
+          FilledButton(
+            onPressed: () async {
+              final val = controller.text.trim();
+              setState(() {
+                _displayName = val.isEmpty ? 'Not set' : val;
+              });
               Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Phone number updated!'),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
+              await UserRepository.updateProfile({'displayName': val});
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _brandBlue,
-              foregroundColor: Colors.white,
-            ),
             child: const Text('Save'),
           ),
         ],
@@ -1087,250 +3801,90 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
   }
 
   void _selectBirthday(AccountModel account) async {
-    final now = DateTime.now();
+    final initialDate = account.dob ?? DateTime(2000, 1, 1);
     final picked = await showDatePicker(
       context: context,
-      initialDate: account.dob ?? DateTime(2000, 1, 1),
-      firstDate: DateTime(1920),
-      lastDate: now,
+      initialDate: initialDate,
+      firstDate: DateTime(1900),
+      lastDate: DateTime.now(),
     );
     if (picked != null) {
-      ref
+      await ref
           .read(accountsProvider.notifier)
           .updateAccountFields(account.id, dob: picked);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Birthday updated!'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
     }
   }
 
-  void _editAccountType(AccountModel account) {
+  void _selectGender() {
     showDialog(
       context: context,
       builder: (ctx) => SimpleDialog(
-        title: const Text('Select Account Type'),
-        children: ['BUSINESS', 'ENTERPRISE', 'PERSONAL'].map((type) {
-          final isSelected = account.accountType.toUpperCase() == type;
-          return SimpleDialogOption(
+        title: const Text('Select Gender'),
+        children: [
+          SimpleDialogOption(
             onPressed: () {
-              ref
-                  .read(accountsProvider.notifier)
-                  .updateAccountFields(account.id, accountType: type);
+              setState(() => _gender = 'Female');
               Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Account type set to $type'),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
             },
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  type,
-                  style: TextStyle(
-                    fontWeight: isSelected
-                        ? FontWeight.bold
-                        : FontWeight.normal,
-                  ),
-                ),
-                if (isSelected)
-                  const Icon(Icons.check_rounded, color: _brandBlue, size: 18),
-              ],
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  void _selectLanguage(AccountModel account) {
-    final langs = [
-      'English (US)',
-      'English (UK)',
-      'Spanish',
-      'French',
-      'German',
-      'Hindi',
-      'Japanese',
-      'Chinese',
-    ];
-    showDialog(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: const Text('Select Language'),
-        children: langs.map((lang) {
-          final isSelected = account.language == lang;
-          return SimpleDialogOption(
-            onPressed: () {
-              ref
-                  .read(accountsProvider.notifier)
-                  .updateAccountFields(account.id, language: lang);
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Language set to $lang'),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-            },
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  lang,
-                  style: TextStyle(
-                    fontWeight: isSelected
-                        ? FontWeight.bold
-                        : FontWeight.normal,
-                  ),
-                ),
-                if (isSelected)
-                  const Icon(Icons.check_rounded, color: _brandBlue, size: 18),
-              ],
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  void _selectAccessibility(AccountModel account) {
-    final options = [
-      'Default',
-      'High Contrast',
-      'Large Text',
-      'Screen Reader Optimized',
-    ];
-    showDialog(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: const Text('Select Accessibility Preference'),
-        children: options.map((opt) {
-          final isSelected = account.accessibility == opt;
-          return SimpleDialogOption(
-            onPressed: () {
-              ref
-                  .read(accountsProvider.notifier)
-                  .updateAccountFields(account.id, accessibility: opt);
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Accessibility set to $opt'),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-            },
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  opt,
-                  style: TextStyle(
-                    fontWeight: isSelected
-                        ? FontWeight.bold
-                        : FontWeight.normal,
-                  ),
-                ),
-                if (isSelected)
-                  const Icon(Icons.check_rounded, color: _brandBlue, size: 18),
-              ],
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  void _showManageSubscriptionDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Manage Subscription'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Current Plan: $_subPlanName ($_subPrice)',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text('Next Renewal: $_subRenewalDate'),
-            Text('Payment Method: $_subPaymentMethod'),
-            Text('Active Seats: $_subTeamSeats Seats'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _showEditPaymentMethodDialog();
-            },
-            child: const Text('Edit Payment'),
+            child: const Text('Female'),
           ),
-          TextButton(
+          SimpleDialogOption(
             onPressed: () {
+              setState(() => _gender = 'Male');
               Navigator.pop(ctx);
-              _showEditSeatsDialog();
             },
-            child: const Text('Edit Seats'),
+            child: const Text('Male'),
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _brandBlue,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Done'),
+          SimpleDialogOption(
+            onPressed: () {
+              setState(() => _gender = 'Non-binary');
+              Navigator.pop(ctx);
+            },
+            child: const Text('Non-binary'),
+          ),
+          SimpleDialogOption(
+            onPressed: () {
+              setState(() => _gender = 'Rather not say');
+              Navigator.pop(ctx);
+            },
+            child: const Text('Rather not say'),
           ),
         ],
       ),
     );
   }
 
-  void _showEditPaymentMethodDialog() {
-    final ctrl = TextEditingController(text: _subPaymentMethod);
+  void _editRecoveryEmail(AccountModel account) {
+    final controller = TextEditingController(
+      text: account.recoveryEmail ?? 'chandran123@bnxmail.com',
+    );
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Update Payment Method'),
+        title: const Text('Update Recovery Email'),
         content: TextField(
-          controller: ctrl,
+          controller: controller,
           decoration: const InputDecoration(
-            labelText: 'Payment Method',
-            hintText: '•••• 4242 (Visa)',
+            labelText: 'Recovery Email',
+            border: OutlineInputBorder(),
           ),
+          keyboardType: TextInputType.emailAddress,
+          autofocus: true,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Cancel'),
           ),
-          ElevatedButton(
-            onPressed: () {
-              final val = ctrl.text.trim();
-              if (val.isNotEmpty) {
-                setState(() => _subPaymentMethod = val);
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Payment method updated!'),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              }
+          FilledButton(
+            onPressed: () async {
+              final newEmail = controller.text.trim();
+              Navigator.pop(ctx);
+              await UserRepository.updateProfile({'recoveryEmail': newEmail});
+              await ref
+                  .read(accountsProvider.notifier)
+                  .updateAccountFields(account.id, recoveryEmail: newEmail);
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _brandBlue,
-              foregroundColor: Colors.white,
-            ),
             child: const Text('Save'),
           ),
         ],
@@ -1338,43 +3892,40 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
     );
   }
 
-  void _showEditSeatsDialog() {
-    final ctrl = TextEditingController(text: _subTeamSeats.toString());
+  void _editPhone(AccountModel account) {
+    final controller = TextEditingController(
+      text: account.phone ?? '8072909876',
+    );
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Manage Team Seats'),
+        title: const Text('Update Phone Number'),
         content: TextField(
-          controller: ctrl,
-          keyboardType: TextInputType.number,
+          controller: controller,
           decoration: const InputDecoration(
-            labelText: 'Number of Seats',
-            hintText: '25',
+            labelText: 'Phone Number',
+            border: OutlineInputBorder(),
           ),
+          keyboardType: TextInputType.phone,
+          autofocus: true,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Cancel'),
           ),
-          ElevatedButton(
-            onPressed: () {
-              final val = int.tryParse(ctrl.text.trim());
-              if (val != null && val > 0) {
-                setState(() => _subTeamSeats = val);
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Team seats updated to $val!'),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              }
+          FilledButton(
+            onPressed: () async {
+              final newPhone = controller.text.trim();
+              Navigator.pop(ctx);
+              await UserRepository.updateProfile({
+                'phoneNumber': newPhone,
+                'phone': newPhone,
+              });
+              await ref
+                  .read(accountsProvider.notifier)
+                  .updateAccountFields(account.id, phone: newPhone);
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _brandBlue,
-              foregroundColor: Colors.white,
-            ),
             child: const Text('Save'),
           ),
         ],
@@ -1382,1318 +3933,314 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen>
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // 1. HOME TAB
-  // ═══════════════════════════════════════════════════════════════════════════
-  Widget _buildHomeTab(AccountModel account, bool isDark, bool isMobile) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildProfileHero(account, isDark),
-
-        // Quick Actions 2x2 Grid (100% Overflow-free)
-        _buildQuickActionGrid(account, isDark, isMobile),
-        const SizedBox(height: 16),
-
-        // Account Storage Card
-        _buildGlassCard(
-          isDark: isDark,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  _buildIconBadge(Icons.cloud_outlined, isDark),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Account Storage',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: isDark ? Colors.white : const Color(0xFF1E293B),
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: LinearProgressIndicator(
-                  value: 0.05,
-                  minHeight: 8,
-                  backgroundColor: isDark
-                      ? Colors.white12
-                      : const Color(0xFFE2E8F0),
-                  valueColor: const AlwaysStoppedAnimation<Color>(_brandBlue),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Flexible(
-                    child: Text(
-                      '0.0 GB used',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.white54 : Colors.grey.shade600,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  Flexible(
-                    child: Text(
-                      '15.0 GB total',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark ? Colors.white38 : Colors.grey.shade500,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ],
+  void _editAddress(bool isHome) {
+    final controller = TextEditingController(
+      text: isHome
+          ? (_homeAddress == 'None added' ? '' : _homeAddress)
+          : (_workAddress == 'None added' ? '' : _workAddress),
     );
-  }
-
-  // Quick Action Grid Layout with Auto-height (No Fixed Grid Aspect Ratio = Zero Overflow)
-  Widget _buildQuickActionGrid(
-    AccountModel account,
-    bool isDark,
-    bool isMobile,
-  ) {
-    final items = [
-      _QuickAction(
-        icon: Icons.person_outline_rounded,
-        title: 'Personal Info',
-        subtitle: 'Name, photo, email',
-        color: const Color(0xFF3B82F6),
-        onTap: () => _switchTab(1),
-      ),
-      _QuickAction(
-        icon: Icons.card_membership_rounded,
-        title: 'Payments',
-        subtitle: 'Subscriptions',
-        color: const Color(0xFF10B981),
-        onTap: () => _switchTab(2),
-      ),
-      _QuickAction(
-        icon: Icons.cloud_outlined,
-        title: 'Storage',
-        subtitle: 'Account limits',
-        color: const Color(0xFF8B5CF6),
-        onTap: () => _switchTab(3),
-      ),
-      _QuickAction(
-        icon: Icons.security_outlined,
-        title: 'B2 Auth',
-        subtitle: 'Security & login',
-        color: const Color(0xFF0EA5E9),
-        onTap: () => _switchTab(4),
-      ),
-    ];
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final cardWidth = (constraints.maxWidth - 12) / 2;
-        return Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: items.map((item) {
-            return GestureDetector(
-              onTap: item.onTap,
-              child: SizedBox(
-                width: cardWidth,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 14,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isDark ? BNXColors.darkSurface : Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(
-                          alpha: isDark ? 0.15 : 0.04,
-                        ),
-                        blurRadius: 10,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 34,
-                        height: 34,
-                        decoration: BoxDecoration(
-                          color: item.color.withValues(
-                            alpha: isDark ? 0.2 : 0.1,
-                          ),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Icon(item.icon, size: 18, color: item.color),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        item.title,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: isDark
-                              ? Colors.white
-                              : const Color(0xFF1E293B),
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        item.subtitle,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: isDark ? Colors.white54 : Colors.grey.shade600,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          }).toList(),
-        );
-      },
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // 2. PERSONAL INFO TAB
-  // ═══════════════════════════════════════════════════════════════════════════
-  Widget _buildPersonalInfoTab(
-    AccountModel account,
-    bool isDark,
-    bool isMobile,
-  ) {
-    final username = account.email.split('@').first;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Basic Info Card
-        _buildGlassCard(
-          isDark: isDark,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildSectionHeader('Basic Info', Icons.badge_outlined, isDark),
-              const SizedBox(height: 4),
-              Text(
-                'Visible to other BNX users',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: isDark ? Colors.white38 : Colors.grey.shade500,
-                ),
-              ),
-              const SizedBox(height: 16),
-              _buildInfoTile(
-                isDark: isDark,
-                icon: Icons.camera_alt_outlined,
-                label: 'Photo',
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    AvatarWidget(
-                      name: account.name,
-                      avatarUrl: account.avatarUrl,
-                      size: 32,
-                      fontSize: 13,
-                    ),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: _buildSmallButton(
-                        'Change',
-                        onTap: _pickAndUploadPhoto,
-                        isDark: isDark,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              _buildInfoTile(
-                isDark: isDark,
-                icon: Icons.person_outline_rounded,
-                label: 'Full Name',
-                value: account.name,
-                isClickable: true,
-                onTap: () => _editFullName(account),
-              ),
-              _buildInfoTile(
-                isDark: isDark,
-                icon: Icons.alternate_email_rounded,
-                label: 'Username',
-                value: username,
-                isClickable: true,
-                onTap: () => _editUsername(account),
-              ),
-              _buildInfoTile(
-                isDark: isDark,
-                icon: Icons.tag_rounded,
-                label: 'Account ID',
-                value: (account.id.isNotEmpty && account.id != 'loading')
-                    ? (account.id.startsWith('#')
-                          ? account.id
-                          : '#${account.id.length > 8 ? account.id.substring(0, 8) : account.id}')
-                    : '#BNX-${(account.email.hashCode.abs() % 9000) + 1000}',
-              ),
-              _buildInfoTile(
-                isDark: isDark,
-                icon: Icons.cake_outlined,
-                label: 'Birthday',
-                value: account.dob != null
-                    ? '${account.dob!.day}/${account.dob!.month}/${account.dob!.year}'
-                    : 'Not set',
-                isClickable: true,
-                onTap: () => _selectBirthday(account),
-              ),
-              _buildInfoTile(
-                isDark: isDark,
-                icon: Icons.business_center_outlined,
-                label: 'Account Type',
-                isClickable: true,
-                onTap: () => _editAccountType(account),
-                trailing: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        _brandBlue.withValues(alpha: 0.15),
-                        _brandBlueLight.withValues(alpha: 0.1),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    account.accountType.toUpperCase(),
-                    style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      color: _brandBlue,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                ),
-                showDivider: false,
-              ),
-            ],
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isHome ? 'Update Home Address' : 'Update Work Address'),
+        content: TextField(
+          controller: controller,
+          decoration: InputDecoration(
+            labelText: isHome ? 'Home Address' : 'Work Address',
+            border: const OutlineInputBorder(),
           ),
+          autofocus: true,
         ),
-        const SizedBox(height: 16),
-
-        // Contact Info Card
-        _buildGlassCard(
-          isDark: isDark,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildSectionHeader(
-                'Contact Info',
-                Icons.contact_mail_outlined,
-                isDark,
-              ),
-              const SizedBox(height: 16),
-              _buildInfoTile(
-                isDark: isDark,
-                icon: Icons.email_outlined,
-                label: 'Email',
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        account.email,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: isDark ? Colors.white : Colors.black87,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _accentGreen.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Text(
-                        '✓',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: _accentGreen,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              _buildInfoTile(
-                isDark: isDark,
-                icon: Icons.mail_outline_rounded,
-                label: 'Recovery',
-                value:
-                    (account.recoveryEmail != null &&
-                        account.recoveryEmail!.isNotEmpty)
-                    ? account.recoveryEmail
-                    : 'Not set',
-                isClickable: true,
-                onTap: () => _editRecoveryEmail(account),
-              ),
-              _buildInfoTile(
-                isDark: isDark,
-                icon: Icons.phone_outlined,
-                label: 'Phone',
-                value: (account.phone != null && account.phone!.isNotEmpty)
-                    ? account.phone
-                    : 'Not set',
-                isClickable: true,
-                onTap: () => _editPhone(account),
-                showDivider: false,
-              ),
-            ],
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
           ),
-        ),
-        const SizedBox(height: 16),
-
-        // Preferences Card
-        _buildGlassCard(
-          isDark: isDark,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildSectionHeader('Preferences', Icons.tune_rounded, isDark),
-              const SizedBox(height: 16),
-              _buildInfoTile(
-                isDark: isDark,
-                icon: Icons.language_rounded,
-                label: 'Language',
-                value: account.language,
-                isClickable: true,
-                onTap: () => _selectLanguage(account),
-              ),
-              _buildInfoTile(
-                isDark: isDark,
-                icon: Icons.accessibility_new_rounded,
-                label: 'Accessibility',
-                value: account.accessibility,
-                isClickable: true,
-                onTap: () => _selectAccessibility(account),
-                showDivider: false,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 20),
-      ],
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // SHARED UTILITY COMPONENTS
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  Widget _buildGlassCard({required bool isDark, required Widget child}) {
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 4),
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: isDark ? BNXColors.darkSurface : Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : const Color(0xFFE2E8F0),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+          FilledButton(
+            onPressed: () async {
+              final val = controller.text.trim();
+              setState(() {
+                if (isHome) {
+                  _homeAddress = val.isEmpty ? 'None added' : val;
+                } else {
+                  _workAddress = val.isEmpty ? 'None added' : val;
+                }
+              });
+              Navigator.pop(ctx);
+              await UserRepository.updateProfile({
+                isHome ? 'homeAddress' : 'workAddress': val,
+              });
+            },
+            child: const Text('Save'),
           ),
         ],
       ),
-      child: child,
     );
   }
 
-  Widget _buildSectionHeader(String title, IconData icon, bool isDark) {
-    return Row(
-      children: [
-        _buildIconBadge(icon, isDark),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            title,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-              color: isDark ? Colors.white : const Color(0xFF1E293B),
-              letterSpacing: -0.3,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+  void _editOccupation() {
+    final controller = TextEditingController(
+      text: _occupation == 'None added' ? '' : _occupation,
+    );
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Update Occupation'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: 'Occupation',
+            border: OutlineInputBorder(),
           ),
+          autofocus: true,
         ),
-      ],
-    );
-  }
-
-  Widget _buildIconBadge(IconData icon, bool isDark) {
-    return Container(
-      width: 36,
-      height: 36,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            _brandBlue.withValues(alpha: isDark ? 0.25 : 0.12),
-            _brandBlueLight.withValues(alpha: isDark ? 0.15 : 0.08),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(10),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final val = controller.text.trim();
+              setState(() {
+                _occupation = val.isEmpty ? 'None added' : val;
+              });
+              Navigator.pop(ctx);
+              await UserRepository.updateProfile({'occupation': val});
+            },
+            child: const Text('Save'),
+          ),
+        ],
       ),
-      child: Icon(icon, size: 18, color: isDark ? _brandBlueLight : _brandBlue),
     );
   }
 
-  Widget _buildInfoTile({
-    required bool isDark,
-    required IconData icon,
-    required String label,
-    String? value,
-    Widget? trailing,
-    bool isClickable = false,
-    bool showDivider = true,
-    VoidCallback? onTap,
-  }) {
-    final content = Container(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      decoration: showDivider
-          ? BoxDecoration(
-              border: Border(
-                bottom: BorderSide(
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.06)
-                      : const Color(0xFFF1F5F9),
-                ),
-              ),
-            )
-          : null,
-      child: Row(
-        children: [
-          Icon(
-            icon,
-            size: 16,
-            color: isDark ? Colors.white38 : const Color(0xFF94A3B8),
+  void _editBio() {
+    final controller = TextEditingController(
+      text: _bio == 'Write a brief description about yourself' ? '' : _bio,
+    );
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Update Bio'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: 'Bio',
+            border: OutlineInputBorder(),
           ),
-          const SizedBox(width: 10),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 80),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: isDark ? Colors.white38 : Colors.grey.shade500,
-                letterSpacing: 0.3,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+          maxLines: 3,
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child:
-                trailing ??
-                Text(
-                  value ?? '',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.87)
-                        : const Color(0xFF334155),
-                  ),
-                  textAlign: TextAlign.right,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+          FilledButton(
+            onPressed: () async {
+              final val = controller.text.trim();
+              setState(() {
+                _bio = val.isEmpty
+                    ? 'Write a brief description about yourself'
+                    : val;
+              });
+              Navigator.pop(ctx);
+              await UserRepository.updateProfile({'bio': val});
+            },
+            child: const Text('Save'),
           ),
-          if (isClickable || onTap != null) ...[
-            const SizedBox(width: 4),
-            Icon(
-              Icons.chevron_right_rounded,
-              size: 18,
-              color: isDark ? Colors.white24 : Colors.grey.shade400,
-            ),
-          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleSignOut() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Sign out'),
+        content: const Text(
+          'Are you sure you want to sign out of this account?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Sign out'),
+          ),
         ],
       ),
     );
 
-    if (isClickable || onTap != null) {
-      return InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: content,
-      );
+    if (confirm == true && mounted) {
+      final activeAccount = ref.read(activeAccountProvider);
+      final activeEmail = activeAccount.email.isNotEmpty
+          ? activeAccount.email
+          : activeAccount.id;
+      await ref.read(accountsProvider.notifier).signOutSingleAccount(
+            targetEmail: activeEmail,
+            ref: ref,
+            context: context,
+          );
     }
-    return content;
   }
+}
 
-  Widget _buildActionTile({
-    required bool isDark,
-    required IconData icon,
-    required Color iconColor,
-    required String title,
-    required String subtitle,
-    Widget? trailingWidget,
-    VoidCallback? onTap,
-    bool showDivider = true,
-  }) {
-    final tile = Container(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      decoration: showDivider
-          ? BoxDecoration(
-              border: Border(
-                bottom: BorderSide(
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.06)
-                      : const Color(0xFFF1F5F9),
-                ),
-              ),
-            )
-          : null,
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: isDark ? 0.18 : 0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, size: 18, color: iconColor),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: isDark ? Colors.white : const Color(0xFF1E293B),
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: isDark ? Colors.white54 : Colors.grey.shade600,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-          if (trailingWidget != null) ...[
-            const SizedBox(width: 8),
-            trailingWidget,
-          ],
-          const SizedBox(width: 4),
-          Icon(
-            Icons.chevron_right_rounded,
-            size: 18,
-            color: isDark ? Colors.white24 : Colors.grey.shade400,
-          ),
-        ],
-      ),
-    );
+// ═════════════════════════════════════════════════════════════════════════════
+// INTERACTIVE SETTING ROW WITH HOVER SUPPORT (Screenshots 3, 4, 5)
+// In Screenshot 5: Hover turns circle badge solid blue with white icon & blue chevron
+// ═════════════════════════════════════════════════════════════════════════════
+class _SettingRow extends StatefulWidget {
+  final bool isDark;
+  final IconData icon;
+  final String label;
+  final String? value;
+  final Widget? valueWidget;
+  final VoidCallback? onTap;
+  final bool showChevron;
+  final bool showDivider;
 
-    if (onTap != null) {
-      return InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: tile,
-      );
-    }
-    return tile;
-  }
+  const _SettingRow({
+    required this.isDark,
+    required this.icon,
+    required this.label,
+    this.value,
+    this.valueWidget,
+    this.onTap,
+    this.showChevron = true,
+    this.showDivider = true,
+  });
 
-  Widget _buildSmallButton(
-    String text, {
-    required VoidCallback onTap,
-    required bool isDark,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: isDark ? Colors.white24 : const Color(0xFFCBD5E1),
-          ),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(
-          text,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: isDark ? _brandBlueLight : _brandBlue,
-          ),
-        ),
-      ),
-    );
-  }
+  @override
+  State<_SettingRow> createState() => _SettingRowState();
+}
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // PAYMENTS & SUBSCRIPTIONS TAB (CLIKS BUSINESS & COMPANY APPS)
-  // ═══════════════════════════════════════════════════════════════════════════
-  Widget _buildPaymentAndSubscriptionTab(
-    AccountModel account,
-    bool isDark,
-    bool isMobile,
-  ) {
-    final surfaceColor = isDark ? const Color(0xFF1E293B) : Colors.white;
-    final borderColor = isDark ? Colors.white10 : const Color(0xFFE2E8F0);
+class _SettingRowState extends State<_SettingRow> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasClick = widget.onTap != null;
+
+    final badgeBgColor = _isHovered && hasClick
+        ? const Color(0xFF1A73E8)
+        : (widget.isDark ? const Color(0xFF1A2A4A) : const Color(0xFFE8F0FE));
+
+    final badgeIconColor = _isHovered && hasClick
+        ? Colors.white
+        : const Color(0xFF1A73E8);
+
+    final chevronColor = _isHovered && hasClick
+        ? const Color(0xFF1A73E8)
+        : (widget.isDark ? Colors.white38 : const Color(0xFF5F6368));
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── 1. Hero Header Banner ──
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: isDark
-                  ? [const Color(0xFF0F172A), const Color(0xFF1E3A5F)]
-                  : [const Color(0xFF195BAC), const Color(0xFF1E40AF)],
-            ),
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: _brandBlue.withValues(alpha: 0.25),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
+        MouseRegion(
+          cursor: hasClick ? SystemMouseCursors.click : SystemMouseCursors.basic,
+          onEnter: (_) {
+            if (hasClick) setState(() => _isHovered = true);
+          },
+          onExit: (_) {
+            if (hasClick) setState(() => _isHovered = false);
+          },
+          child: InkWell(
+            onTap: widget.onTap,
+            borderRadius: BorderRadius.circular(8),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
+              decoration: BoxDecoration(
+                color: _isHovered && hasClick
+                    ? (widget.isDark
+                        ? const Color(0xFF2E3238)
+                        : const Color(0xFFF8F9FA))
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
               ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+              child: Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
+                  // Icon Circle Badge
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    width: 40,
+                    height: 40,
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(12),
+                      color: badgeBgColor,
+                      shape: BoxShape.circle,
                     ),
-                    child: const Icon(
-                      Icons.subscriptions_rounded,
-                      color: Colors.white,
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
-                        Text(
-                          'Payments & Subscriptions',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        SizedBox(height: 2),
-                        Text(
-                          'Manage product licenses & company environment apps',
-                          style: TextStyle(fontSize: 12, color: Colors.white70),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
+                    child: Icon(
+                      widget.icon,
+                      color: badgeIconColor,
+                      size: 20,
                     ),
                   ),
-                ],
-              ),
-            ],
-          ),
-        ),
+                  const SizedBox(width: 16),
 
-        const SizedBox(height: 24),
-
-        // ── 2. FEATURED PRODUCT SUBSCRIPTION: CLIKS BUSINESS ──
-        const Text(
-          'Active Product Subscription',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 10),
-
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: surfaceColor,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: _brandBlue.withValues(alpha: 0.4),
-              width: 1.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: _brandBlue.withValues(alpha: isDark ? 0.2 : 0.08),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)],
-                      ),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: const Icon(
-                      Icons.business_center_rounded,
-                      color: Colors.white,
-                      size: 26,
-                    ),
-                  ),
-                  const SizedBox(width: 14),
+                  // Content Column (Upper Label, Lower Value)
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                _subPlanName,
-                                style: const TextStyle(
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: _accentGreen.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: _accentGreen,
-                                  width: 1,
-                                ),
-                              ),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.check_circle_rounded,
-                                    color: _accentGreen,
-                                    size: 12,
-                                  ),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    'SUBSCRIBED',
-                                    style: TextStyle(
-                                      color: _accentGreen,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
                         Text(
-                          'Billing App • $_subPrice',
+                          widget.label,
                           style: TextStyle(
-                            fontSize: 13,
-                            color: isDark
-                                ? Colors.white70
-                                : const Color(0xFF64748B),
-                            fontWeight: FontWeight.w500,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: widget.isDark
+                                ? Colors.white60
+                                : const Color(0xFF5F6368),
+                            letterSpacing: 0.5,
                           ),
                         ),
+                        const SizedBox(height: 3),
+                        if (widget.valueWidget != null)
+                          widget.valueWidget!
+                        else
+                          Text(
+                            widget.value ?? '',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w400,
+                              color: widget.isDark
+                                  ? Colors.white
+                                  : const Color(0xFF202124),
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                       ],
                     ),
                   ),
+
+                  // Trailing Chevron
+                  if (widget.showChevron && hasClick)
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      color: chevronColor,
+                      size: 20,
+                    ),
                 ],
               ),
-
-              const SizedBox(height: 16),
-              Divider(color: borderColor),
-              const SizedBox(height: 12),
-
-              // Plan Details Grid
-              Wrap(
-                spacing: 20,
-                runSpacing: 12,
-                children: [
-                  _buildSubDetailItem(
-                    icon: Icons.calendar_today_rounded,
-                    label: 'Next Renewal',
-                    value: _subRenewalDate,
-                    isDark: isDark,
-                  ),
-                  _buildSubDetailItem(
-                    icon: Icons.credit_card_rounded,
-                    label: 'Payment Method',
-                    value: _subPaymentMethod,
-                    isDark: isDark,
-                  ),
-                  _buildSubDetailItem(
-                    icon: Icons.people_outline_rounded,
-                    label: 'Team Seats',
-                    value: '$_subTeamSeats Active Seats',
-                    isDark: isDark,
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 18),
-
-              // Action Buttons
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: _showManageSubscriptionDialog,
-                    icon: const Icon(Icons.settings_rounded, size: 16),
-                    label: const Text('Manage Subscription'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _brandBlue,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      showDialog(
-                        context: context,
-                        builder: (ctx) => SimpleDialog(
-                          title: const Text('Upgrade Plan'),
-                          children: [
-                            SimpleDialogOption(
-                              onPressed: () {
-                                setState(() {
-                                  _subPlanName = 'Cliks Enterprise';
-                                  _subPrice = '\$79/month';
-                                });
-                                Navigator.pop(ctx);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Upgraded to Cliks Enterprise!',
-                                    ),
-                                    behavior: SnackBarBehavior.floating,
-                                  ),
-                                );
-                              },
-                              child: const Text(
-                                'Cliks Enterprise (\$79/mo) • Unlimited seats & priority support',
-                              ),
-                            ),
-                            SimpleDialogOption(
-                              onPressed: () {
-                                setState(() {
-                                  _subPlanName = 'Cliks Business';
-                                  _subPrice = '\$29/month';
-                                });
-                                Navigator.pop(ctx);
-                              },
-                              child: const Text(
-                                'Cliks Business (\$29/mo) • Standard business tier',
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.arrow_upward_rounded, size: 16),
-                    label: const Text('Upgrade Plan'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: _brandBlue,
-                      side: BorderSide(
-                        color: _brandBlue.withValues(alpha: 0.5),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                  ),
-                  TextButton.icon(
-                    onPressed: () {
-                      showDialog(
-                        context: context,
-                        builder: (ctx) => AlertDialog(
-                          title: const Text('Billing History'),
-                          content: SingleChildScrollView(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: const [
-                                ListTile(
-                                  leading: Icon(
-                                    Icons.receipt_long_rounded,
-                                    color: _brandBlue,
-                                  ),
-                                  title: Text('Invoice #BNX-9942'),
-                                  subtitle: Text(
-                                    'Jul 15, 2026 • \$29.00 (Paid)',
-                                  ),
-                                ),
-                                Divider(),
-                                ListTile(
-                                  leading: Icon(
-                                    Icons.receipt_long_rounded,
-                                    color: _brandBlue,
-                                  ),
-                                  title: Text('Invoice #BNX-8821'),
-                                  subtitle: Text(
-                                    'Jun 15, 2026 • \$29.00 (Paid)',
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(ctx),
-                              child: const Text('Close'),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.history_rounded, size: 16),
-                    label: const Text('Billing History'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: isDark
-                          ? Colors.white70
-                          : const Color(0xFF64748B),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+            ),
           ),
         ),
-
-        const SizedBox(height: 28),
-
-        // ── 3. COMPANY ENVIRONMENT APPS ──
-        const Text(
-          'Company Apps & Products',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'Authorized apps & services configured in your company ecosystem',
-          style: TextStyle(
-            fontSize: 12,
-            color: isDark ? Colors.white54 : const Color(0xFF64748B),
+        if (widget.showDivider)
+          Divider(
+            height: 1,
+            color: widget.isDark
+                ? const Color(0xFF3C4043)
+                : const Color(0xFFE8EAED),
           ),
-        ),
-        const SizedBox(height: 14),
-
-        // List of all Company Apps
-        _buildCompanyAppTile(
-          name: 'BNX Mail',
-          category: 'Communication & secure email app',
-          status: 'Active (Primary)',
-          icon: Icons.mark_email_read_rounded,
-          iconBg: const Color(0xFF195BAC),
-          isDark: isDark,
-          surfaceColor: surfaceColor,
-          borderColor: borderColor,
-        ),
-        const SizedBox(height: 10),
-        _buildCompanyAppTile(
-          name: 'Cliks Business',
-          category: 'Billing app',
-          status: 'Subscribed (\$29/mo)',
-          icon: Icons.business_center_rounded,
-          iconBg: const Color(0xFF2563EB),
-          isSubscribedProduct: true,
-          isDark: isDark,
-          surfaceColor: surfaceColor,
-          borderColor: borderColor,
-        ),
-        const SizedBox(height: 10),
-        _buildCompanyAppTile(
-          name: 'Cliks',
-          category: 'Personal expenses monitoring app',
-          status: 'Active (Free Tier)',
-          icon: Icons.account_balance_wallet_rounded,
-          iconBg: const Color(0xFF0EA5E9),
-          isDark: isDark,
-          surfaceColor: surfaceColor,
-          borderColor: borderColor,
-        ),
-        const SizedBox(height: 10),
-        _buildCompanyAppTile(
-          name: 'B2 Auth',
-          category: 'Security provider app',
-          status: 'Active (Connected)',
-          icon: Icons.security_rounded,
-          iconBg: const Color(0xFF8B5CF6),
-          isDark: isDark,
-          surfaceColor: surfaceColor,
-          borderColor: borderColor,
-        ),
-        const SizedBox(height: 10),
-        _buildCompanyAppTile(
-          name: 'Bit Tool',
-          category: 'Developer toolkit & API suite',
-          status: 'Active (Connected)',
-          icon: Icons.build_circle_rounded,
-          iconBg: const Color(0xFFF59E0B),
-          isDark: isDark,
-          surfaceColor: surfaceColor,
-          borderColor: borderColor,
-        ),
-
-        const SizedBox(height: 40),
       ],
     );
   }
-
-  Widget _buildSubDetailItem({
-    required IconData icon,
-    required String label,
-    required String value,
-    required bool isDark,
-  }) {
-    return Container(
-      constraints: const BoxConstraints(minWidth: 140),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            size: 16,
-            color: isDark ? Colors.white54 : const Color(0xFF64748B),
-          ),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: isDark ? Colors.white54 : const Color(0xFF64748B),
-                ),
-              ),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCompanyAppTile({
-    required String name,
-    required String category,
-    required String status,
-    required IconData icon,
-    required Color iconBg,
-    required bool isDark,
-    required Color surfaceColor,
-    required Color borderColor,
-    bool isSubscribedProduct = false,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: surfaceColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isSubscribedProduct
-              ? _brandBlue.withValues(alpha: 0.5)
-              : borderColor,
-          width: isSubscribedProduct ? 1.5 : 1,
-        ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(9),
-            decoration: BoxDecoration(
-              color: iconBg.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, color: iconBg, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  name,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  category,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: isDark ? Colors.white54 : const Color(0xFF64748B),
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                if (isSubscribedProduct) ...[
-                  const SizedBox(height: 4),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _brandBlue.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Text(
-                      'SUBSCRIPTION PRODUCT',
-                      style: TextStyle(
-                        color: _brandBlue,
-                        fontSize: 8.5,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Flexible(
-            flex: 0,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-              decoration: BoxDecoration(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.06)
-                    : const Color(0xFFF1F5F9),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                status,
-                style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w600,
-                  color: isSubscribedProduct
-                      ? _brandBlue
-                      : (isDark ? Colors.white70 : const Color(0xFF475569)),
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// MODELS
-// ═══════════════════════════════════════════════════════════════════════════
 
 class _TabItem {
   final String title;
@@ -2707,18 +4254,881 @@ class _TabItem {
   });
 }
 
-class _QuickAction {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color color;
-  final VoidCallback onTap;
+// ═════════════════════════════════════════════════════════════════════════════
+// CREATE SUB-ID MODAL DIALOG (Modern & Professional)
+// ═════════════════════════════════════════════════════════════════════════════
+class _CreateSubIdDialog extends StatefulWidget {
+  final AccountModel account;
+  final bool isDark;
+  final ValueChanged<Map<String, String>> onCreated;
 
-  const _QuickAction({
-    required this.icon,
+  const _CreateSubIdDialog({
+    required this.account,
+    required this.isDark,
+    required this.onCreated,
+  });
+
+  @override
+  State<_CreateSubIdDialog> createState() => _CreateSubIdDialogState();
+}
+
+class _CreateSubIdDialogState extends State<_CreateSubIdDialog> {
+  String _accountType = 'Business (Employee / Team)';
+  final _prefixController = TextEditingController();
+  final _firstNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _obscurePassword = true;
+  bool _isSubmitting = false;
+
+  final List<_CategoryData> _categories = [
+    _CategoryData(
+      title: 'Finance',
+      icon: Icons.attach_money_rounded,
+      subItems: const [
+        _SubItemData(title: 'Accounting', id: 201),
+        _SubItemData(title: 'Expenses', id: 202),
+        _SubItemData(title: 'Tax', id: 203),
+      ],
+      isExpanded: true,
+    ),
+    _CategoryData(
+      title: 'Sales',
+      icon: Icons.shopping_cart_outlined,
+      subItems: const [
+        _SubItemData(title: 'Sales Invoice', id: 210),
+        _SubItemData(title: 'Customers', id: 211),
+      ],
+      isExpanded: true,
+    ),
+    _CategoryData(
+      title: 'Purchases',
+      icon: Icons.shopping_cart_outlined,
+      subItems: const [
+        _SubItemData(title: 'Purchase Invoice', id: 212),
+        _SubItemData(title: 'Suppliers', id: 213),
+      ],
+      isExpanded: true,
+    ),
+    _CategoryData(
+      title: 'Inventory',
+      icon: Icons.inventory_2_outlined,
+      subItems: const [
+        _SubItemData(title: 'Products', id: 214),
+        _SubItemData(title: 'Stock', id: 215),
+        _SubItemData(title: 'Warehouse', id: 216),
+      ],
+      isExpanded: true,
+    ),
+    _CategoryData(
+      title: 'HR',
+      icon: Icons.people_outline_rounded,
+      subItems: const [
+        _SubItemData(title: 'Staff', id: 220),
+        _SubItemData(title: 'Attendance', id: 221),
+        _SubItemData(title: 'Payroll', id: 222),
+      ],
+      isExpanded: true,
+    ),
+    _CategoryData(
+      title: 'POS Billing',
+      icon: Icons.desktop_windows_outlined,
+      subItems: const [
+        _SubItemData(title: 'POS Billing', id: 223),
+      ],
+      isExpanded: true,
+    ),
+    _CategoryData(
+      title: 'Reports',
+      icon: Icons.description_outlined,
+      subItems: const [
+        _SubItemData(title: 'Reports', id: 224),
+      ],
+      isExpanded: true,
+    ),
+    _CategoryData(
+      title: 'Barcode Gen',
+      icon: Icons.local_offer_outlined,
+      subItems: const [
+        _SubItemData(title: 'Barcode Gen', id: 225),
+      ],
+      isExpanded: true,
+    ),
+    _CategoryData(
+      title: 'Marketing',
+      icon: Icons.local_offer_outlined,
+      subItems: const [
+        _SubItemData(title: 'Marketing', id: 226),
+      ],
+      isExpanded: true,
+    ),
+  ];
+
+  final Set<int> _checkedSubItems = {};
+
+  @override
+  void dispose() {
+    _prefixController.dispose();
+    _firstNameController.dispose();
+    _lastNameController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  bool _isCategoryChecked(_CategoryData cat) {
+    if (cat.subItems.isEmpty) return false;
+    return cat.subItems.every((item) => _checkedSubItems.contains(item.id));
+  }
+
+  void _toggleCategory(_CategoryData cat) {
+    final allChecked = _isCategoryChecked(cat);
+    setState(() {
+      for (final item in cat.subItems) {
+        if (allChecked) {
+          _checkedSubItems.remove(item.id);
+        } else {
+          _checkedSubItems.add(item.id);
+        }
+      }
+    });
+  }
+
+  void _toggleSubItem(_SubItemData item) {
+    setState(() {
+      if (_checkedSubItems.contains(item.id)) {
+        _checkedSubItems.remove(item.id);
+      } else {
+        _checkedSubItems.add(item.id);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = widget.isDark;
+    final suffixEmail = widget.account.email.isNotEmpty
+        ? widget.account.email
+        : 'chandran123@bnxmail.com';
+
+    final surfaceColor = isDark ? const Color(0xFF23262B) : Colors.white;
+    final borderColor = isDark ? const Color(0xFF383C44) : const Color(0xFFE2E4E8);
+
+    return Dialog(
+      backgroundColor: surfaceColor,
+      elevation: 12,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: borderColor, width: 1),
+      ),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(
+          maxWidth: 750,
+        ),
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Top Header Row with Title and Close Button
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Create New Sub-ID',
+                          style: TextStyle(
+                            fontSize: 19,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: -0.2,
+                            color: isDark ? Colors.white : const Color(0xFF1E2124),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Configure account access and assign isolated permissions.',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            color: isDark ? Colors.white60 : const Color(0xFF5F6368),
+                          ),
+                        ),
+                      ],
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        Icons.close_rounded,
+                        size: 20,
+                        color: isDark ? Colors.white60 : const Color(0xFF5F6368),
+                      ),
+                      tooltip: 'Close',
+                      onPressed: () => Navigator.pop(context),
+                      splashRadius: 18,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Divider(height: 1, thickness: 1, color: borderColor),
+                const SizedBox(height: 18),
+
+                // Main Content (Two Columns Layout)
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isNarrow = constraints.maxWidth < 600;
+
+                    if (isNarrow) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildLeftFields(suffixEmail, isDark),
+                          const SizedBox(height: 20),
+                          _buildRightPermissions(isDark, 310),
+                        ],
+                      );
+                    }
+
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Left Column Form
+                        Expanded(
+                          flex: 11,
+                          child: _buildLeftFields(suffixEmail, isDark),
+                        ),
+                        const SizedBox(width: 20),
+
+                        // Right Column: Big Centre Sub Tab (330px height)
+                        Expanded(
+                          flex: 12,
+                          child: _buildRightPermissions(isDark, 330),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+
+                const SizedBox(height: 20),
+                Divider(height: 1, thickness: 1, color: borderColor),
+                const SizedBox(height: 16),
+
+                // Bottom Action Buttons (Directly below content, zero blank gap!)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: TextButton.styleFrom(
+                        foregroundColor: isDark ? Colors.white70 : const Color(0xFF5F6368),
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    FilledButton(
+                      onPressed: _isSubmitting ? null : _submit,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF1A73E8),
+                        foregroundColor: Colors.white,
+                        elevation: 1,
+                        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 11),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                      ),
+                      child: _isSubmitting
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text(
+                              'Create Sub-ID',
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                            ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLeftFields(String suffixEmail, bool isDark) {
+    final borderSide = BorderSide(
+      color: isDark ? const Color(0xFF383C44) : const Color(0xFFD1D5DB),
+      width: 1,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Account Type
+        _buildFieldLabel('Account Type', isDark),
+        const SizedBox(height: 6),
+        PopupMenuButton<String>(
+          tooltip: 'Select Account Type',
+          offset: const Offset(0, 42),
+          elevation: 6,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+            side: BorderSide(
+              color: isDark ? const Color(0xFF383C44) : const Color(0xFFD1D5DB),
+            ),
+          ),
+          color: isDark ? const Color(0xFF24272B) : Colors.white,
+          onSelected: (val) {
+            setState(() => _accountType = val);
+          },
+          itemBuilder: (context) => [
+            _buildAccountTypeItem(
+              title: 'Business (Employee / Team)',
+              isSelected: _accountType == 'Business (Employee / Team)',
+              isDark: isDark,
+            ),
+            _buildAccountTypeItem(
+              title: 'Personal (Assistant / Family)',
+              isSelected: _accountType == 'Personal (Assistant / Family)',
+              isDark: isDark,
+            ),
+          ],
+          child: Container(
+            height: 42,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1B1E22) : Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: isDark ? const Color(0xFF383C44) : const Color(0xFFD1D5DB),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    _accountType,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: isDark ? Colors.white : const Color(0xFF1E2124),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 19,
+                  color: isDark ? Colors.white60 : const Color(0xFF5F6368),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        // Username Prefix
+        _buildFieldLabel('Username Prefix', isDark),
+        const SizedBox(height: 6),
+        Container(
+          height: 42,
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1B1E22) : Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isDark ? const Color(0xFF383C44) : const Color(0xFFD1D5DB),
+            ),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _prefixController,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isDark ? Colors.white : const Color(0xFF1E2124),
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'e.g. hr',
+                    hintStyle: TextStyle(
+                      fontSize: 13,
+                      color: isDark ? Colors.white38 : const Color(0xFF9AA0A6),
+                    ),
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                  ),
+                ),
+              ),
+              Container(
+                alignment: Alignment.center,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF181A1D) : const Color(0xFFF1F3F5),
+                  borderRadius: const BorderRadius.horizontal(right: Radius.circular(7)),
+                  border: Border(left: borderSide),
+                ),
+                child: Text(
+                  '.$suffixEmail',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w500,
+                    color: isDark ? Colors.white70 : const Color(0xFF5F6368),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        // First Name & Last Name (Side by Side)
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildFieldLabel('First Name', isDark),
+                  const SizedBox(height: 6),
+                  SizedBox(
+                    height: 42,
+                    child: TextField(
+                      controller: _firstNameController,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isDark ? Colors.white : const Color(0xFF1E2124),
+                      ),
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: isDark ? const Color(0xFF1B1E22) : Colors.white,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: borderSide,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: borderSide,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(color: Color(0xFF1A73E8), width: 1.5),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildFieldLabel('Last Name', isDark),
+                  const SizedBox(height: 6),
+                  SizedBox(
+                    height: 42,
+                    child: TextField(
+                      controller: _lastNameController,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isDark ? Colors.white : const Color(0xFF1E2124),
+                      ),
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: isDark ? const Color(0xFF1B1E22) : Colors.white,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: borderSide,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: borderSide,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(color: Color(0xFF1A73E8), width: 1.5),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+
+        // Temporary Password (with toggle visibility)
+        _buildFieldLabel('Temporary Password', isDark),
+        const SizedBox(height: 6),
+        SizedBox(
+          height: 42,
+          child: TextField(
+            controller: _passwordController,
+            obscureText: _obscurePassword,
+            style: TextStyle(
+              fontSize: 13,
+              color: isDark ? Colors.white : const Color(0xFF1E2124),
+            ),
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: isDark ? const Color(0xFF1B1E22) : Colors.white,
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+              suffixIcon: IconButton(
+                icon: Icon(
+                  _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                  size: 18,
+                  color: isDark ? Colors.white54 : const Color(0xFF757575),
+                ),
+                onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                splashRadius: 16,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: borderSide,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: borderSide,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Color(0xFF1A73E8), width: 1.5),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  PopupMenuItem<String> _buildAccountTypeItem({
+    required String title,
+    required bool isSelected,
+    required bool isDark,
+  }) {
+    return PopupMenuItem<String>(
+      value: title,
+      height: 38,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 20,
+            child: isSelected
+                ? Icon(
+                    Icons.check,
+                    size: 16,
+                    color: isDark ? Colors.white : const Color(0xFF1A73E8),
+                  )
+                : const SizedBox.shrink(),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+              color: isDark ? Colors.white : const Color(0xFF1E2124),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // BIG CENTRE SUB-TAB: ACCESS PERMISSIONS (330px height, modern scroll list)
+  // ═══════════════════════════════════════════════════════════════════════════
+  Widget _buildRightPermissions(bool isDark, double height) {
+    final borderColor = isDark ? const Color(0xFF383C44) : const Color(0xFFD1D5DB);
+    final boxBgColor = isDark ? const Color(0xFF1B1E22) : const Color(0xFFFAFBFD);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            _buildFieldLabel('Access Permissions', isDark),
+            if (_checkedSubItems.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1A2A4A) : const Color(0xFFE8F0FE),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '${_checkedSubItems.length} selected',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1A73E8),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Container(
+          height: height,
+          decoration: BoxDecoration(
+            color: boxBgColor,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: borderColor, width: 1),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(9),
+            child: ListView.separated(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              itemCount: _categories.length,
+              separatorBuilder: (_, _) => Divider(
+                height: 1,
+                thickness: 0.5,
+                color: isDark ? const Color(0xFF2C3036) : const Color(0xFFEDEFF2),
+              ),
+              itemBuilder: (context, catIndex) {
+                final cat = _categories[catIndex];
+                final isCatChecked = _isCategoryChecked(cat);
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Category Header
+                    InkWell(
+                      onTap: () {
+                        setState(() {
+                          cat.isExpanded = !cat.isExpanded;
+                        });
+                      },
+                      hoverColor: isDark ? const Color(0xFF252930) : const Color(0xFFF1F5F9),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: Checkbox(
+                                value: isCatChecked,
+                                activeColor: const Color(0xFF1A73E8),
+                                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                onChanged: (_) => _toggleCategory(cat),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Icon(
+                              cat.icon,
+                              size: 17,
+                              color: isDark ? Colors.white70 : const Color(0xFF374151),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                cat.title,
+                                style: TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: isDark ? Colors.white : const Color(0xFF1F2937),
+                                ),
+                              ),
+                            ),
+                            Icon(
+                              cat.isExpanded
+                                  ? Icons.keyboard_arrow_down_rounded
+                                  : Icons.keyboard_arrow_right_rounded,
+                              size: 19,
+                              color: isDark ? Colors.white54 : const Color(0xFF6B7280),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // Sub Items
+                    if (cat.isExpanded)
+                      ...cat.subItems.map((subItem) {
+                        final isSubChecked = _checkedSubItems.contains(subItem.id);
+
+                        return Padding(
+                          padding: const EdgeInsets.only(left: 28, right: 6, top: 1, bottom: 1),
+                          child: InkWell(
+                            onTap: () => _toggleSubItem(subItem),
+                            hoverColor: isDark ? const Color(0xFF282D36) : const Color(0xFFEBF3FE),
+                            borderRadius: BorderRadius.circular(6),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: isSubChecked
+                                    ? (isDark
+                                        ? const Color(0xFF1A2A4A).withValues(alpha: 0.3)
+                                        : const Color(0xFFEBF3FE).withValues(alpha: 0.6))
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Row(
+                                children: [
+                                  SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: Checkbox(
+                                      value: isSubChecked,
+                                      activeColor: const Color(0xFF1A73E8),
+                                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(3)),
+                                      onChanged: (_) => _toggleSubItem(subItem),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      subItem.title,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: isSubChecked ? FontWeight.w500 : FontWeight.w400,
+                                        color: isSubChecked
+                                            ? const Color(0xFF1A73E8)
+                                            : (isDark ? Colors.white70 : const Color(0xFF374151)),
+                                      ),
+                                    ),
+                                  ),
+                                  Icon(
+                                    Icons.chevron_right_rounded,
+                                    size: 16,
+                                    color: isDark ? Colors.white38 : const Color(0xFF9CA3AF),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFieldLabel(String label, bool isDark) {
+    return Text(
+      label,
+      style: TextStyle(
+        fontSize: 12.5,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.2,
+        color: isDark ? Colors.white70 : const Color(0xFF374151),
+      ),
+    );
+  }
+
+  Future<void> _submit() async {
+    final prefix = _prefixController.text.trim();
+    final firstName = _firstNameController.text.trim();
+    final lastName = _lastNameController.text.trim();
+    final password = _passwordController.text.trim();
+    final fullName = ('$firstName $lastName').trim();
+
+    final baseEmail = widget.account.email.isNotEmpty
+        ? widget.account.email
+        : 'chandran123@bnxmail.com';
+
+    final username = prefix.isNotEmpty
+        ? '$prefix.$baseEmail'
+        : 'sales.${baseEmail.split('@').first}';
+
+    if (prefix.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a Sub-ID prefix'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      final perms = _checkedSubItems.toList();
+
+      final res = await UserRepository.createSubId(
+        prefix: prefix,
+        password: password.isNotEmpty ? password : 'TempPassword123!',
+        firstName: firstName.isNotEmpty ? firstName : 'Sub',
+        lastName: lastName.isNotEmpty ? lastName : 'User',
+        accountType: _accountType.contains('Personal') ? 'PERSONAL' : 'BUSINESS',
+        permissions: perms,
+      );
+
+      final createdUsername = res?['username']?.toString() ??
+          res?['subUsername']?.toString() ??
+          username;
+      widget.onCreated({
+        'username': createdUsername,
+        'name': fullName.isNotEmpty ? fullName : 'Sub User',
+        'type': _accountType.contains('Personal') ? 'PERSONAL' : 'BUSINESS',
+      });
+
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+        final errorMessage = e is ApiException ? e.message : e.toString();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to create Sub-ID: $errorMessage'),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+}
+
+class _SubItemData {
+  final String title;
+  final int id;
+
+  const _SubItemData({required this.title, required this.id});
+}
+
+class _CategoryData {
+  final String title;
+  final IconData icon;
+  final List<_SubItemData> subItems;
+  bool isExpanded;
+
+  _CategoryData({
     required this.title,
-    required this.subtitle,
-    required this.color,
-    required this.onTap,
+    required this.icon,
+    required this.subItems,
+    this.isExpanded = true,
   });
 }

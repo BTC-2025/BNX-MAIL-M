@@ -75,15 +75,8 @@ class ProfileButton extends ConsumerWidget {
           ),
         ),
         onSelected: (value) async {
-          if (value == 'account') {
+          if (value == 'account' || value == 'profile') {
             context.push('/manage-account');
-          } else if (value == 'profile') {
-            if (defaultTargetPlatform == TargetPlatform.macOS) {
-              context.push('/manage-account');
-            } else {
-              ref.read(appUiProvider.notifier).selectFolder('Profile');
-              context.go('/profile');
-            }
           } else if (value == 'settings') {
             ref.read(appUiProvider.notifier).selectFolder('Settings');
             context.go('/settings');

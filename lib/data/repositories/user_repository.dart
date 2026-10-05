@@ -57,12 +57,17 @@ class UserRepository {
       await TokenService.saveUserSettings(email, {...existing, ...fields});
     }
     try {
-      // Official endpoint: PATCH /api/users/settings
+      // 5.7 Update Profile: PATCH /api/users/profile
       try {
-        await ApiClient.patch('/api/users/settings', body: fields);
+        await ApiClient.patch('/api/users/profile', body: fields);
       } catch (_) {
-        // Fallback: PUT /api/user/profile
-        await ApiClient.put('/api/user/profile', body: fields);
+        // Fallback 1: PATCH /api/users/settings
+        try {
+          await ApiClient.patch('/api/users/settings', body: fields);
+        } catch (_) {
+          // Fallback 2: PUT /api/user/profile
+          await ApiClient.put('/api/user/profile', body: fields);
+        }
       }
     } catch (e) {
       print('[PROFILE UPDATE API LOG] $e');
@@ -326,10 +331,163 @@ class UserRepository {
     }
   }
 
-  // ── Set Primary Mailbox ──────────────────────────────────────────────────
+  // ── Section 5: Manage Accounts & Sub-IDs ───────────────────────────────────
 
-  static Future<void> setPrimaryMailbox(String emailId) async {
-    await ApiClient.post('/api/emails/$emailId/set-primary');
+  /// 5.1 List Connected Mail Accounts (GET /api/emails/list)
+  static Future<List<Map<String, dynamic>>> getConnectedEmails() async {
+    try {
+      final res = await ApiClient.get('/api/emails/list');
+      final data = res['data'];
+      dynamic list;
+      if (data is Map && data.containsKey('emails')) {
+        list = data['emails'];
+      } else if (data is List) {
+        list = data;
+      } else if (res['emails'] is List) {
+        list = res['emails'];
+      } else {
+        list = _extractList(res);
+      }
+      if (list is List) {
+        return list
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
+      }
+      return [];
+    } catch (e) {
+      print('[GET CONNECTED EMAILS ERROR] $e');
+      return [];
+    }
+  }
+
+  /// 5.2 Create New Mailbox / Alias (POST /api/emails/create)
+  static Future<Map<String, dynamic>?> createMailbox({
+    required String emailName,
+    required String password,
+  }) async {
+    try {
+      final res = await ApiClient.post(
+        '/api/emails/create',
+        body: {
+          'emailName': emailName.trim(),
+          'password': password,
+        },
+      );
+      final data = res['data'];
+      if (data is Map) {
+        return Map<String, dynamic>.from(data['email'] ?? data);
+      }
+      return Map<String, dynamic>.from(res);
+    } catch (e) {
+      print('[CREATE MAILBOX ERROR] $e');
+      rethrow;
+    }
+  }
+
+  /// 5.3 Switch Primary Mailbox (POST /api/emails/{emailId}/set-primary)
+  static Future<bool> switchPrimaryMailbox(dynamic emailId) async {
+    try {
+      final res = await ApiClient.post('/api/emails/$emailId/set-primary');
+      return res['success'] == true || res['data'] != null;
+    } catch (e) {
+      print('[SWITCH PRIMARY MAILBOX ERROR] $e');
+      return false;
+    }
+  }
+
+  /// Alias for switchPrimaryMailbox for backward compatibility
+  static Future<void> setPrimaryMailbox(dynamic emailId) async {
+    await switchPrimaryMailbox(emailId);
+  }
+
+  /// 5.4 Create Sub-ID Account (POST /api/subid/create)
+  static Future<Map<String, dynamic>?> createSubId({
+    required String prefix,
+    required String password,
+    required String firstName,
+    required String lastName,
+    String accountType = 'BUSINESS',
+    List<int> permissions = const [],
+  }) async {
+    try {
+      // Backend Jackson deserializer strictly expects List<Integer> for permissions
+      final List<int> intPermissions = permissions;
+
+      final normAccountType = accountType.toUpperCase().contains('PERSONAL')
+          ? 'PERSONAL'
+          : (accountType.toUpperCase().contains('CHILD') ? 'CHILD' : 'BUSINESS');
+
+      final body = {
+        'prefix': prefix.trim(),
+        'password': password,
+        'firstName': firstName.trim(),
+        'lastName': lastName.trim(),
+        'accountType': normAccountType,
+        'permissions': intPermissions,
+      };
+      final res = await ApiClient.post('/api/subid/create', body: body);
+      final data = res['data'];
+      if (data is Map) {
+        return Map<String, dynamic>.from(data);
+      }
+      return Map<String, dynamic>.from(res);
+    } catch (e) {
+      print('[CREATE SUBID ERROR] $e');
+      rethrow;
+    }
+  }
+
+  /// 5.5 List Sub-ID Accounts (GET /api/subid/list)
+  static Future<List<Map<String, dynamic>>> listSubIds() async {
+    try {
+      final res = await ApiClient.get('/api/subid/list');
+      final data = res['data'];
+      dynamic list;
+      if (data is List) {
+        list = data;
+      } else if (data is Map && data['subIds'] is List) {
+        list = data['subIds'];
+      } else if (res['subids'] is List) {
+        list = res['subids'];
+      } else {
+        list = _extractList(res);
+      }
+      if (list is List) {
+        return list
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
+      }
+      return [];
+    } catch (e) {
+      print('[LIST SUB-IDS ERROR] $e');
+      return [];
+    }
+  }
+
+  /// Delete Sub-ID Account (DELETE /api/subid/{id})
+  static Future<bool> deleteSubId(dynamic id) async {
+    try {
+      print('[SUBID DELETE] Calling DELETE endpoint: /api/subid/$id');
+      final res = await ApiClient.delete('/api/subid/$id');
+      print('[SUBID DELETE] Response body: $res');
+      return res['success'] == true || res['error'] == null;
+    } catch (e) {
+      print('[SUBID DELETE ERROR] $e');
+      rethrow;
+    }
+  }
+
+  /// 5.6 Parent Approval for Child Accounts (PATCH /api/users/{id}/approve)
+  static Future<bool> approveChildAccount(dynamic userId) async {
+    try {
+      final res = await ApiClient.patch('/api/users/$userId/approve');
+      return res['success'] == true || (res['data'] is Map && res['data']['approved'] == true);
+    } catch (e) {
+      print('[APPROVE CHILD ACCOUNT ERROR] $e');
+      return false;
+    }
   }
 
   // ── Sessions & Activity Logs ──────────────────────────────────────────────

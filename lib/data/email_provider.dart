@@ -9,6 +9,7 @@ import '../models/label_model.dart';
 import '../core/network/token_service.dart';
 import '../core/notifications/notification_service.dart';
 import '../core/notifications/notification_model.dart';
+import '../core/network/api_exception.dart';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -51,6 +52,7 @@ class EmailNotifier extends StateNotifier<EmailState> {
   Timer? _pollingTimer;
   bool _isDispatchingScheduled = false;
   final Set<String> _dispatchingIds = {};
+  static final Set<String> _knownStaleUids = {};
 
   void clear() {
     _pollingTimer?.cancel();
@@ -390,6 +392,7 @@ class EmailNotifier extends StateNotifier<EmailState> {
       }
 
       for (final e in fetched) {
+        if (_knownStaleUids.contains(MailRepository.cleanUid(e.id))) continue;
         final key = e.canonicalKey;
         if (merged.containsKey(key)) {
           final existing = merged[key]!;
@@ -477,6 +480,7 @@ class EmailNotifier extends StateNotifier<EmailState> {
 
       // Add/merge freshly fetched emails
       for (final e in fetched) {
+        if (_knownStaleUids.contains(MailRepository.cleanUid(e.id))) continue;
         final key = e.canonicalKey;
         if (merged.containsKey(key)) {
           final existing = merged[key]!;
@@ -608,6 +612,7 @@ class EmailNotifier extends StateNotifier<EmailState> {
       for (int i = 0; i < results.length; i++) {
         final folderName = foldersToRefresh.elementAt(i);
         for (final e in results[i]) {
+          if (_knownStaleUids.contains(MailRepository.cleanUid(e.id))) continue;
           final key = e.canonicalKey;
           if (merged.containsKey(key)) {
             final existing = merged[key]!;
@@ -973,7 +978,11 @@ class EmailNotifier extends StateNotifier<EmailState> {
     });
   }
 
-  Future<void> fetchFullEmailDetails(String emailId, String folder) async {
+  Future<void> fetchFullEmailDetails(
+    String emailId,
+    String folder, {
+    void Function(String message)? onStaleEmail,
+  }) async {
     final cleanId = MailRepository.cleanUid(emailId);
     try {
       final fullEmail = await MailRepository.fetchEmail(
@@ -997,6 +1006,28 @@ class EmailNotifier extends StateNotifier<EmailState> {
                 mergedAttachments.isNotEmpty,
           );
         });
+      }
+    } on ApiException catch (e) {
+      if (e.isNotFound) {
+        _knownStaleUids.add(cleanId);
+        print(
+          '[STALE EMAIL] Email with UID $cleanId is no longer present on server ($folder).',
+        );
+        state = state.copyWith(
+          emails: state.emails
+              .where((m) => m.id != emailId && MailRepository.cleanUid(m.id) != cleanId)
+              .toList(),
+        );
+        forceRefreshFolder(folder);
+        if (onStaleEmail != null) {
+          onStaleEmail(
+            'This email is no longer available. Refreshing $folder...',
+          );
+        }
+      } else {
+        print(
+          '[FETCH EMAIL DETAILS ERROR] fetchFullEmailDetails failed for $cleanId: $e',
+        );
       }
     } catch (e) {
       print(

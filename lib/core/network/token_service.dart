@@ -261,6 +261,9 @@ class TokenService {
         }
         print('[TOKEN SERVICE] Active session switched to: $cleanEmail');
       }
+    } else {
+      await _safeWrite(key: _kEmail, value: cleanEmail);
+      print('[TOKEN SERVICE] Active session email updated to: $cleanEmail');
     }
   }
 
@@ -319,7 +322,9 @@ class TokenService {
   static Future<void> saveUserSettings(String email, Map<String, dynamic> settings) async {
     final cleanEmail = email.trim().toLowerCase();
     if (cleanEmail.isNotEmpty) {
-      await _safeWrite(key: _kSettingsKey(cleanEmail), value: jsonEncode(settings));
+      final existing = await getUserSettings(cleanEmail) ?? {};
+      final merged = {...existing, ...settings};
+      await _safeWrite(key: _kSettingsKey(cleanEmail), value: jsonEncode(merged));
     }
   }
 
@@ -333,6 +338,31 @@ class TokenService {
       } catch (_) {}
     }
     return null;
+  }
+
+  static String _kCustomLabelsKey(String email) =>
+      'bnx_user_custom_labels_${email.trim().toLowerCase()}';
+
+  static Future<void> saveUserCustomLabels(String email, List<Map<String, dynamic>> labels) async {
+    final cleanEmail = email.trim().toLowerCase();
+    if (cleanEmail.isNotEmpty) {
+      await _safeWrite(key: _kCustomLabelsKey(cleanEmail), value: jsonEncode(labels));
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getUserCustomLabels(String email) async {
+    final cleanEmail = email.trim().toLowerCase();
+    if (cleanEmail.isEmpty) return [];
+    final str = await _safeRead(key: _kCustomLabelsKey(cleanEmail));
+    if (str != null && str.isNotEmpty) {
+      try {
+        final list = jsonDecode(str);
+        if (list is List) {
+          return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        }
+      } catch (_) {}
+    }
+    return [];
   }
 
   static String _kTemplatesKey(String email) =>

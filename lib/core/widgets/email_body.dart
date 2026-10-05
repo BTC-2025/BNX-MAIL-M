@@ -16,6 +16,7 @@ import '../../data/all_inboxes_provider.dart';
 import '../../data/app_state_provider.dart';
 import '../../data/repositories/mail_repository.dart';
 import '../network/api_client.dart';
+import '../network/api_exception.dart';
 import '../network/token_service.dart';
 import '../theme/colors.dart';
 import '../theme/neumorphic.dart';
@@ -25,6 +26,8 @@ import 'create_label_dialog.dart';
 import '../../features/ai/presentation/ai_smart_reply_bar.dart';
 import '../../features/inbox/presentation/snooze_scheduler_dialog.dart';
 import 'email_html_view.dart';
+import '../../data/account_provider.dart';
+import '../../data/subscription_provider.dart';
 
 class EmailBody extends ConsumerWidget {
   final String emailId;
@@ -80,9 +83,19 @@ class EmailBody extends ConsumerWidget {
       ),
     );
 
+    final activeAccount = ref.watch(activeAccountProvider);
+    final subscriptionState = ref.watch(subscriptionProvider);
+    final senderEmailClean = email.senderEmail.trim().toLowerCase();
+    final isUnsubscribed =
+        subscriptionState.blockedEmailsSet.contains(senderEmailClean);
+    final isPending =
+        subscriptionState.pendingEmails.contains(senderEmailClean);
+    final isOwnEmail = email.isSent ||
+        senderEmailClean == activeAccount.email.trim().toLowerCase();
+
     final bool needsFullDetails = email.id != 'error' &&
-        (!_handledDetailIds.contains(email.id) ||
-            email.htmlBody.isEmpty ||
+        !_handledDetailIds.contains(email.id) &&
+        (email.htmlBody.isEmpty ||
             !EmailHtmlView.looksLikeHtml(email.htmlBody));
 
     if (needsFullDetails) {
@@ -120,11 +133,44 @@ class EmailBody extends ConsumerWidget {
             if (detail != null) {
               ref.read(allInboxesProvider.notifier).updateEmail(detail);
             }
+          } on ApiException catch (e) {
+            if (e.isNotFound) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'This email is no longer available. Refreshing $currentFolder...',
+                    ),
+                    duration: const Duration(seconds: 4),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+                if (email.body.isEmpty && email.htmlBody.isEmpty) {
+                  Navigator.of(context).maybePop();
+                }
+              }
+              ref.read(emailProvider.notifier).forceRefreshFolder(currentFolder);
+            }
           } catch (_) {}
         } else {
-          ref
-              .read(emailProvider.notifier)
-              .fetchFullEmailDetails(email.id, currentFolder);
+          ref.read(emailProvider.notifier).fetchFullEmailDetails(
+            email.id,
+            currentFolder,
+            onStaleEmail: (msg) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(msg),
+                    duration: const Duration(seconds: 4),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+                if (email.body.isEmpty && email.htmlBody.isEmpty) {
+                  Navigator.of(context).maybePop();
+                }
+              }
+            },
+          );
         }
       });
     }
@@ -621,8 +667,7 @@ class EmailBody extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
-                        crossAxisAlignment: CrossAxisAlignment.baseline,
-                        textBaseline: TextBaseline.alphabetic,
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           Flexible(
                             child: Text(
@@ -635,8 +680,8 @@ class EmailBody extends ConsumerWidget {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
+                          const SizedBox(width: 6),
+                          Flexible(
                             child: Text(
                               '<${email.senderEmail}>',
                               style: TextStyle(
@@ -648,6 +693,18 @@ class EmailBody extends ConsumerWidget {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
+                          if (!isOwnEmail &&
+                              email.senderEmail.trim().isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            _buildUnsubscribeBadge(
+                              context: context,
+                              ref: ref,
+                              email: email,
+                              isUnsubscribed: isUnsubscribed,
+                              isPending: isPending,
+                              isDark: isDark,
+                            ),
+                          ],
                         ],
                       ),
                       const SizedBox(height: 2),
@@ -1299,6 +1356,232 @@ class EmailBody extends ConsumerWidget {
         ),
       ],
     );
+  }
+
+  Widget _buildUnsubscribeBadge({
+    required BuildContext context,
+    required WidgetRef ref,
+    required EmailModel email,
+    required bool isUnsubscribed,
+    required bool isPending,
+    required bool isDark,
+  }) {
+    final bgColor = isUnsubscribed
+        ? (isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9))
+        : (isDark
+            ? const Color(0xFF451A1A).withValues(alpha: 0.6)
+            : const Color(0xFFFDE8E8));
+    final textColor = isUnsubscribed
+        ? (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B))
+        : (isDark ? const Color(0xFFF87171) : const Color(0xFFE53935));
+    final labelText = isUnsubscribed ? 'Unsubscribed' : 'Unsubscribe';
+
+    return Tooltip(
+      message: isUnsubscribed
+          ? 'Sender is unsubscribed. Click to resubscribe.'
+          : 'Unsubscribe from this sender',
+      child: MouseRegion(
+        cursor: isPending ? SystemMouseCursors.basic : SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: isPending
+              ? null
+              : () => _handleSubscriptionAction(
+                    context,
+                    ref,
+                    email: email,
+                    isUnsubscribed: isUnsubscribed,
+                  ),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+            decoration: BoxDecoration(
+              color: bgColor,
+              borderRadius: BorderRadius.circular(14),
+              border: isUnsubscribed
+                  ? Border.all(
+                      color: isDark
+                          ? const Color(0xFF334155)
+                          : const Color(0xFFCBD5E1),
+                      width: 0.5,
+                    )
+                  : null,
+            ),
+            child: isPending
+                ? SizedBox(
+                    width: 10,
+                    height: 10,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 1.5,
+                      valueColor: AlwaysStoppedAnimation<Color>(textColor),
+                    ),
+                  )
+                : Text(
+                    labelText,
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.1,
+                    ),
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleSubscriptionAction(
+    BuildContext context,
+    WidgetRef ref, {
+    required EmailModel email,
+    required bool isUnsubscribed,
+  }) async {
+    final senderEmail = email.senderEmail.trim();
+    if (senderEmail.isEmpty) return;
+    final displayName = email.senderName.trim().isNotEmpty
+        ? email.senderName.trim()
+        : senderEmail;
+
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
+    if (!isUnsubscribed) {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(
+            'Unsubscribe from $displayName?',
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+          content: Text(
+            'Are you sure you want to unsubscribe from $senderEmail?\n\nYou can manage your subscriptions at any time in the Subscriptions section.',
+            style: const TextStyle(fontSize: 14),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFE53935),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Unsubscribe'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirm != true) return;
+
+      scaffoldMessenger.hideCurrentSnackBar();
+      final res = await ref
+          .read(subscriptionProvider.notifier)
+          .unsubscribe(senderEmail);
+
+      if (res.success) {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            content: Text('Unsubscribed from $displayName'),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
+            action: SnackBarAction(
+              label: 'Undo',
+              textColor: Colors.amberAccent,
+              onPressed: () {
+                ref
+                    .read(subscriptionProvider.notifier)
+                    .subscribe(senderEmail);
+              },
+            ),
+          ),
+        );
+      } else {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              res.message ?? 'Failed to unsubscribe from $displayName',
+            ),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } else {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(
+            'Resubscribe to $displayName?',
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+          content: Text(
+            'Do you want to resubscribe to $senderEmail and receive messages again?',
+            style: const TextStyle(fontSize: 14),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF10B981),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Resubscribe'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirm != true) return;
+
+      scaffoldMessenger.hideCurrentSnackBar();
+      final res = await ref
+          .read(subscriptionProvider.notifier)
+          .subscribe(senderEmail);
+
+      if (res.success) {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            content: Text('Resubscribed to $displayName'),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
+            action: SnackBarAction(
+              label: 'Undo',
+              textColor: Colors.amberAccent,
+              onPressed: () {
+                ref
+                    .read(subscriptionProvider.notifier)
+                    .unsubscribe(senderEmail);
+              },
+            ),
+          ),
+        );
+      } else {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              res.message ?? 'Failed to resubscribe to $displayName',
+            ),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 }
 

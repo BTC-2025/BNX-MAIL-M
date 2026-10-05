@@ -160,7 +160,15 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
     // 1. Instantly update tokens locally
     await TokenService.switchActiveAccountSession(cleanId);
 
-    // 2. Clear state caches and reset navigation folder to 'Inbox' (Mail Section)
+    // 2. Update account list state immediately so activeAccount is up to date
+    state = state.map((acc) {
+      final accEmail = acc.email.trim().toLowerCase();
+      final accId = acc.id.trim().toLowerCase();
+      final isTarget = (accEmail == cleanId || accId == cleanId);
+      return acc.copyWith(isActive: isTarget);
+    }).toList();
+
+    // 3. Clear state caches and reset navigation folder to 'Inbox' (Mail Section)
     if (ref != null) {
       ref.read(emailProvider.notifier).switchAccountContext(cleanId);
       ref.read(colabListProvider.notifier).switchAccountContext(cleanId);
@@ -172,15 +180,8 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
 
       // Reset active folder to 'Inbox' so app lands on Mail section
       ref.read(appUiProvider.notifier).selectFolder('Inbox');
+      ref.read(appUiProvider.notifier).loadUserSettings(cleanId);
     }
-
-    // 3. Update account list state immediately
-    state = state.map((acc) {
-      final accEmail = acc.email.trim().toLowerCase();
-      final accId = acc.id.trim().toLowerCase();
-      final isTarget = (accEmail == cleanId || accId == cleanId);
-      return acc.copyWith(isActive: isTarget);
-    }).toList();
 
     // 4. Non-blocking background call to update primary mailbox on backend
     UserRepository.setPrimaryMailbox(id).catchError((_) {});

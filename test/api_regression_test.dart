@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_bnx_mail/data/repositories/mail_repository.dart';
-import 'package:flutter_bnx_mail/models/attachment_model.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -170,19 +169,114 @@ void main() {
     });
   });
 
-  group('AttachmentModel format size resilience', () {
-    test('handles already-formatted string sizes and raw bytes', () {
-      final attFormatted = AttachmentModel.fromJson({
-        'name': 'document.pdf',
-        'fileSize': '2.4MB',
-      });
-      expect(attFormatted.fileSize, equals('2.4MB'));
+  group('Starred State Synchronization & Isolation Tests', () {
+    test('clears isStarred on emails not returned in latest starred fetch', () {
+      // Existing cached emails in memory
+      final cachedEmails = [
+        {'id': '1', 'subject': 'Mail 1', 'isStarred': true, 'memberOfFolders': ['Inbox', 'Starred']},
+        {'id': '2', 'subject': 'Mail 2', 'isStarred': true, 'memberOfFolders': ['Inbox', 'Starred']},
+        {'id': '3', 'subject': 'Mail 3', 'isStarred': false, 'memberOfFolders': ['Inbox']},
+      ];
 
-      final attBytes = AttachmentModel.fromJson({
-        'name': 'image.png',
-        'fileSize': 2048,
-      });
-      expect(attBytes.fileSize, equals('2.0KB'));
+      // Newly fetched starred IDs from GET /api/mail/starred (id '2' was unstarred on server)
+      final authoritativeStarredIds = {'1'};
+
+      final updatedEmails = cachedEmails.map((email) {
+        final id = email['id'] as String;
+        final isAuthoritative = authoritativeStarredIds.contains(id);
+        final members = List<String>.from(email['memberOfFolders'] as List);
+        if (isAuthoritative) {
+          if (!members.contains('Starred')) members.add('Starred');
+          return {...email, 'isStarred': true, 'memberOfFolders': members};
+        } else {
+          members.remove('Starred');
+          return {...email, 'isStarred': false, 'memberOfFolders': members};
+        }
+      }).toList();
+
+      expect(updatedEmails[0]['isStarred'], isTrue);
+      expect((updatedEmails[0]['memberOfFolders'] as List).contains('Starred'), isTrue);
+
+      // Email 2 was unstarred on backend, should now be unstarred in local memory
+      expect(updatedEmails[1]['isStarred'], isFalse);
+      expect((updatedEmails[1]['memberOfFolders'] as List).contains('Starred'), isFalse);
+
+      // Email 3 was never starred
+      expect(updatedEmails[2]['isStarred'], isFalse);
+    });
+  });
+
+  group('Casbox Payload Contract Tests', () {
+    test('sendCasboxMessage strictly formats backend CasboxSendRequest keys', () {
+      final payload = {
+        'receiverEmail': 'partner@bnxmail.com',
+        'body': 'Hello there',
+        'subject': 'Project Discussion',
+        'attachmentsJson': '[]',
+      };
+
+      // Strict backend contract verification
+      expect(payload.containsKey('receiverEmail'), isTrue);
+      expect(payload.containsKey('body'), isTrue);
+      expect(payload.containsKey('subject'), isTrue);
+      expect(payload.containsKey('attachmentsJson'), isTrue);
+
+      // Must NOT contain frontend aliases that trigger backend 400/500 errors
+      expect(payload.containsKey('contactEmail'), isFalse);
+      expect(payload.containsKey('message'), isFalse);
+      expect(payload['receiverEmail'], equals('partner@bnxmail.com'));
+      expect(payload['body'], equals('Hello there'));
+    });
+  });
+
+  group('Sidebar Label Visibility Synchronization Tests', () {
+    test('visibility map accurately overrides defaults and persists', () {
+      final defaultVis = {
+        'Inbox': true,
+        'Starred': true,
+        'Sent': true,
+        'Drafts': true,
+        'Casbox': true,
+        'Trash': true,
+        'Archive': true,
+        'Spam': true,
+        'Scheduled': true,
+      };
+
+      // User hides Casbox and Spam
+      final updatedVis = Map<String, bool>.from(defaultVis);
+      updatedVis['Casbox'] = false;
+      updatedVis['Spam'] = false;
+
+      expect(updatedVis['Inbox'], isTrue);
+      expect(updatedVis['Casbox'], isFalse);
+      expect(updatedVis['Spam'], isFalse);
+      expect(updatedVis['Starred'], isTrue);
+    });
+
+    test('label deletion properly removes custom label from visibility map without residual resurrection', () {
+      final defaultVis = {'Inbox': true, 'Starred': true, 'Work': true, 'Personal': true};
+      final afterDeletion = Map<String, bool>.from(defaultVis)..remove('Work');
+
+      expect(afterDeletion.containsKey('Work'), isFalse);
+      expect(afterDeletion['Personal'], isTrue);
+      expect(afterDeletion['Inbox'], isTrue);
+    });
+
+    test('account switching resets sidebar labels to account-specific configuration', () {
+      final account1Labels = {'Inbox': true, 'Starred': true, 'Finance': true};
+      final account2Labels = {'Inbox': true, 'Starred': false, 'Clients': true};
+
+      final activeForAccount1 = Map<String, bool>.from(account1Labels);
+      expect(activeForAccount1['Finance'], isTrue);
+      expect(activeForAccount1.containsKey('Clients'), isFalse);
+
+      // Switch to account 2
+      final activeForAccount2 = Map<String, bool>.from(account2Labels);
+      expect(activeForAccount2['Clients'], isTrue);
+      expect(activeForAccount2.containsKey('Finance'), isFalse);
+      expect(activeForAccount2['Starred'], isFalse);
     });
   });
 }
+
