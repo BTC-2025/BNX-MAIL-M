@@ -1,5 +1,13 @@
 /// Formats a raw byte count into a human-readable size string.
 String _formatSize(dynamic raw) {
+  if (raw is String &&
+      (raw.endsWith('B') ||
+          raw.endsWith('KB') ||
+          raw.endsWith('MB') ||
+          raw.endsWith('GB') ||
+          raw.endsWith('TB'))) {
+    return raw;
+  }
   final bytes = raw is int ? raw : int.tryParse(raw?.toString() ?? '0') ?? 0;
   if (bytes < 1024) return '${bytes}B';
   if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)}KB';

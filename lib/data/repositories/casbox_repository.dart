@@ -152,22 +152,12 @@ class CasboxRepository {
       body['attachmentsJson'] = jsonEncode(attachList);
     }
 
-    // Also supply compatibility keys
-    body['contactEmail'] = cleanRecipient;
-    body['message'] = message;
-
     try {
       final res = await ApiClient.post('/api/casbox/send', body: body);
       return (res['data'] as Map<String, dynamic>?) ?? res;
     } catch (e) {
-      print('[CASBOX REPO WARNING] POST /api/casbox/send primary failed ($e), trying fallback...');
-      final fallbackBody = {
-        'receiverEmail': cleanRecipient,
-        'body': message,
-        if (subject != null && subject.isNotEmpty) 'subject': subject,
-      };
-      final res = await ApiClient.post('/api/casbox/send', body: fallbackBody);
-      return (res['data'] as Map<String, dynamic>?) ?? res;
+      print('[CASBOX REPO WARNING] POST /api/casbox/send failed: $e');
+      rethrow;
     }
   }
 

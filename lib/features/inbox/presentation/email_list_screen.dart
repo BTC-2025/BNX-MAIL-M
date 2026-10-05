@@ -543,22 +543,20 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
             uiState.activeLabel == null)
         ? serverReported
         : filtered.length;
-    final int totalPages = totalEmailCount == 0
+    final int maxAvailablePages = filtered.isEmpty
         ? 1
-        : ((totalEmailCount + pageSize - 1) ~/ pageSize);
+        : ((filtered.length + pageSize - 1) ~/ pageSize);
+    final int totalPages = maxAvailablePages;
     final int safePage = _desktopCurrentPage.clamp(1, totalPages);
     if (_desktopCurrentPage != safePage) {
       _desktopCurrentPage = safePage;
     }
-    final int startIndex = totalEmailCount == 0 ? 0 : (safePage - 1) * pageSize;
-    final int endIndex = (startIndex + pageSize > totalEmailCount)
-        ? totalEmailCount
-        : (startIndex + pageSize);
-    final int startItem = filtered.isEmpty ? 0 : (startIndex + 1);
-    final int endItem = endIndex > filtered.length ? filtered.length : endIndex;
-
+    final int startIndex = filtered.isEmpty ? 0 : (safePage - 1) * pageSize;
     final int safeSliceStart = startIndex.clamp(0, filtered.length);
-    final int safeSliceEnd = endIndex.clamp(safeSliceStart, filtered.length);
+    final int safeSliceEnd =
+        (safeSliceStart + pageSize).clamp(safeSliceStart, filtered.length);
+    final int startItem = filtered.isEmpty ? 0 : (safeSliceStart + 1);
+    final int endItem = safeSliceEnd;
 
     final List<EmailModel> desktopPagedList = isDesktopOS
         ? (filtered.isEmpty
@@ -1123,7 +1121,7 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
             color: isDark ? Colors.white70 : const Color(0xFF475569),
             tooltip: 'Refresh',
             onPressed: () {
-              ref.read(emailProvider.notifier).loadFolder(uiState.activeFolder);
+              ref.read(emailProvider.notifier).forceRefreshFolder(uiState.activeFolder);
             },
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),

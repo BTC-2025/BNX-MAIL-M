@@ -364,13 +364,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         });
       }
       if (_selectedSignatureIndex >= _signatureItems.length) {
+        _selectedSignatureIndex = _signatureItems.length - 1;
+      }
+      if (_selectedSignatureIndex < 0) {
         _selectedSignatureIndex = 0;
       }
       final cur = _signatureItems[_selectedSignatureIndex];
       _signatureNameController.text = cur['name']?.toString() ?? 'New Signature';
       _signatureContentController.text =
           _cleanHtmlForEditor(cur['content']?.toString() ?? '');
-    } else if (state.isLoaded) {
+    } else {
       // Backend confirmed empty signature list for this account
       _signatureItems.clear();
       _selectedSignatureIndex = 0;
@@ -3617,21 +3620,39 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                       .read(settingsProvider.notifier)
                                       .deleteSignature(id);
                                   if (!res.success) {
-                                    _showSnackBar(res.message ??
-                                        'Failed to delete signature');
+                                    _showSnackBar(
+                                      res.message ??
+                                          'Failed to delete signature',
+                                      isError: true,
+                                    );
                                     return;
                                   }
                                 }
+                                if (!mounted) return;
                                 setState(() {
-                                  _signatureItems.removeAt(
-                                    _selectedSignatureIndex,
-                                  );
-                                  if (_selectedSignatureIndex >=
+                                  if (id != null && id.isNotEmpty) {
+                                    _signatureItems.removeWhere(
+                                      (s) => s['id']?.toString() == id,
+                                    );
+                                  } else if (_selectedSignatureIndex <
                                       _signatureItems.length) {
-                                    _selectedSignatureIndex =
-                                        _signatureItems.length - 1;
+                                    _signatureItems
+                                        .removeAt(_selectedSignatureIndex);
                                   }
-                                  if (_selectedSignatureIndex >= 0) {
+
+                                  if (_signatureItems.isEmpty) {
+                                    _selectedSignatureIndex = 0;
+                                    _signatureNameController.clear();
+                                    _signatureContentController.clear();
+                                  } else {
+                                    if (_selectedSignatureIndex >=
+                                        _signatureItems.length) {
+                                      _selectedSignatureIndex =
+                                          _signatureItems.length - 1;
+                                    }
+                                    if (_selectedSignatureIndex < 0) {
+                                      _selectedSignatureIndex = 0;
+                                    }
                                     final nextSig =
                                         _signatureItems[_selectedSignatureIndex];
                                     _signatureNameController.text =
@@ -3641,9 +3662,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                         _cleanHtmlForEditor(
                                       nextSig['content']?.toString() ?? '',
                                     );
-                                  } else {
-                                    _signatureNameController.clear();
-                                    _signatureContentController.clear();
                                   }
                                 });
                                 _showSnackBar('Signature deleted');

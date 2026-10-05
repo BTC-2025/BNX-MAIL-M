@@ -36,9 +36,19 @@ dev_dependencies:
   flutter_native_splash: ^2.4.0
 
 flutter_launcher_icons:
+  image_path: "assets/bnx_mail_logo.png"
   android: "launcher_icon"
   ios: true
-  image_path: "assets/bnx_mail_logo.png"
+  remove_alpha_ios: true
+  macos:
+    generate: true
+    image_path: "assets/bnx_mail_logo.png"
+  web:
+    generate: true
+    image_path: "assets/bnx_mail_logo.png"
+  windows:
+    generate: true
+    image_path: "assets/bnx_mail_logo.png"
 
 flutter_native_splash:
   color: "#ffffff"

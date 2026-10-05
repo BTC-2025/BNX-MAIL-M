@@ -46,6 +46,10 @@ class MailRepository {
             'Spam',
             'Inbox',
             'Starred',
+            'Snoozed',
+            'Scheduled',
+            'Unread',
+            'Important',
           ].contains(parts[0])) {
         return parts.sublist(1).join('_');
       }
@@ -54,6 +58,8 @@ class MailRepository {
   }
 
   // ── Fetch Folder ─────────────────────────────────────────────────────────
+
+  static final Map<String, Future<List<EmailModel>>> _inFlightFetches = {};
 
   static List<dynamic>? _extractList(dynamic json) {
     if (json is List) return json;
@@ -97,6 +103,24 @@ class MailRepository {
     if (nonMailFolders.contains(folder)) {
       return [];
     }
+    final key = '$folder-$limit';
+    if (_inFlightFetches.containsKey(key)) {
+      print('[STAGE 1: DEDUP] Reusing in-flight request for $key');
+      return _inFlightFetches[key]!;
+    }
+    final future = _fetchFolderInternal(folder, limit: limit);
+    _inFlightFetches[key] = future;
+    try {
+      return await future;
+    } finally {
+      _inFlightFetches.remove(key);
+    }
+  }
+
+  static Future<List<EmailModel>> _fetchFolderInternal(
+    String folder, {
+    int limit = 50,
+  }) async {
     final path = _folderPaths[folder] ?? '/api/mail/inbox';
     dynamic res;
 
@@ -417,10 +441,11 @@ class MailRepository {
     String folder, {
     String? tempToken,
   }) async {
+    final cleanId = cleanUid(uid);
     try {
-      await ApiClient.post('/api/mail/read/$uid', tempToken: tempToken);
+      await ApiClient.post('/api/mail/read/$cleanId', tempToken: tempToken);
     } catch (e) {
-      print('[MARK READ WARNING] Failed to mark email $uid as read: $e');
+      print('[MARK READ WARNING] Failed to mark email $cleanId as read: $e');
     }
   }
 
@@ -429,18 +454,20 @@ class MailRepository {
     String folder, {
     String? tempToken,
   }) async {
+    final cleanId = cleanUid(uid);
     try {
-      await ApiClient.post('/api/mail/unread/$uid', tempToken: tempToken);
+      await ApiClient.post('/api/mail/unread/$cleanId', tempToken: tempToken);
     } catch (e) {
-      print('[MARK UNREAD WARNING] Failed to mark email $uid as unread: $e');
+      print('[MARK UNREAD WARNING] Failed to mark email $cleanId as unread: $e');
     }
   }
 
   // ── Star / Unstar ─────────────────────────────────────────────────────────
 
   static Future<void> toggleStar(String uid, String folder) async {
+    final cleanId = cleanUid(uid);
     await ApiClient.post(
-      '/api/mail/star/$uid',
+      '/api/mail/star/$cleanId',
       queryParams: {'folder': folder},
     );
   }
@@ -591,14 +618,16 @@ class MailRepository {
   // ── Spam ─────────────────────────────────────────────────────────────────
 
   static Future<void> markSpam(String uid, String folder) async {
+    final cleanId = cleanUid(uid);
     await ApiClient.post(
-      '/api/mail/spam/$uid',
+      '/api/mail/spam/$cleanId',
       queryParams: {'folder': folder},
     );
   }
 
   static Future<void> restoreFromSpam(String uid) async {
-    await ApiClient.post('/api/mail/restore-spam/$uid');
+    final cleanId = cleanUid(uid);
+    await ApiClient.post('/api/mail/restore-spam/$cleanId');
   }
 
   // ── Snooze ────────────────────────────────────────────────────────────────
@@ -608,14 +637,16 @@ class MailRepository {
     DateTime wakeUpAt,
     String folder,
   ) async {
+    final cleanId = cleanUid(uid);
     await ApiClient.post(
-      '/api/mail/snooze/$uid',
+      '/api/mail/snooze/$cleanId',
       queryParams: {'wakeUpAt': wakeUpAt.toIso8601String()},
     );
   }
 
   static Future<void> unsnoozeEmail(String uid) async {
-    await ApiClient.post('/api/mail/unsnooze/$uid');
+    final cleanId = cleanUid(uid);
+    await ApiClient.post('/api/mail/unsnooze/$cleanId');
   }
 
   // ── Labels ────────────────────────────────────────────────────────────────
@@ -625,8 +656,9 @@ class MailRepository {
     String labelId,
     String folder,
   ) async {
+    final cleanId = cleanUid(uid);
     await ApiClient.post(
-      '/api/mail/labels/apply/$uid',
+      '/api/mail/labels/apply/$cleanId',
       queryParams: {'labelId': labelId, 'folder': folder},
     );
   }
@@ -636,8 +668,9 @@ class MailRepository {
     String labelId,
     String folder,
   ) async {
+    final cleanId = cleanUid(uid);
     await ApiClient.delete(
-      '/api/mail/labels/remove/$uid',
+      '/api/mail/labels/remove/$cleanId',
       queryParams: {'labelId': labelId, 'folder': folder},
     );
   }

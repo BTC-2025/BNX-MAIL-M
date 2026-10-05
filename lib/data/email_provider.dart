@@ -56,9 +56,11 @@ class EmailNotifier extends StateNotifier<EmailState> {
     _pollingTimer?.cancel();
     state = const EmailState();
     _accountCaches.clear();
+    MailRepository.serverFolderCounts.clear();
   }
 
   Future<void> switchAccountContext(String accountId) async {
+    MailRepository.serverFolderCounts.clear();
     if (_currentAccountId.isNotEmpty) {
       _accountCaches[_currentAccountId] = state;
     }
@@ -237,8 +239,8 @@ class EmailNotifier extends StateNotifier<EmailState> {
 
   void _startPolling() {
     _pollingTimer?.cancel();
-    // Synchronize inbox & auto-dispatch due scheduled mails every 10 seconds
-    _pollingTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+    // Synchronize inbox & auto-dispatch due scheduled mails every 30 seconds
+    _pollingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       syncInbox();
       checkAndDispatchScheduledMails();
     });
@@ -358,7 +360,9 @@ class EmailNotifier extends StateNotifier<EmailState> {
   // ── Load a specific folder (lazy) ───────────────────────────────────────
 
   Future<void> loadFolder(String folder, {bool background = false}) async {
+    if (MailRepository.nonMailFolders.contains(folder)) return;
     if (folder == 'Storage') return;
+    if (state.loadedFolders.contains(folder) && !background) return;
     if (state.isLoading && !background) return;
 
     if (!background) {
@@ -370,6 +374,21 @@ class EmailNotifier extends StateNotifier<EmailState> {
       for (final e in state.emails) {
         merged[e.canonicalKey] = e;
       }
+
+      if (folder == 'Starred') {
+        // Authoritative Starred list: clear stale isStarred for emails not returned by server
+        final fetchedKeys = fetched.map((e) => e.canonicalKey).toSet();
+        for (final entry in merged.entries) {
+          if (!fetchedKeys.contains(entry.key)) {
+            final e = entry.value;
+            if (e.isStarred || e.memberOfFolders.contains('Starred')) {
+              final newFolders = Set<String>.from(e.memberOfFolders)..remove('Starred');
+              merged[entry.key] = e.copyWith(isStarred: false, memberOfFolders: newFolders);
+            }
+          }
+        }
+      }
+
       for (final e in fetched) {
         final key = e.canonicalKey;
         if (merged.containsKey(key)) {
@@ -378,27 +397,31 @@ class EmailNotifier extends StateNotifier<EmailState> {
               (e.isDateFallback && !existing.isDateFallback)
               ? existing.date
               : e.date;
-            final updatedFolders = existing.memberOfFolders.union(
-              e.memberOfFolders.isEmpty ? {folder} : e.memberOfFolders,
-            );
-            if (existing.isStarred || e.isStarred || folder == 'Starred') {
-              updatedFolders.add('Starred');
-            }
-            merged[key] = existing.copyWith(
-              isStarred: existing.isStarred || e.isStarred || folder == 'Starred',
-              isSnoozed: existing.isSnoozed || e.isSnoozed,
-              isScheduled: existing.isScheduled || e.isScheduled,
-              labels: (existing.labels.toSet()..addAll(e.labels)).toList(),
-              isSent: folder == 'Sent' ? true : existing.isSent,
-              isDraft: folder == 'Draft' ? true : existing.isDraft,
-              isTrash: folder == 'Trash' ? true : existing.isTrash,
-              isArchive: folder == 'Archive' ? true : existing.isArchive,
-              isSpam: folder == 'Spam' ? true : existing.isSpam,
-              date: effectiveDate,
-              isDateFallback: e.isDateFallback && existing.isDateFallback,
-              isRead: e.isRead,
-              memberOfFolders: updatedFolders,
-            );
+          final updatedFolders = existing.memberOfFolders.union(
+            e.memberOfFolders.isEmpty ? {folder} : e.memberOfFolders,
+          );
+          final bool isNowStarred =
+              folder == 'Starred' ? true : (existing.isStarred || e.isStarred);
+          if (isNowStarred) {
+            updatedFolders.add('Starred');
+          } else {
+            updatedFolders.remove('Starred');
+          }
+          merged[key] = existing.copyWith(
+            isStarred: isNowStarred,
+            isSnoozed: existing.isSnoozed || e.isSnoozed,
+            isScheduled: existing.isScheduled || e.isScheduled,
+            labels: (existing.labels.toSet()..addAll(e.labels)).toList(),
+            isSent: folder == 'Sent' ? true : existing.isSent,
+            isDraft: folder == 'Draft' ? true : existing.isDraft,
+            isTrash: folder == 'Trash' ? true : existing.isTrash,
+            isArchive: folder == 'Archive' ? true : existing.isArchive,
+            isSpam: folder == 'Spam' ? true : existing.isSpam,
+            date: effectiveDate,
+            isDateFallback: e.isDateFallback && existing.isDateFallback,
+            isRead: e.isRead,
+            memberOfFolders: updatedFolders,
+          );
         } else {
           merged[key] = e.copyWith(
             memberOfFolders: e.memberOfFolders.isEmpty
@@ -422,6 +445,7 @@ class EmailNotifier extends StateNotifier<EmailState> {
 
   /// Force-reloads a folder, bypassing the cache guard.
   Future<void> forceRefreshFolder(String folder) async {
+    if (MailRepository.nonMailFolders.contains(folder)) return;
     if (folder == 'Storage') return;
     try {
       final fetched = await MailRepository.fetchFolder(folder, limit: 50);
@@ -437,6 +461,20 @@ class EmailNotifier extends StateNotifier<EmailState> {
         merged[e.canonicalKey] = e;
       }
 
+      if (folder == 'Starred') {
+        // Authoritative Starred list: clear stale isStarred for emails not returned by server
+        final fetchedKeys = fetched.map((e) => e.canonicalKey).toSet();
+        for (final entry in merged.entries) {
+          if (!fetchedKeys.contains(entry.key)) {
+            final e = entry.value;
+            if (e.isStarred || e.memberOfFolders.contains('Starred')) {
+              final newFolders = Set<String>.from(e.memberOfFolders)..remove('Starred');
+              merged[entry.key] = e.copyWith(isStarred: false, memberOfFolders: newFolders);
+            }
+          }
+        }
+      }
+
       // Add/merge freshly fetched emails
       for (final e in fetched) {
         final key = e.canonicalKey;
@@ -447,27 +485,31 @@ class EmailNotifier extends StateNotifier<EmailState> {
               ? existing.date
               : e.date;
 
-            final updatedFolders = existing.memberOfFolders.union(
-              e.memberOfFolders.isEmpty ? {folder} : e.memberOfFolders,
-            );
-            if (existing.isStarred || e.isStarred || folder == 'Starred') {
-              updatedFolders.add('Starred');
-            }
-            merged[key] = existing.copyWith(
-              isStarred: existing.isStarred || e.isStarred || folder == 'Starred',
-              isSnoozed: existing.isSnoozed || e.isSnoozed,
-              isScheduled: existing.isScheduled || e.isScheduled,
-              labels: (existing.labels.toSet()..addAll(e.labels)).toList(),
-              isSent: existing.isSent || e.isSent || folder == 'Sent',
-              isDraft: existing.isDraft || e.isDraft || folder == 'Draft',
-              isTrash: existing.isTrash || e.isTrash || folder == 'Trash',
-              isArchive: existing.isArchive || e.isArchive || folder == 'Archive',
-              isSpam: existing.isSpam || e.isSpam || folder == 'Spam',
-              date: effectiveDate,
-              isDateFallback: e.isDateFallback && existing.isDateFallback,
-              isRead: e.isRead,
-              memberOfFolders: updatedFolders,
-            );
+          final updatedFolders = existing.memberOfFolders.union(
+            e.memberOfFolders.isEmpty ? {folder} : e.memberOfFolders,
+          );
+          final bool isNowStarred =
+              folder == 'Starred' ? true : (existing.isStarred || e.isStarred);
+          if (isNowStarred) {
+            updatedFolders.add('Starred');
+          } else {
+            updatedFolders.remove('Starred');
+          }
+          merged[key] = existing.copyWith(
+            isStarred: isNowStarred,
+            isSnoozed: existing.isSnoozed || e.isSnoozed,
+            isScheduled: existing.isScheduled || e.isScheduled,
+            labels: (existing.labels.toSet()..addAll(e.labels)).toList(),
+            isSent: existing.isSent || e.isSent || folder == 'Sent',
+            isDraft: existing.isDraft || e.isDraft || folder == 'Draft',
+            isTrash: existing.isTrash || e.isTrash || folder == 'Trash',
+            isArchive: existing.isArchive || e.isArchive || folder == 'Archive',
+            isSpam: existing.isSpam || e.isSpam || folder == 'Spam',
+            date: effectiveDate,
+            isDateFallback: e.isDateFallback && existing.isDateFallback,
+            isRead: e.isRead,
+            memberOfFolders: updatedFolders,
+          );
         } else {
           merged[key] = e.copyWith(
             memberOfFolders: e.memberOfFolders.isEmpty
@@ -1273,22 +1315,28 @@ class EmailNotifier extends StateNotifier<EmailState> {
         }
       }
 
-      // 2. Fetch latest server Scheduled folder items to catch items created in background
-      try {
-        final serverScheduled = await MailRepository.fetchFolder(
-          'Scheduled',
-          limit: 50,
-        );
-        for (final e in serverScheduled) {
-          if (!_dispatchingIds.contains(e.id)) {
-            if (e.date.isBefore(now) || e.date.isAtSameMomentAs(now)) {
-              if (!dueMails.any((m) => m.id == e.id)) {
-                dueMails.add(e);
+      // 2. Fetch latest server Scheduled folder items only if scheduled emails are tracked
+      // or pending in state to avoid redundant repeated GET requests
+      final hasScheduled = state.emails.any(
+        (e) => e.isScheduled || e.memberOfFolders.contains('Scheduled'),
+      );
+      if (hasScheduled) {
+        try {
+          final serverScheduled = await MailRepository.fetchFolder(
+            'Scheduled',
+            limit: 50,
+          );
+          for (final e in serverScheduled) {
+            if (!_dispatchingIds.contains(e.id)) {
+              if (e.date.isBefore(now) || e.date.isAtSameMomentAs(now)) {
+                if (!dueMails.any((m) => m.id == e.id)) {
+                  dueMails.add(e);
+                }
               }
             }
           }
-        }
-      } catch (_) {}
+        } catch (_) {}
+      }
 
       // 3. Dispatch each due email automatically
       if (dueMails.isNotEmpty) {
