@@ -1,5 +1,5 @@
-import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import '../../core/network/api_client.dart';
 import '../../core/network/token_service.dart';
 import '../../models/account_model.dart';
@@ -122,48 +122,87 @@ class UserRepository {
     }
   }
 
-  static Future<String?> uploadAvatar(String email, String imagePath) async {
-    await TokenService.saveUserAvatar(email, imagePath);
-    final loggedInEmail = await TokenService.getUserEmail();
+  static Future<String?> uploadAvatar(
+    String email,
+    String imagePath, {
+    Uint8List? bytes,
+    String? filePath,
+    String? filename,
+  }) async {
+    final cleanEmail = email.trim().toLowerCase();
+    final loggedInEmail = (await TokenService.getUserEmail())?.trim().toLowerCase();
+
+    // Cache local image immediately for instant UI feedback
+    if (cleanEmail.isNotEmpty) {
+      await TokenService.saveUserAvatar(cleanEmail, imagePath);
+    }
     if (loggedInEmail != null && loggedInEmail.isNotEmpty) {
       await TokenService.saveUserAvatar(loggedInEmail, imagePath);
     }
-    try {
-      String? uploadFilePath;
-      if (imagePath.startsWith('data:image/')) {
-        try {
-          final uriParts = imagePath.split(',').last;
-          final bytes = base64Decode(uriParts);
-          final tempDir = Directory.systemTemp;
-          final tempFile = File('${tempDir.path}/avatar_temp.jpg');
-          await tempFile.writeAsBytes(bytes);
-          uploadFilePath = tempFile.path;
-        } catch (e) {
-          print('[BASE64 DECODE ERROR] $e');
-        }
-      } else {
-        uploadFilePath = imagePath;
-      }
 
-      if (uploadFilePath != null) {
-        final res = await ApiClient.uploadProfilePicture(uploadFilePath);
-        final remoteData = res['data'] as Map<String, dynamic>? ?? res;
-        final serverAvatarUrl =
+    try {
+      final res = await ApiClient.uploadProfilePicture(
+        filePath ?? imagePath,
+        bytes: bytes,
+        filename: filename,
+      );
+      print('[AVATAR UPLOAD API RESPONSE] $res');
+
+      final remoteData = (res['data'] as Map<String, dynamic>?) ?? res;
+
+      // Contract from bnx_account_ui_api_reference.md Section 1.3:
+      // "profilePicture": "filename.png",
+      // "profilePictureUrl": "/api/users/profile-picture/siva"
+      String? serverAvatarUrl = remoteData['profilePictureUrl']?.toString();
+      if (serverAvatarUrl == null || serverAvatarUrl.isEmpty || serverAvatarUrl == 'null') {
+        final pp = remoteData['profilePicture']?.toString() ??
             remoteData['avatarUrl']?.toString() ??
             remoteData['avatar']?.toString() ??
             remoteData['url']?.toString();
-        if (serverAvatarUrl != null && serverAvatarUrl.isNotEmpty) {
-          await TokenService.saveUserAvatar(email, serverAvatarUrl);
-          if (loggedInEmail != null && loggedInEmail.isNotEmpty) {
-            await TokenService.saveUserAvatar(loggedInEmail, serverAvatarUrl);
+        if (pp != null && pp.isNotEmpty && pp != 'null') {
+          if (pp.startsWith('/') || pp.startsWith('http')) {
+            serverAvatarUrl = pp;
+          } else {
+            // It's a filename or ID, serve via profile picture endpoint
+            final emailForUrl = cleanEmail.isNotEmpty ? cleanEmail : (loggedInEmail ?? '');
+            serverAvatarUrl = '/api/users/profile-picture/$emailForUrl';
           }
-          return serverAvatarUrl;
         }
+      }
+
+      if (serverAvatarUrl != null && serverAvatarUrl.isNotEmpty) {
+        if (cleanEmail.isNotEmpty) {
+          await TokenService.saveUserAvatar(cleanEmail, serverAvatarUrl);
+        }
+        if (loggedInEmail != null && loggedInEmail.isNotEmpty) {
+          await TokenService.saveUserAvatar(loggedInEmail, serverAvatarUrl);
+        }
+        return serverAvatarUrl;
       }
     } catch (e) {
       print('[AVATAR UPLOAD ERROR] $e');
     }
+
     return imagePath;
+  }
+
+  /// 1.4 Delete Profile Picture: DELETE /api/users/profile-picture
+  static Future<bool> deleteAvatar(String email) async {
+    final cleanEmail = email.trim().toLowerCase();
+    if (cleanEmail.isNotEmpty) {
+      await TokenService.saveUserAvatar(cleanEmail, '');
+    }
+    final loggedInEmail = await TokenService.getUserEmail();
+    if (loggedInEmail != null && loggedInEmail.isNotEmpty) {
+      await TokenService.saveUserAvatar(loggedInEmail, '');
+    }
+    try {
+      final res = await ApiClient.delete('/api/users/profile-picture');
+      return res['success'] == true || res['error'] == null;
+    } catch (e) {
+      print('[AVATAR DELETE ERROR] $e');
+      return false;
+    }
   }
 
   // ── Mailboxes (multiple accounts) ────────────────────────────────────────
@@ -449,6 +488,17 @@ class UserRepository {
     await switchPrimaryMailbox(emailId);
   }
 
+  /// 5.1 Initiate Email Verification: GET /api/verification/initiate/{emailId}
+  static Future<bool> initiateEmailVerification(dynamic emailId) async {
+    try {
+      final res = await ApiClient.get('/api/verification/initiate/$emailId');
+      return res['success'] == true || res['error'] == null;
+    } catch (e) {
+      print('[EMAIL VERIFICATION INITIATE ERROR] $e');
+      return false;
+    }
+  }
+
   /// 5.4 Create Sub-ID Account (POST /api/subid/create)
   static Future<Map<String, dynamic>?> createSubId({
     required String prefix,
@@ -474,12 +524,26 @@ class UserRepository {
         'accountType': normAccountType,
         'permissions': intPermissions,
       };
-      final res = await ApiClient.post('/api/subid/create', body: body);
-      final data = res['data'];
-      if (data is Map) {
-        return Map<String, dynamic>.from(data);
+      try {
+        final res = await ApiClient.post('/api/subid/create', body: body);
+        final data = res['data'];
+        if (data is Map) {
+          return Map<String, dynamic>.from(data);
+        }
+        return Map<String, dynamic>.from(res);
+      } catch (e) {
+        // Fallback with standard minimal payload as documented in Section 4.2
+        final minimalBody = {
+          'prefix': prefix.trim(),
+          'password': password,
+        };
+        final res = await ApiClient.post('/api/subid/create', body: minimalBody);
+        final data = res['data'];
+        if (data is Map) {
+          return Map<String, dynamic>.from(data);
+        }
+        return Map<String, dynamic>.from(res);
       }
-      return Map<String, dynamic>.from(res);
     } catch (e) {
       print('[CREATE SUBID ERROR] $e');
       rethrow;

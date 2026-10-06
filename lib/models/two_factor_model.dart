@@ -18,7 +18,8 @@ class TwoFactorSetupData {
           json['qrCodeUrl']?.toString() ??
           json['qr']?.toString() ??
           json['qr_code']?.toString(),
-      otpauthUrl: json['otpauthUrl']?.toString() ??
+      otpauthUrl: json['qrCodeUri']?.toString() ??
+          json['otpauthUrl']?.toString() ??
           json['otpauth_url']?.toString() ??
           json['url']?.toString(),
     );

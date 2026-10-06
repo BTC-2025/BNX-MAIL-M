@@ -112,7 +112,8 @@ class _SubscriptionsViewState extends ConsumerState<SubscriptionsView>
     if (result.success) {
       final actionText =
           isUnsubscribing ? 'Unsubscribed from' : 'Resubscribed to';
-      scaffoldMessenger.showSnackBar(
+      final messenger = scaffoldMessenger;
+      messenger.showSnackBar(
         SnackBar(
           content: Text('$actionText ${sender.name}'),
           action: SnackBarAction(
@@ -125,9 +126,17 @@ class _SubscriptionsViewState extends ConsumerState<SubscriptionsView>
             },
           ),
           duration: const Duration(seconds: 3),
+          persist: false,
           behavior: SnackBarBehavior.floating,
         ),
       );
+      Future.delayed(const Duration(seconds: 3, milliseconds: 200), () {
+        if (mounted) {
+          try {
+            messenger.hideCurrentSnackBar();
+          } catch (_) {}
+        }
+      });
     } else {
       scaffoldMessenger.showSnackBar(
         SnackBar(

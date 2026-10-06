@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_bnx_mail/data/repositories/mail_repository.dart';
+import 'package:flutter_bnx_mail/models/account_model.dart';
+import 'package:flutter_bnx_mail/models/user_model.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -361,6 +363,48 @@ void main() {
       applyUpdate({'nickname': '', 'gender': 'Female'});
       expect(currentProfile['nickname'], equals('tell')); // Preserved
       expect(currentProfile['gender'], equals('Female')); // Updated
+    });
+  });
+
+  group('Profile Picture API & Avatar Contract Tests', () {
+    test('AccountModel.fromJson correctly parses profilePictureUrl and does not fake when absent', () {
+      final withPic = {
+        'id': 'siva@bnxmail.com',
+        'email': 'siva@bnxmail.com',
+        'profilePictureUrl': '/api/users/profile-picture/siva',
+      };
+      final accWithPic = AccountModel.fromJson(withPic);
+      expect(accWithPic.avatarUrl, equals('/api/users/profile-picture/siva'));
+
+      final withFilename = {
+        'id': 'siva@bnxmail.com',
+        'email': 'siva@bnxmail.com',
+        'profilePicture': 'avatar123.png',
+      };
+      final accWithFile = AccountModel.fromJson(withFilename);
+      expect(accWithFile.avatarUrl, equals('/api/users/profile-picture/siva@bnxmail.com'));
+
+      final withoutPic = {
+        'id': 'siva@bnxmail.com',
+        'email': 'siva@bnxmail.com',
+      };
+      final accWithoutPic = AccountModel.fromJson(withoutPic);
+      expect(accWithoutPic.avatarUrl, isNull);
+    });
+
+    test('UserModel.fromJson correctly parses profilePictureUrl and returns null when absent', () {
+      final userWithPic = UserModel.fromJson({
+        'name': 'Siva',
+        'email': 'siva@bnxmail.com',
+        'profilePictureUrl': '/api/users/profile-picture/siva',
+      });
+      expect(userWithPic.avatarUrl, equals('/api/users/profile-picture/siva'));
+
+      final userWithoutPic = UserModel.fromJson({
+        'name': 'Siva',
+        'email': 'siva@bnxmail.com',
+      });
+      expect(userWithoutPic.avatarUrl, isNull);
     });
   });
 }

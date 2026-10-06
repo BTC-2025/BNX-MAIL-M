@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import '../../core/network/api_client.dart';
 import '../../models/blocked_contact_model.dart';
 
@@ -63,5 +65,27 @@ class SubscriptionRepository {
     }
     if (data is bool) return data;
     return res['blocked'] == true || res['isBlocked'] == true;
+  }
+
+  /// 6.1 Get Active Subscription (External API)
+  /// GET https://cliks.beta-softnet.com/api/v1/business/subscription/{userEmail}
+  static Future<Map<String, dynamic>?> getBusinessSubscription(String userEmail) async {
+    final cleanEmail = userEmail.trim().toLowerCase();
+    if (cleanEmail.isEmpty) return null;
+    try {
+      final uri = Uri.parse('https://cliks.beta-softnet.com/api/v1/business/subscription/$cleanEmail');
+      final res = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final decoded = jsonDecode(res.body);
+        if (decoded is Map<String, dynamic>) {
+          return decoded['data'] is Map<String, dynamic>
+              ? Map<String, dynamic>.from(decoded['data'])
+              : decoded;
+        }
+      }
+    } catch (e) {
+      print('[BUSINESS SUBSCRIPTION API ERROR] $e');
+    }
+    return null;
   }
 }

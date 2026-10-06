@@ -1486,11 +1486,13 @@ class EmailBody extends ConsumerWidget {
           .unsubscribe(senderEmail);
 
       if (res.success) {
-        scaffoldMessenger.showSnackBar(
+        final messenger = scaffoldMessenger;
+        messenger.showSnackBar(
           SnackBar(
             content: Text('Unsubscribed from $displayName'),
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 4),
+            persist: false,
             action: SnackBarAction(
               label: 'Undo',
               textColor: Colors.amberAccent,
@@ -1502,6 +1504,13 @@ class EmailBody extends ConsumerWidget {
             ),
           ),
         );
+        Future.delayed(const Duration(seconds: 4, milliseconds: 200), () {
+          if (context.mounted) {
+            try {
+              messenger.hideCurrentSnackBar();
+            } catch (_) {}
+          }
+        });
       } else {
         scaffoldMessenger.showSnackBar(
           SnackBar(
@@ -1554,11 +1563,13 @@ class EmailBody extends ConsumerWidget {
           .subscribe(senderEmail);
 
       if (res.success) {
-        scaffoldMessenger.showSnackBar(
+        final messenger = scaffoldMessenger;
+        messenger.showSnackBar(
           SnackBar(
             content: Text('Resubscribed to $displayName'),
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 4),
+            persist: false,
             action: SnackBarAction(
               label: 'Undo',
               textColor: Colors.amberAccent,
@@ -1570,6 +1581,13 @@ class EmailBody extends ConsumerWidget {
             ),
           ),
         );
+        Future.delayed(const Duration(seconds: 4, milliseconds: 200), () {
+          if (context.mounted) {
+            try {
+              messenger.hideCurrentSnackBar();
+            } catch (_) {}
+          }
+        });
       } else {
         scaffoldMessenger.showSnackBar(
           SnackBar(

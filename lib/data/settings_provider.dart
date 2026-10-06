@@ -507,6 +507,26 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     }
   }
 
+  /// Disable 2FA: POST /api/users/2fa/disable
+  Future<({bool success, String? message})> disable2FA() async {
+    try {
+      final disabled = await SettingsRepository.disable2FA();
+      if (disabled) {
+        final updated = state.settings?.copyWith(twoFactorEnabled: false);
+        if (updated != null) {
+          state = state.copyWith(settings: updated, clearError: true);
+        }
+        return (success: true, message: null);
+      } else {
+        return (success: false, message: 'Failed to disable 2FA');
+      }
+    } on ApiException catch (e) {
+      return (success: false, message: e.message);
+    } catch (e) {
+      return (success: false, message: e.toString());
+    }
+  }
+
   /// Clears state when switching accounts or signing out.
   void clear() {
     _loadingAccountId = null;

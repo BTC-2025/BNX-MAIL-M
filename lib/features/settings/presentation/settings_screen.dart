@@ -221,6 +221,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     // synchronously during initState/build.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
       _loadBackendData();
     });
   }
@@ -1264,7 +1265,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   final emailInput = Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           Text(
                             'Recovery Email Address',
@@ -1276,7 +1280,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                   : const Color(0xFF1E293B),
                             ),
                           ),
-                          const SizedBox(width: 8),
                           _buildUnverifiedBadge(),
                         ],
                       ),
@@ -1329,7 +1332,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   final phoneInput = Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           Text(
                             'Recovery Phone Number (10 Digits)',
@@ -1341,7 +1347,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                   : const Color(0xFF1E293B),
                             ),
                           ),
-                          const SizedBox(width: 8),
                           _buildUnverifiedBadge(),
                         ],
                       ),
@@ -1574,10 +1579,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
+          LayoutBuilder(
+            builder: (context, headerConstraints) {
+              final isNarrow = defaultTargetPlatform != TargetPlatform.macOS || headerConstraints.maxWidth < 650;
+              final infoWidget = Row(
                 children: [
                   Container(
                     width: 40,
@@ -1594,30 +1599,35 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ),
                   ),
                   const SizedBox(width: 14),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Mailbox Storage & Quota',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Mailbox Storage & Quota',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: isDark ? Colors.white : const Color(0xFF0F172A),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        'Live IMAP Dovecot server mailbox allocation and usage',
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                        const SizedBox(height: 3),
+                        Text(
+                          'Live IMAP Dovecot server mailbox allocation and usage',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ],
-              ),
-              Row(
+              );
+
+              final actionsWidget = Row(
+                mainAxisSize: isNarrow ? MainAxisSize.max : MainAxisSize.min,
+                mainAxisAlignment: isNarrow ? MainAxisAlignment.spaceBetween : MainAxisAlignment.end,
                 children: [
                   IconButton(
                     icon: const Icon(Icons.refresh_rounded, size: 20),
@@ -1645,8 +1655,28 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ),
                   ),
                 ],
-              ),
-            ],
+              );
+
+              if (isNarrow) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    infoWidget,
+                    const SizedBox(height: 12),
+                    actionsWidget,
+                  ],
+                );
+              }
+
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(child: infoWidget),
+                  const SizedBox(width: 16),
+                  actionsWidget,
+                ],
+              );
+            },
           ),
           const SizedBox(height: 18),
           quotaAsync.when(
@@ -1716,12 +1746,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         ),
                       ),
                       const SizedBox(width: 6),
-                      Text(
-                        'Dovecot IMAP Mail Server Connected & Synced',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: isDark ? Colors.white54 : const Color(0xFF64748B),
+                      Expanded(
+                        child: Text(
+                          'Dovecot IMAP Mail Server Connected & Synced',
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: isDark ? Colors.white54 : const Color(0xFF64748B),
+                          ),
                         ),
                       ),
                     ],
@@ -4333,45 +4366,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           LayoutBuilder(
             builder: (context, constraints) {
               final densityOptions = ['Default', 'Spacious', 'Compact'];
-              if (constraints.maxWidth >= 450) {
-                return Row(
-                  children: densityOptions.map((d) {
-                    final isSelected =
-                        _density.toLowerCase() == d.toLowerCase();
-                    return Expanded(
-                      child: Padding(
-                        padding: EdgeInsets.only(
-                          right: d != densityOptions.last ? 12.0 : 0.0,
-                        ),
-                        child: _buildPillButton(
-                          label: d,
-                          isSelected: isSelected,
-                          isDark: isDark,
-                          onTap: () {
-                            setState(() => _density = d);
-                            ref
-                                .read(settingsProvider.notifier)
-                                .updateGeneralSettings(
-                                    {'density': _toBackendDensity(d)});
-                          },
-                        ),
+              final isSmall = constraints.maxWidth < 450;
+              return Row(
+                children: densityOptions.map((d) {
+                  final isSelected =
+                      _density.toLowerCase() == d.toLowerCase();
+                  return Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.only(
+                        right: d != densityOptions.last ? (isSmall ? 8.0 : 12.0) : 0.0,
                       ),
-                    );
-                  }).toList(),
-                );
-              } else {
-                return Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: densityOptions.map((d) {
-                    final isSelected =
-                        _density.toLowerCase() == d.toLowerCase();
-                    return SizedBox(
-                      width: (constraints.maxWidth - 16) / 3,
                       child: _buildPillButton(
                         label: d,
                         isSelected: isSelected,
                         isDark: isDark,
+                        padding: isSmall
+                            ? const EdgeInsets.symmetric(horizontal: 4)
+                            : const EdgeInsets.symmetric(horizontal: 16),
                         onTap: () {
                           setState(() => _density = d);
                           ref
@@ -4380,10 +4391,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                   {'density': _toBackendDensity(d)});
                         },
                       ),
-                    );
-                  }).toList(),
-                );
-              }
+                    ),
+                  );
+                }).toList(),
+              );
             },
           ),
           const SizedBox(height: 24),
@@ -4432,6 +4443,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         label: '$count',
                         isSelected: isSelected,
                         isDark: isDark,
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
                         onTap: () => setState(() => _emailsPerPage = count),
                       ),
                     );
@@ -5074,13 +5086,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     required bool isDark,
     required VoidCallback onTap,
     Widget? trailing,
+    EdgeInsetsGeometry? padding,
   }) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(20),
       child: Container(
         height: 46,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        padding: padding ?? const EdgeInsets.symmetric(horizontal: 16),
         decoration: BoxDecoration(
           color: isSelected
               ? (isDark ? const Color(0xFF1E3A5F) : const Color(0xFFF0F6FE))
@@ -5098,14 +5111,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-                color: isSelected
-                    ? const Color(0xFF155EEF)
-                    : (isDark ? Colors.white70 : const Color(0xFF1E293B)),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                  color: isSelected
+                      ? const Color(0xFF155EEF)
+                      : (isDark ? Colors.white70 : const Color(0xFF1E293B)),
+                ),
               ),
             ),
             ?trailing,

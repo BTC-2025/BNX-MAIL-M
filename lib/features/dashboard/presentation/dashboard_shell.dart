@@ -15,6 +15,7 @@ import '../../../core/widgets/avatar_widget.dart';
 import '../../../models/account_model.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../data/email_provider.dart';
+import '../../../data/colab_provider.dart';
 import '../../../data/all_inboxes_provider.dart';
 import '../../auth/presentation/notifiers/auth_notifier.dart';
 import '../../../core/widgets/notification_centre_panel.dart';
@@ -40,11 +41,14 @@ class DashboardShell extends ConsumerWidget {
     final isVirtualKeyboardOpen = ref.watch(isVirtualKeyboardOpenProvider);
 
     final double screenWidth = MediaQuery.of(context).size.width;
-    final bool isMobile = screenWidth < 600;
     final bool isDesktopOS =
         !kIsWeb &&
         (defaultTargetPlatform == TargetPlatform.macOS ||
             defaultTargetPlatform == TargetPlatform.windows);
+    final bool isMobileDevice = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS);
+    final bool isMobile = isMobileDevice || (screenWidth < 600 && !isDesktopOS);
     final bool isTablet =
         screenWidth >= 600 && screenWidth < BNXConstants.desktopBreakpoint;
 
@@ -86,7 +90,7 @@ class DashboardShell extends ConsumerWidget {
         uiState.activeRightUtility != 'none' && !isMobile && screenWidth > 950;
 
     int selectedIndex = 0;
-    if (isProfile) {
+    if (isProfile || isManageAccount) {
       selectedIndex = 2;
     } else if (currentRoute == '/colab') {
       selectedIndex = 1;
@@ -109,6 +113,11 @@ class DashboardShell extends ConsumerWidget {
             ref
                 .read(appUiProvider.notifier)
                 .setComposeStatus(ComposeStatus.closed);
+          } else if (currentRoute == '/colab' ||
+              currentRoute == '/manage-account' ||
+              currentRoute == '/profile') {
+            // These screens manage their own internal subpage / tab / chat room / search navigation.
+            // DashboardShell delegates back navigation to their internal PopScope handlers.
           } else if (currentRoute != '/home') {
             // Always go to /home — never let back reach the splash screen
             context.go('/home');
@@ -127,6 +136,9 @@ class DashboardShell extends ConsumerWidget {
                   currentRoute != '/help' &&
                   currentRoute != '/compose' &&
                   currentRoute != '/connect-settings' &&
+                  !(currentRoute == '/colab' &&
+                      ref.watch(selectedColabIdProvider) != null) &&
+                  MediaQuery.of(context).viewInsets.bottom == 0 &&
                   uiState.composeStatus == ComposeStatus.closed)
               ? Container(
                   color: Colors.transparent,

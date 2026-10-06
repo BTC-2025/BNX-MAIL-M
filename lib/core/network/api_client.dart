@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'api_exception.dart';
@@ -18,8 +19,13 @@ import 'package:http_parser/http_parser.dart';
 class ApiClient {
   static String get baseUrl => _base;
 
-  static String get _base =>
-      dotenv.env['BASE_URL'] ?? 'https://api.bnxmail.com';
+  static String get _base {
+    try {
+      return dotenv.env['BASE_URL'] ?? 'https://api.bnxmail.com';
+    } catch (_) {
+      return 'https://api.bnxmail.com';
+    }
+  }
 
   static const Duration _timeout = Duration(seconds: 15);
 
@@ -408,7 +414,12 @@ class ApiClient {
   }
 
   /// Uploads user profile picture via multipart/form-data.
-  static Future<Map<String, dynamic>> uploadProfilePicture(String filePath) async {
+  /// Supports either [filePath] or raw [bytes] (with optional [filename]).
+  static Future<Map<String, dynamic>> uploadProfilePicture(
+    String? filePath, {
+    Uint8List? bytes,
+    String? filename,
+  }) async {
     final uri = Uri.parse('$_base/api/users/profile-picture');
     final headers = await _headers(auth: true);
     headers.remove('Content-Type'); // Let http package handle Content-Type & boundary!
@@ -416,16 +427,71 @@ class ApiClient {
     final request = http.MultipartRequest('POST', uri);
     request.headers.addAll(headers);
 
-    final ext = filePath.split('.').last.toLowerCase();
+    final resolvedFilename = filename ??
+        (filePath != null && filePath.contains('.')
+            ? filePath.split(Platform.pathSeparator).last
+            : 'avatar.jpg');
+    final ext = resolvedFilename.split('.').last.toLowerCase();
     final isPng = ext == 'png';
-    request.files.add(await http.MultipartFile.fromPath(
-      'file',
-      filePath,
-      contentType: MediaType('image', isPng ? 'png' : 'jpeg'),
-    ));
+    final mediaType = MediaType('image', isPng ? 'png' : 'jpeg');
+
+    if (bytes != null && bytes.isNotEmpty) {
+      request.files.add(http.MultipartFile.fromBytes(
+        'file',
+        bytes,
+        filename: resolvedFilename,
+        contentType: mediaType,
+      ));
+    } else if (filePath != null && filePath.isNotEmpty) {
+      if (filePath.startsWith('data:image/') || filePath.contains(';base64,')) {
+        final commaIndex = filePath.indexOf(',');
+        final base64Str = commaIndex != -1 ? filePath.substring(commaIndex + 1) : filePath;
+        final decoded = base64Decode(base64Str.trim());
+        request.files.add(http.MultipartFile.fromBytes(
+          'file',
+          decoded,
+          filename: resolvedFilename,
+          contentType: mediaType,
+        ));
+      } else {
+        final file = File(filePath);
+        if (file.existsSync()) {
+          request.files.add(await http.MultipartFile.fromPath(
+            'file',
+            filePath,
+            filename: resolvedFilename,
+            contentType: mediaType,
+          ));
+        } else {
+          // If filePath is raw base64 string
+          try {
+            final decoded = base64Decode(filePath.trim());
+            request.files.add(http.MultipartFile.fromBytes(
+              'file',
+              decoded,
+              filename: resolvedFilename,
+              contentType: mediaType,
+            ));
+          } catch (_) {
+            throw ApiException(
+              statusCode: 400,
+              message: 'Invalid image file path or data: $filePath',
+            );
+          }
+        }
+      }
+    } else {
+      throw const ApiException(
+        statusCode: 400,
+        message: 'No image data or file provided for profile picture upload.',
+      );
+    }
+
+    print('[API REQUEST] POST $uri (multipart/form-data, file: $resolvedFilename)');
 
     final streamedResponse = await request.send().timeout(const Duration(seconds: 45));
     final response = await http.Response.fromStream(streamedResponse);
+    print('[API RESPONSE] POST $uri | Status: ${response.statusCode} | Body: ${response.body}');
     _assertOk(response);
     return _parseBody(response);
   }

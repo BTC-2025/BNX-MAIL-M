@@ -77,8 +77,23 @@ class AccountModel {
           json['designation']?.toString() ?? json['role']?.toString() ?? '',
       experience: json['experience']?.toString() ?? '',
       dob: dob,
-      avatarUrl: (json['avatarUrl']?.toString() ?? json['avatar']?.toString()) ??
-          (email.isNotEmpty ? '/api/users/profile-picture/$email' : null),
+      avatarUrl: () {
+        final ppUrl = json['profilePictureUrl']?.toString();
+        if (ppUrl != null && ppUrl.isNotEmpty && ppUrl != 'null') {
+          return ppUrl;
+        }
+        final pp = json['profilePicture']?.toString();
+        if (pp != null && pp.isNotEmpty && pp != 'null') {
+          if (pp.startsWith('/') || pp.startsWith('http')) return pp;
+          final userOrEmail = email.isNotEmpty ? email : (json['username']?.toString() ?? '');
+          return userOrEmail.isNotEmpty ? '/api/users/profile-picture/$userOrEmail' : pp;
+        }
+        final av = json['avatarUrl']?.toString() ?? json['avatar']?.toString();
+        if (av != null && av.isNotEmpty && av != 'null') {
+          return av;
+        }
+        return null;
+      }(),
       recoveryEmail: json['recoveryEmail']?.toString() ?? json['recovery_email']?.toString(),
       phone: json['phone']?.toString() ?? json['phoneNumber']?.toString(),
       accountType: json['accountType']?.toString() ?? 'BUSINESS',

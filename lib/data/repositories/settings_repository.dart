@@ -234,4 +234,14 @@ class SettingsRepository {
         res['data']?['twoFactorEnabled'] == true;
     return success;
   }
+
+  /// 3.3 Disable 2FA: POST /api/users/2fa/disable
+  static Future<bool> disable2FA() async {
+    print('[SETTINGS] POST /api/users/2fa/disable');
+    final res = await ApiClient.post(
+      '/api/users/2fa/disable',
+      body: {},
+    );
+    return res['success'] == true || res['error'] == null;
+  }
 }

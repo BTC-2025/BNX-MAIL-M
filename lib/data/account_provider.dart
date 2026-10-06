@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/account_model.dart';
@@ -54,9 +55,7 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
                     userProfile.avatarUrl != null &&
                     userProfile.avatarUrl!.isNotEmpty)
                 ? userProfile.avatarUrl
-                : (regEmail.isNotEmpty
-                      ? '/api/users/profile-picture/$regEmail'
-                      : null));
+                : null);
 
       final phone = cachedSettings['phoneNumber']?.toString() ??
           cachedSettings['phone']?.toString() ??
@@ -101,10 +100,7 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
             final cachedSettings = await TokenService.getUserSettings(accEmail) ?? {};
             final avatar = (savedAvatar != null && savedAvatar.isNotEmpty)
                 ? savedAvatar
-                : (acc.avatarUrl ??
-                      (accEmail.isNotEmpty
-                          ? '/api/users/profile-picture/$accEmail'
-                          : null));
+                : acc.avatarUrl;
             final phone = cachedSettings['phoneNumber']?.toString() ??
                 cachedSettings['phone']?.toString() ??
                 acc.phone;
@@ -135,8 +131,7 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
       final cachedSettings = await TokenService.getUserSettings(loggedInEmail) ?? {};
       final avatar = (savedAvatar != null && savedAvatar.isNotEmpty)
           ? savedAvatar
-          : (userProfile?.avatarUrl ??
-                '/api/users/profile-picture/$loggedInEmail');
+          : userProfile?.avatarUrl;
       final phone = cachedSettings['phoneNumber']?.toString() ??
           cachedSettings['phone']?.toString() ??
           userProfile?.phone;
@@ -386,7 +381,13 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
     );
   }
 
-  Future<void> updateAvatar(String id, String avatarUrl) async {
+  Future<void> updateAvatar(
+    String id,
+    String avatarUrl, {
+    Uint8List? bytes,
+    String? filePath,
+    String? filename,
+  }) async {
     state = state.map((acc) {
       if (acc.id == id) {
         return acc.copyWith(avatarUrl: avatarUrl);
@@ -398,7 +399,7 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
       (a) => a.id == id,
       orElse: () => activeAccount,
     );
-    if (active.email.isNotEmpty) {
+    if (active.email.isNotEmpty && avatarUrl.isNotEmpty) {
       await TokenService.saveUserAvatar(active.email, avatarUrl);
     }
 
@@ -406,6 +407,9 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
       final remoteUrl = await UserRepository.uploadAvatar(
         active.email,
         avatarUrl,
+        bytes: bytes,
+        filePath: filePath,
+        filename: filename,
       );
       if (remoteUrl != null && remoteUrl.isNotEmpty) {
         state = state.map((acc) {
@@ -415,15 +419,32 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
           return acc;
         }).toList();
         await TokenService.saveUserAvatar(active.email, remoteUrl);
-
-        // Also sync the avatar url to the backend profile settings so it persists on reinstall
-        await UserRepository.updateProfile({
-          'avatarUrl': remoteUrl,
-          'avatar': remoteUrl,
-        });
       }
     } catch (e) {
       print('[AVATAR SYNC ERROR] Failed to upload avatar to backend: $e');
+    }
+  }
+
+  Future<void> removeAvatar(String id) async {
+    state = state.map((acc) {
+      if (acc.id == id) {
+        return acc.copyWith(avatarUrl: null);
+      }
+      return acc;
+    }).toList();
+
+    final active = state.firstWhere(
+      (a) => a.id == id,
+      orElse: () => activeAccount,
+    );
+    if (active.email.isNotEmpty) {
+      await TokenService.saveUserAvatar(active.email, '');
+    }
+
+    try {
+      await UserRepository.deleteAvatar(active.email);
+    } catch (e) {
+      print('[AVATAR REMOVE ERROR] Failed to remove avatar: $e');
     }
   }
 }

@@ -52,37 +52,68 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
     super.dispose();
   }
 
+  void _handleBackNavigation() {
+    if (_isSearching) {
+      setState(() {
+        _isSearching = false;
+        _searchController.clear();
+      });
+      ref.read(appUiProvider.notifier).setSearchQuery('');
+      return;
+    }
+    final selectedGroupId = ref.read(selectedColabIdProvider);
+    if (selectedGroupId != null) {
+      ref.read(selectedColabIdProvider.notifier).state = null;
+      return;
+    }
+    final uiState = ref.read(appUiProvider);
+    if (uiState.activeFolder == 'Casbox') {
+      ref.read(appUiProvider.notifier).selectFolder('Inbox');
+      return;
+    }
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      context.go('/home');
+      ref.read(appUiProvider.notifier).selectFolder('Inbox');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final uiState = ref.watch(appUiProvider);
     final isDark = uiState.isDarkMode;
     final double screenWidth = MediaQuery.of(context).size.width;
-    final bool isMobile = screenWidth < 600;
+    final bool isMobileDevice = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS);
+    final bool isMobile = isMobileDevice ||
+        (screenWidth < 800 &&
+            defaultTargetPlatform != TargetPlatform.macOS &&
+            defaultTargetPlatform != TargetPlatform.windows);
 
-    if (uiState.activeFolder == 'Casbox') {
-      return _buildCasboxView(context, ref, isDark, isMobile);
-    }
-
+    Widget content;
     final selectedGroupId = ref.watch(selectedColabIdProvider);
-    if (selectedGroupId != null) {
-      return _buildColabDetailView(
+    if (uiState.activeFolder == 'Casbox') {
+      content = _buildCasboxView(context, ref, isDark, isMobile);
+    } else if (selectedGroupId != null) {
+      content = _buildColabDetailView(
         context,
         ref,
         selectedGroupId,
         isDark,
         isMobile,
       );
-    }
+    } else {
+      final groups = ref.watch(colabListProvider);
+      final searchQuery = uiState.searchQuery.toLowerCase();
+      final filteredGroups = groups.where((g) {
+        return g.name.toLowerCase().contains(searchQuery) ||
+            g.desc.toLowerCase().contains(searchQuery);
+      }).toList();
 
-    final groups = ref.watch(colabListProvider);
-    final searchQuery = uiState.searchQuery.toLowerCase();
-    final filteredGroups = groups.where((g) {
-      return g.name.toLowerCase().contains(searchQuery) ||
-          g.desc.toLowerCase().contains(searchQuery);
-    }).toList();
-
-    return Scaffold(
-      backgroundColor: isDark ? BNXColors.darkSurface : const Color(0xFFE9F4FF),
+      content = Scaffold(
+        backgroundColor: isDark ? BNXColors.darkSurface : const Color(0xFFE9F4FF),
       body: RefreshIndicator(
         onRefresh: () async {
           await ref.read(colabListProvider.notifier).loadGroups();
@@ -385,6 +416,16 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
     );
   }
 
+    return PopScope(
+      canPop: !isMobile,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _handleBackNavigation();
+      },
+      child: content,
+    );
+  }
+
   Widget _buildGroupCard(
     BuildContext context,
     WidgetRef ref,
@@ -657,24 +698,27 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                     const Divider(),
                     // Invitation list
                     if (invitations.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 32),
-                        child: Column(
-                          children: [
-                            Icon(
-                              Icons.check_circle_outline_rounded,
-                              size: 48,
-                              color: Colors.green.shade400,
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              'No pending invitations',
-                              style: TextStyle(
-                                color: isDark ? Colors.white54 : Colors.grey,
-                                fontSize: 14,
+                      Flexible(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.symmetric(vertical: 32),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.check_circle_outline_rounded,
+                                size: 48,
+                                color: Colors.green.shade400,
                               ),
-                            ),
-                          ],
+                              const SizedBox(height: 12),
+                              Text(
+                                'No pending invitations',
+                                style: TextStyle(
+                                  color: isDark ? Colors.white54 : Colors.grey,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       )
                     else
@@ -1367,72 +1411,76 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
       return DefaultTabController(
         length: 2,
         child: Scaffold(
+          resizeToAvoidBottomInset: true,
           backgroundColor: isDark
               ? BNXColors.darkSurface
               : const Color(0xFFE9F4FF),
-          body: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                color: isDark ? BNXColors.darkSurface : Colors.white,
-                child: Column(
-                  children: [
-                    headerRow,
-                    TabBar(
-                      labelColor: isDark
-                          ? BNXColors.darkPrimary
-                          : BNXColors.lightPrimary,
-                      unselectedLabelColor: Colors.grey,
-                      indicatorColor: isDark
-                          ? BNXColors.darkPrimary
-                          : BNXColors.lightPrimary,
-                      indicatorSize: TabBarIndicatorSize.tab,
-                      tabs: const [
-                        Tab(
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.email_outlined, size: 18),
-                              SizedBox(width: 8),
-                              Text('Broadcasts'),
-                            ],
-                          ),
-                        ),
-                        Tab(
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.chat_bubble_outline_rounded, size: 18),
-                              SizedBox(width: 8),
-                              Text('Comments'),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              Expanded(
-                child: Padding(
-                  padding: isMobile
-                      ? const EdgeInsets.only(
-                          left: 16.0,
-                          right: 16.0,
-                          top: 16.0,
-                          bottom: 84.0,
-                        )
-                      : const EdgeInsets.all(16.0),
-                  child: TabBarView(
+          body: SafeArea(
+            bottom: true,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  color: isDark ? BNXColors.darkSurface : Colors.white,
+                  child: Column(
                     children: [
-                      _buildBroadcastsPanel(context, ref, group, isDark),
-                      CommentsSection(group: group, isDark: isDark, ref: ref),
+                      headerRow,
+                      TabBar(
+                        labelColor: isDark
+                            ? BNXColors.darkPrimary
+                            : BNXColors.lightPrimary,
+                        unselectedLabelColor: Colors.grey,
+                        indicatorColor: isDark
+                            ? BNXColors.darkPrimary
+                            : BNXColors.lightPrimary,
+                        indicatorSize: TabBarIndicatorSize.tab,
+                        tabs: const [
+                          Tab(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.email_outlined, size: 18),
+                                SizedBox(width: 8),
+                                Text('Broadcasts'),
+                              ],
+                            ),
+                          ),
+                          Tab(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.chat_bubble_outline_rounded, size: 18),
+                                SizedBox(width: 8),
+                                Text('Comments'),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
-              ),
-            ],
+                const Divider(height: 1),
+                Expanded(
+                  child: Padding(
+                    padding: isMobile
+                        ? const EdgeInsets.only(
+                            left: 16.0,
+                            right: 16.0,
+                            top: 16.0,
+                            bottom: 8.0,
+                          )
+                        : const EdgeInsets.all(16.0),
+                    child: TabBarView(
+                      children: [
+                        _buildBroadcastsPanel(context, ref, group, isDark),
+                        CommentsSection(group: group, isDark: isDark, ref: ref),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -5851,74 +5899,79 @@ class _CommentsSectionState extends State<CommentsSection> {
                                             ? CrossAxisAlignment.end
                                             : CrossAxisAlignment.start,
                                         children: c.attachments.map((att) {
-                                          return Container(
-                                            margin: const EdgeInsets.only(
-                                              top: 4,
+                                          return ConstrainedBox(
+                                            constraints: BoxConstraints(
+                                              maxWidth: MediaQuery.of(context).size.width * 0.65,
                                             ),
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 10,
-                                              vertical: 6,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: isMe
-                                                  ? Colors.white.withValues(
-                                                      alpha: 0.2,
-                                                    )
-                                                  : (widget.isDark
-                                                        ? Colors.white12
-                                                        : Colors.grey[300]),
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
-                                            ),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(
-                                                  Icons
-                                                      .insert_drive_file_rounded,
-                                                  size: 14,
-                                                  color: isMe
-                                                      ? Colors.white
-                                                      : const Color(0xFF195BAC),
-                                                ),
-                                                const SizedBox(width: 6),
-                                                Flexible(
-                                                  child: Text(
-                                                    att.fileName,
-                                                    maxLines: 1,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                    style: TextStyle(
-                                                      fontSize: 12,
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                      color: isMe
-                                                          ? Colors.white
-                                                          : (widget.isDark
-                                                                ? Colors.white
-                                                                : Colors
-                                                                      .black87),
+                                            child: Container(
+                                              margin: const EdgeInsets.only(
+                                                top: 4,
+                                              ),
+                                              padding: const EdgeInsets.symmetric(
+                                                horizontal: 10,
+                                                vertical: 6,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: isMe
+                                                    ? Colors.white.withValues(
+                                                        alpha: 0.2,
+                                                      )
+                                                    : (widget.isDark
+                                                          ? Colors.white12
+                                                          : Colors.grey[300]),
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    Icons
+                                                        .insert_drive_file_rounded,
+                                                    size: 14,
+                                                    color: isMe
+                                                        ? Colors.white
+                                                        : const Color(0xFF195BAC),
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  Flexible(
+                                                    child: Text(
+                                                      att.fileName,
+                                                      maxLines: 1,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: TextStyle(
+                                                        fontSize: 12,
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                        color: isMe
+                                                            ? Colors.white
+                                                            : (widget.isDark
+                                                                  ? Colors.white
+                                                                  : Colors
+                                                                        .black87),
+                                                      ),
                                                     ),
                                                   ),
-                                                ),
-                                                if (att
-                                                    .fileSize
-                                                    .isNotEmpty) ...[
-                                                  const SizedBox(width: 4),
-                                                  Text(
-                                                    '(${att.fileSize})',
-                                                    style: TextStyle(
-                                                      fontSize: 10,
-                                                      color: isMe
-                                                          ? Colors.white70
-                                                          : (widget.isDark
-                                                                ? Colors.white60
-                                                                : Colors
-                                                                      .black54),
+                                                  if (att
+                                                      .fileSize
+                                                      .isNotEmpty) ...[
+                                                    const SizedBox(width: 4),
+                                                    Text(
+                                                      '(${att.fileSize})',
+                                                      style: TextStyle(
+                                                        fontSize: 10,
+                                                        color: isMe
+                                                            ? Colors.white70
+                                                            : (widget.isDark
+                                                                  ? Colors.white60
+                                                                  : Colors
+                                                                        .black54),
+                                                      ),
                                                     ),
-                                                  ),
+                                                  ],
                                                 ],
-                                              ],
+                                              ),
                                             ),
                                           );
                                         }).toList(),
@@ -5947,54 +6000,59 @@ class _CommentsSectionState extends State<CommentsSection> {
                 children: _pendingAttachments.asMap().entries.map((entry) {
                   final idx = entry.key;
                   final att = entry.value;
-                  return Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
+                  return ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: MediaQuery.of(context).size.width * 0.45,
                     ),
-                    decoration: BoxDecoration(
-                      color: widget.isDark ? Colors.white12 : Colors.white,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: widget.isDark
-                            ? Colors.white24
-                            : Colors.grey[300]!,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
                       ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.insert_drive_file_rounded,
-                          size: 14,
-                          color: Color(0xFF195BAC),
+                      decoration: BoxDecoration(
+                        color: widget.isDark ? Colors.white12 : Colors.white,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: widget.isDark
+                              ? Colors.white24
+                              : Colors.grey[300]!,
                         ),
-                        const SizedBox(width: 4),
-                        Flexible(
-                          child: Text(
-                            att.fileName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.insert_drive_file_rounded,
+                            size: 14,
+                            color: Color(0xFF195BAC),
+                          ),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              att.fileName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 4),
-                        GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _pendingAttachments.removeAt(idx);
-                            });
-                          },
-                          child: const Icon(
-                            Icons.close_rounded,
-                            size: 14,
-                            color: Colors.redAccent,
+                          const SizedBox(width: 4),
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _pendingAttachments.removeAt(idx);
+                              });
+                            },
+                            child: const Icon(
+                              Icons.close_rounded,
+                              size: 14,
+                              color: Colors.redAccent,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   );
                 }).toList(),
@@ -6193,8 +6251,14 @@ class _CasboxDetailPageState extends ConsumerState<_CasboxDetailPage> {
     final contactEmail = initialMsg.to.isNotEmpty
         ? initialMsg.to
         : initialMsg.sender;
-    final media = MediaQuery.of(context);
-    final isMobile = media.size.width < 600;
+    final double screenWidth = MediaQuery.of(context).size.width;
+    final bool isMobileDevice = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS);
+    final isMobile = isMobileDevice ||
+        (screenWidth < 800 &&
+            defaultTargetPlatform != TargetPlatform.macOS &&
+            defaultTargetPlatform != TargetPlatform.windows);
 
     final subjectText = initialMsg.subject.trim().isNotEmpty
         ? initialMsg.subject
@@ -6206,8 +6270,15 @@ class _CasboxDetailPageState extends ConsumerState<_CasboxDetailPage> {
         ? initialMsg.to
         : 'ravikumar123@bnxmail.com';
 
-    return Scaffold(
-      backgroundColor: isDark ? BNXColors.darkBg : const Color(0xFFE9F4FF),
+    return PopScope(
+      canPop: !_showReplyBox,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        setState(() => _showReplyBox = false);
+      },
+      child: Scaffold(
+        resizeToAvoidBottomInset: true,
+        backgroundColor: isDark ? BNXColors.darkBg : const Color(0xFFE9F4FF),
       body: SafeArea(
         child: Column(
           children: [
@@ -6528,6 +6599,7 @@ class _CasboxDetailPageState extends ConsumerState<_CasboxDetailPage> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

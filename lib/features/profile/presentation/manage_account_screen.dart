@@ -1,14 +1,20 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/widgets/avatar_widget.dart';
 import '../../../data/account_provider.dart';
+import '../../../data/repositories/storage_repository.dart';
+import '../../../data/repositories/subscription_repository.dart';
 import '../../../data/repositories/user_repository.dart';
+import '../../../data/settings_provider.dart';
 import '../../../models/account_model.dart';
+import '../../../models/two_factor_model.dart';
 
 class ManageAccountScreen extends ConsumerStatefulWidget {
   final int initialTab;
@@ -34,6 +40,18 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
   String _occupation = 'None added';
   String _bio = 'Write a brief description about yourself';
   bool _isProfileMenuOpen = false;
+
+  // Section 2.2: Storage Quota state
+  StorageQuota? _storageQuota;
+  bool _isLoadingStorageQuota = false;
+
+  // Section 6.1: Active Cliks Business Subscription state
+  Map<String, dynamic>? _subscriptionData;
+  bool _isLoadingSubscription = false;
+
+  // Section 3: 2FA & Security state
+  bool _is2faLoading = false;
+  bool _isVerifyingEmail = false;
 
   // Section 5.1 & 5.3: Connected Mail Accounts state
   List<Map<String, dynamic>> _connectedEmails = [];
@@ -104,6 +122,597 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
     _loadProfileSettings(email);
     _loadConnectedEmails();
     _loadSubIds();
+    _loadStorageQuota();
+    _loadSubscriptionData(email);
+    ref.read(settingsProvider.notifier).loadAllSettings();
+  }
+
+  /// 2.2 Storage Quota (GET /api/mail/storage-quota)
+  Future<void> _loadStorageQuota() async {
+    if (!mounted) return;
+    setState(() => _isLoadingStorageQuota = true);
+    try {
+      final quota = await StorageRepository.fetchStorageQuota();
+      if (mounted) {
+        setState(() {
+          _storageQuota = quota;
+          _isLoadingStorageQuota = false;
+        });
+      }
+    } catch (e) {
+      print('[MANAGE_ACCOUNT] loadStorageQuota error: $e');
+      if (mounted) setState(() => _isLoadingStorageQuota = false);
+    }
+  }
+
+  /// 6.1 Cliks Business Subscription (GET https://cliks.beta-softnet.com/api/v1/business/subscription/{userEmail})
+  Future<void> _loadSubscriptionData([String? accountEmail]) async {
+    if (!mounted) return;
+    setState(() => _isLoadingSubscription = true);
+    try {
+      final email = accountEmail ?? ref.read(activeAccountProvider).email;
+      final sub = await SubscriptionRepository.getBusinessSubscription(email);
+      if (mounted) {
+        setState(() {
+          _subscriptionData = sub;
+          _isLoadingSubscription = false;
+        });
+      }
+    } catch (e) {
+      print('[MANAGE_ACCOUNT] loadSubscriptionData error: $e');
+      if (mounted) setState(() => _isLoadingSubscription = false);
+    }
+  }
+
+  /// 5. Initiate Email Verification (GET /api/verification/initiate/{emailId})
+  Future<void> _initiateEmailVerification(
+    dynamic emailId,
+    String emailStr,
+  ) async {
+    if (_isVerifyingEmail) return;
+    setState(() => _isVerifyingEmail = true);
+    try {
+      final success = await UserRepository.initiateEmailVerification(emailId);
+      if (mounted) {
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Verification link sent to $emailStr. Please check your inbox.'),
+              backgroundColor: const Color(0xFF1E8E3E),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to initiate verification for $emailStr'),
+              backgroundColor: Colors.redAccent,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Verification error: $e'),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isVerifyingEmail = false);
+    }
+  }
+
+  /// Open Change Password Dialog (POST /api/auth/change-password)
+  void _openChangePasswordDialog(bool isDark) {
+    final currentPassController = TextEditingController();
+    final newPassController = TextEditingController();
+    bool obscureCurrent = true;
+    bool obscureNew = true;
+    bool isSubmitting = false;
+    String? errorMessage;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final surfaceColor = isDark ? const Color(0xFF23262B) : Colors.white;
+          final borderColor =
+              isDark ? const Color(0xFF383C44) : const Color(0xFFE2E4E8);
+
+          return Dialog(
+            backgroundColor: surfaceColor,
+            elevation: 12,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: borderColor, width: 1),
+            ),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Change Password',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? Colors.white : const Color(0xFF202124),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded, size: 20),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Enter your current password and a new password to keep your account secure.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isDark ? Colors.white60 : const Color(0xFF5F6368),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    TextField(
+                      controller: currentPassController,
+                      obscureText: obscureCurrent,
+                      decoration: InputDecoration(
+                        labelText: 'Current Password',
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            obscureCurrent ? Icons.visibility_off : Icons.visibility,
+                            size: 20,
+                          ),
+                          onPressed: () =>
+                              setDialogState(() => obscureCurrent = !obscureCurrent),
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: newPassController,
+                      obscureText: obscureNew,
+                      decoration: InputDecoration(
+                        labelText: 'New Password',
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            obscureNew ? Icons.visibility_off : Icons.visibility,
+                            size: 20,
+                          ),
+                          onPressed: () =>
+                              setDialogState(() => obscureNew = !obscureNew),
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                    if (errorMessage != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        errorMessage!,
+                        style: const TextStyle(
+                          color: Colors.redAccent,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('Cancel'),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton(
+                          onPressed: isSubmitting
+                              ? null
+                              : () async {
+                                  final oldP = currentPassController.text;
+                                  final newP = newPassController.text;
+                                  if (oldP.isEmpty || newP.isEmpty) {
+                                    setDialogState(() {
+                                      errorMessage = 'Please fill both password fields.';
+                                    });
+                                    return;
+                                  }
+                                  setDialogState(() {
+                                    isSubmitting = true;
+                                    errorMessage = null;
+                                  });
+                                  final messenger = ScaffoldMessenger.of(context);
+                                  try {
+                                    await UserRepository.changePassword(oldP, newP);
+                                    if (ctx.mounted) Navigator.pop(ctx);
+                                    if (mounted) {
+                                      messenger.showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Password updated successfully!'),
+                                          backgroundColor: Color(0xFF1E8E3E),
+                                          behavior: SnackBarBehavior.floating,
+                                        ),
+                                      );
+                                    }
+                                  } catch (e) {
+                                    setDialogState(() {
+                                      isSubmitting = false;
+                                      errorMessage = 'Failed to update password: $e';
+                                    });
+                                  }
+                                },
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF1A73E8),
+                          ),
+                          child: isSubmitting
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Text('Update Password'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// Open 2FA Setup or Management Dialog (POST /api/users/2fa/setup, POST /api/users/2fa/disable)
+  void _open2FAManagement(bool isDark, bool is2Fa) async {
+    if (is2Fa) {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: isDark ? const Color(0xFF24272B) : Colors.white,
+          title: const Text('Two-Factor Authentication'),
+          content: const Text(
+            'Two-factor authentication is currently enabled for your account. Would you like to disable it?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+              child: const Text('Disable 2FA'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirm == true) {
+        setState(() => _is2faLoading = true);
+        try {
+          final res = await ref.read(settingsProvider.notifier).disable2FA();
+          if (mounted) {
+            if (res.success) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Two-factor authentication disabled.'),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(res.message ?? 'Failed to disable 2FA'),
+                  backgroundColor: Colors.redAccent,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
+          }
+        } finally {
+          if (mounted) setState(() => _is2faLoading = false);
+        }
+      }
+    } else {
+      setState(() => _is2faLoading = true);
+      try {
+        final res = await ref.read(settingsProvider.notifier).setup2FA();
+        if (mounted) {
+          setState(() => _is2faLoading = false);
+          if (res.success && res.data != null) {
+            _show2FASetupDialog(isDark, res.data!);
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(res.message ?? 'Failed to initialize 2FA setup'),
+                backgroundColor: Colors.redAccent,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _is2faLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error initializing 2FA: $e'),
+              backgroundColor: Colors.redAccent,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  void _show2FASetupDialog(bool isDark, TwoFactorSetupData data) {
+    final controllers = List.generate(6, (_) => TextEditingController());
+    final focusNodes = List.generate(6, (_) => FocusNode());
+    bool isVerifying = false;
+    String? errorMessage;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            final surfaceColor =
+                isDark ? const Color(0xFF1E293B) : Colors.white;
+            return Dialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              backgroundColor: surfaceColor,
+              insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 440),
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.security_rounded,
+                              color: Color(0xFF1A73E8),
+                              size: 24,
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              'Set Up 2-Step Verification',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: isDark ? Colors.white : const Color(0xFF202124),
+                              ),
+                            ),
+                            const Spacer(),
+                            IconButton(
+                              icon: const Icon(Icons.close_rounded, size: 20),
+                              onPressed: () => Navigator.pop(dialogCtx),
+                            ),
+                          ],
+                        ),
+                        const Divider(height: 24),
+                        Text(
+                          'Add your BNX Mail account to an authenticator app (such as Google Authenticator or Authy) using the secret key below:',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isDark ? Colors.white70 : const Color(0xFF5F6368),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        if (data.secret != null && data.secret!.isNotEmpty) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: isDark ? Colors.white12 : const Color(0xFFCBD5E1),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: SelectableText(
+                                    data.secret!,
+                                    style: const TextStyle(
+                                      fontFamily: 'monospace',
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 1.1,
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.copy_rounded, size: 18, color: Color(0xFF1A73E8)),
+                                  tooltip: 'Copy Key',
+                                  onPressed: () {
+                                    Clipboard.setData(ClipboardData(text: data.secret!));
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Secret key copied to clipboard'),
+                                        behavior: SnackBarBehavior.floating,
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                        ],
+                        Text(
+                          'Enter the 6-digit code from your authenticator app:',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? Colors.white70 : const Color(0xFF202124),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Center(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: List.generate(6, (i) {
+                                return Container(
+                                  width: 44,
+                                  height: 52,
+                                  margin: EdgeInsets.only(right: i < 5 ? 8 : 0),
+                                  decoration: BoxDecoration(
+                                    color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: focusNodes[i].hasFocus
+                                          ? const Color(0xFF1A73E8)
+                                          : (isDark ? Colors.white12 : const Color(0xFFE2E8F0)),
+                                      width: focusNodes[i].hasFocus ? 2.0 : 1.0,
+                                    ),
+                                  ),
+                                  child: Center(
+                                    child: TextField(
+                                      controller: controllers[i],
+                                      focusNode: focusNodes[i],
+                                      keyboardType: TextInputType.number,
+                                      textAlign: TextAlign.center,
+                                      maxLength: 1,
+                                      style: TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold,
+                                        color: isDark ? Colors.white : const Color(0xFF202124),
+                                      ),
+                                      inputFormatters: [
+                                        FilteringTextInputFormatter.digitsOnly,
+                                      ],
+                                      decoration: const InputDecoration(
+                                        counterText: '',
+                                        border: InputBorder.none,
+                                        isDense: true,
+                                        contentPadding: EdgeInsets.zero,
+                                      ),
+                                      onChanged: (val) {
+                                        if (val.isNotEmpty && i < 5) {
+                                          focusNodes[i + 1].requestFocus();
+                                        } else if (val.isEmpty && i > 0) {
+                                          focusNodes[i - 1].requestFocus();
+                                        }
+                                        setDialogState(() => errorMessage = null);
+                                      },
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ),
+                          ),
+                        ),
+                        if (errorMessage != null) ...[
+                          const SizedBox(height: 12),
+                          Text(
+                            errorMessage!,
+                            style: const TextStyle(
+                              color: Colors.redAccent,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 24),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 44,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF1A73E8),
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                            onPressed: isVerifying
+                                ? null
+                                : () async {
+                                    final code = controllers.map((c) => c.text).join();
+                                    if (code.length < 6) {
+                                      setDialogState(() {
+                                        errorMessage = 'Please enter the full 6-digit code';
+                                      });
+                                      return;
+                                    }
+                                    setDialogState(() {
+                                      isVerifying = true;
+                                      errorMessage = null;
+                                    });
+                                    final res = await ref.read(settingsProvider.notifier).verify2FA(code);
+                                    if (res.success) {
+                                      if (dialogCtx.mounted) Navigator.pop(dialogCtx);
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(
+                                            content: Text('Two-factor authentication enabled successfully!'),
+                                            backgroundColor: Color(0xFF1E8E3E),
+                                            behavior: SnackBarBehavior.floating,
+                                          ),
+                                        );
+                                      }
+                                    } else {
+                                      setDialogState(() {
+                                        isVerifying = false;
+                                        errorMessage = res.message ?? 'Verification failed';
+                                      });
+                                    }
+                                  },
+                            child: isVerifying
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Text('Verify & Enable'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<void> _loadProfileSettings([String? accountEmail]) async {
@@ -254,22 +863,25 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
             ),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 480),
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          'Create New Mailbox / Alias',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            color:
-                                isDark ? Colors.white : const Color(0xFF202124),
+                        Expanded(
+                          child: Text(
+                            'Create New Mailbox / Alias',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              color:
+                                  isDark ? Colors.white : const Color(0xFF202124),
+                            ),
                           ),
                         ),
                         IconButton(
@@ -397,8 +1009,9 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
                 ),
               ),
             ),
-          );
-        },
+          ),
+        );
+      },
       ),
     );
   }
@@ -454,25 +1067,41 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.image,
         allowMultiple: false,
+        withData: true,
       );
 
       if (result != null && result.files.isNotEmpty) {
         setState(() => _isLoading = true);
         final file = result.files.first;
-        String? base64String;
+        Uint8List? fileBytes = file.bytes;
+        final filePath = file.path;
 
-        if (file.bytes != null) {
-          base64String = base64Encode(file.bytes!);
-        } else if (file.path != null) {
-          final bytes = await File(file.path!).readAsBytes();
-          base64String = base64Encode(bytes);
+        if (fileBytes == null && filePath != null) {
+          try {
+            final f = File(filePath);
+            if (f.existsSync()) {
+              fileBytes = await f.readAsBytes();
+            }
+          } catch (e) {
+            print('[FILE READ ERROR] $e');
+          }
         }
 
-        if (base64String != null) {
+        if (fileBytes != null || (filePath != null && filePath.isNotEmpty)) {
           final activeAccount = ref.read(activeAccountProvider);
-          await ref
-              .read(accountsProvider.notifier)
-              .updateAvatar(activeAccount.id, base64String);
+          final ext = (file.extension ?? 'jpg').toLowerCase();
+          final mime = ext == 'png' ? 'image/png' : 'image/jpeg';
+          final localPreviewUri = fileBytes != null
+              ? 'data:$mime;base64,${base64Encode(fileBytes)}'
+              : (filePath ?? '');
+
+          await ref.read(accountsProvider.notifier).updateAvatar(
+                activeAccount.id,
+                localPreviewUri,
+                bytes: fileBytes,
+                filePath: filePath,
+                filename: file.name,
+              );
 
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -531,7 +1160,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
       try {
         await ref
             .read(accountsProvider.notifier)
-            .updateAvatar(activeAccount.id, '');
+            .removeAvatar(activeAccount.id);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -559,6 +1188,18 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
   // ═══════════════════════════════════════════════════════════════════════════
   // BUILD ENTRY POINT
   // ═══════════════════════════════════════════════════════════════════════════
+  void _handleBackNavigation() {
+    if (_homeSubPage != 0) {
+      setState(() => _homeSubPage = 0);
+    } else if (_selectedTab != 0) {
+      setState(() => _selectedTab = 0);
+    } else if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      context.go('/home');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final account = ref.watch(activeAccountProvider);
@@ -571,52 +1212,68 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
     }
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final screenWidth = MediaQuery.of(context).size.width;
-    final isMobile = screenWidth < 800;
+    final bool isMobileDevice = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS);
+    final isMobile = isMobileDevice ||
+        (screenWidth < 800 &&
+            defaultTargetPlatform != TargetPlatform.macOS &&
+            defaultTargetPlatform != TargetPlatform.windows);
 
     final bgColor = isDark ? const Color(0xFF1E2022) : Colors.white;
 
-    return Scaffold(
-      backgroundColor: bgColor,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Top Google Account Style Bar (Exact match to screenshots)
-            _buildTopAppBar(account, isDark, isMobile),
+    return PopScope(
+      canPop: !isMobile ||
+          (_homeSubPage == 0 &&
+              _selectedTab == 0 &&
+              Navigator.of(context).canPop()),
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _handleBackNavigation();
+      },
+      child: Scaffold(
+        backgroundColor: bgColor,
+        body: SafeArea(
+          child: Column(
+            children: [
+              // Top Google Account Style Bar (Exact match to screenshots)
+              _buildTopAppBar(account, isDark, isMobile),
 
-            // Mobile Horizontal Tab Bar (For responsive screens)
-            if (isMobile) _buildMobileTabBar(isDark),
+              // Mobile Horizontal Tab Bar (For responsive screens)
+              if (isMobile) _buildMobileTabBar(isDark),
 
-            // Content Area (Split Sidebar + Body on Desktop)
-            Expanded(
-              child: isMobile
-                  ? _buildScrollableContent(account, isDark, isMobile)
-                  : Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Left Sidebar
-                        _buildDesktopSidebar(isDark),
+              // Content Area (Split Sidebar + Body on Desktop)
+              Expanded(
+                child: isMobile
+                    ? _buildScrollableContent(account, isDark, isMobile)
+                    : Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Left Sidebar
+                          _buildDesktopSidebar(isDark),
 
-                        // Vertical Divider
-                        VerticalDivider(
-                          width: 1,
-                          thickness: 1,
-                          color: isDark
-                              ? const Color(0xFF3C4043)
-                              : const Color(0xFFE8EAED),
-                        ),
-
-                        // Main Scrollable Area
-                        Expanded(
-                          child: _buildScrollableContent(
-                            account,
-                            isDark,
-                            isMobile,
+                          // Vertical Divider
+                          VerticalDivider(
+                            width: 1,
+                            thickness: 1,
+                            color: isDark
+                                ? const Color(0xFF3C4043)
+                                : const Color(0xFFE8EAED),
                           ),
-                        ),
-                      ],
-                    ),
-            ),
-          ],
+
+                          // Main Scrollable Area
+                          Expanded(
+                            child: _buildScrollableContent(
+                              account,
+                              isDark,
+                              isMobile,
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -642,8 +1299,8 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
       ),
       child: Row(
         children: [
-          // On mobile, show back button if can pop
-          if (isMobile && Navigator.of(context).canPop()) ...[
+          // On mobile, show back button
+          if (isMobile) ...[
             IconButton(
               icon: Icon(
                 Icons.arrow_back_rounded,
@@ -653,20 +1310,14 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
               tooltip: 'Back',
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: _handleBackNavigation,
             ),
             const SizedBox(width: 4),
           ],
 
           // Logo (B Beta) + "Account" title
           InkWell(
-            onTap: () {
-              if (Navigator.of(context).canPop()) {
-                Navigator.of(context).pop();
-              } else {
-                context.go('/');
-              }
-            },
+            onTap: _handleBackNavigation,
             borderRadius: BorderRadius.circular(8),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
@@ -704,29 +1355,31 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
 
           const Spacer(),
 
-          // Help Icon (?)
-          IconButton(
-            icon: Icon(
-              Icons.help_outline_rounded,
-              color: isDark ? Colors.white70 : const Color(0xFF5F6368),
-              size: 22,
+          if (!isMobile) ...[
+            // Help Icon (?)
+            IconButton(
+              icon: Icon(
+                Icons.help_outline_rounded,
+                color: isDark ? Colors.white70 : const Color(0xFF5F6368),
+                size: 22,
+              ),
+              tooltip: 'Help',
+              onPressed: () {},
             ),
-            tooltip: 'Help',
-            onPressed: () {},
-          ),
 
-          // Apps Launcher Icon (3x3 grid)
-          IconButton(
-            icon: Icon(
-              Icons.apps_rounded,
-              color: isDark ? Colors.white70 : const Color(0xFF5F6368),
-              size: 22,
+            // Apps Launcher Icon (3x3 grid)
+            IconButton(
+              icon: Icon(
+                Icons.apps_rounded,
+                color: isDark ? Colors.white70 : const Color(0xFF5F6368),
+                size: 22,
+              ),
+              tooltip: 'BNX Apps',
+              onPressed: () {},
             ),
-            tooltip: 'BNX Apps',
-            onPressed: () {},
-          ),
 
-          const SizedBox(width: 6),
+            const SizedBox(width: 6),
+          ],
 
           // User Profile Dropdown Pill
           _buildUserProfilePill(account, displayName, isDark, isMobile),
@@ -1513,53 +2166,94 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Title and Add Mailbox action row
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Your Email Identities',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w600,
-                              color: isDark ? Colors.white : const Color(0xFF202124),
-                              letterSpacing: -0.2,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Your primary email is used for account-related notifications and as your default identity.',
-                            style: TextStyle(
-                              fontSize: 13.5,
-                              color: isDark ? Colors.white60 : const Color(0xFF5F6368),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    FilledButton.icon(
-                      onPressed: () => _openCreateMailboxDialog(isDark),
-                      icon: const Icon(Icons.add, size: 16),
-                      label: const Text(
-                        'Add Mailbox',
-                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
-                      ),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF1A73E8),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
+                if (isMobile)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Your Email Identities',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white : const Color(0xFF202124),
+                          letterSpacing: -0.2,
                         ),
                       ),
-                    ),
-                  ],
-                ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Your primary email is used for account-related notifications and as your default identity.',
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          color: isDark ? Colors.white60 : const Color(0xFF5F6368),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      FilledButton.icon(
+                        onPressed: () => _openCreateMailboxDialog(isDark),
+                        icon: const Icon(Icons.add, size: 16),
+                        label: const Text(
+                          'Add Mailbox',
+                          style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+                        ),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF1A73E8),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Your Email Identities',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w600,
+                                color: isDark ? Colors.white : const Color(0xFF202124),
+                                letterSpacing: -0.2,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Your primary email is used for account-related notifications and as your default identity.',
+                              style: TextStyle(
+                                fontSize: 13.5,
+                                color: isDark ? Colors.white60 : const Color(0xFF5F6368),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      FilledButton.icon(
+                        onPressed: () => _openCreateMailboxDialog(isDark),
+                        icon: const Icon(Icons.add, size: 16),
+                        label: const Text(
+                          'Add Mailbox',
+                          style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+                        ),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF1A73E8),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 const SizedBox(height: 16),
 
                 if (_isLoadingEmails)
@@ -1697,22 +2391,47 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
                                 ),
                               )
                             else
-                              OutlinedButton(
-                                onPressed: emailId != null
-                                    ? () => _switchPrimaryEmail(emailId)
-                                    : null,
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: const Color(0xFF1A73E8),
-                                  side: const BorderSide(color: Color(0xFF1A73E8)),
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 6,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  if (item['isVerified'] == false || item['verified'] == false)
+                                    OutlinedButton(
+                                      onPressed: emailId != null && !_isVerifyingEmail
+                                          ? () => _initiateEmailVerification(emailId, emailStr)
+                                          : null,
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: const Color(0xFFE37400),
+                                        side: const BorderSide(color: Color(0xFFE37400)),
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(16),
+                                        ),
+                                      ),
+                                      child: const Text(
+                                        'Verify',
+                                        style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600),
+                                      ),
+                                    ),
+                                  OutlinedButton(
+                                    onPressed: emailId != null
+                                        ? () => _switchPrimaryEmail(emailId)
+                                        : null,
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: const Color(0xFF1A73E8),
+                                      side: const BorderSide(color: Color(0xFF1A73E8)),
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                    ),
+                                    child: const Text(
+                                      'Set as Primary',
+                                      style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600),
+                                    ),
                                   ),
-                                ),
-                                child: const Text(
-                                  'Set as Primary',
-                                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600),
-                                ),
+                                ],
                               ),
                           ],
                         ),
@@ -2149,7 +2868,10 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
                     children: [
                       // Row 1: 2-Step Verification
                       InkWell(
-                        onTap: () {},
+                        onTap: () {
+                          final is2Fa = ref.read(settingsProvider).settings?.twoFactorEnabled ?? false;
+                          _open2FAManagement(isDark, is2Fa);
+                        },
                         borderRadius: const BorderRadius.vertical(
                           top: Radius.circular(11),
                         ),
@@ -2172,53 +2894,103 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      '2-Step Verification',
-                                      style: TextStyle(
-                                        fontSize: 14.5,
-                                        fontWeight: FontWeight.w500,
-                                        color: isDark
-                                            ? Colors.white
-                                            : const Color(0xFF202124),
-                                      ),
+                                    Builder(
+                                      builder: (context) {
+                                        final is2Fa = ref.watch(settingsProvider).settings?.twoFactorEnabled ?? false;
+                                        return Row(
+                                          children: [
+                                            Text(
+                                              '2-Step Verification',
+                                              style: TextStyle(
+                                                fontSize: 14.5,
+                                                fontWeight: FontWeight.w500,
+                                                color: isDark
+                                                    ? Colors.white
+                                                    : const Color(0xFF202124),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(
+                                                horizontal: 8,
+                                                vertical: 2,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: is2Fa
+                                                    ? const Color(0xFFE6F4EA)
+                                                    : (isDark ? const Color(0xFF3C4043) : const Color(0xFFF1F3F4)),
+                                                borderRadius: BorderRadius.circular(6),
+                                              ),
+                                              child: Text(
+                                                is2Fa ? 'On' : 'Off',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: is2Fa
+                                                      ? const Color(0xFF137333)
+                                                      : (isDark ? Colors.white70 : const Color(0xFF5F6368)),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        );
+                                      },
                                     ),
                                     const SizedBox(height: 3),
-                                    Text(
-                                      'Protect your account with an extra layer of security.',
-                                      style: TextStyle(
-                                        fontSize: 12.5,
-                                        color: isDark
-                                            ? Colors.white60
-                                            : const Color(0xFF5F6368),
-                                      ),
+                                    Builder(
+                                      builder: (context) {
+                                        final is2Fa = ref.watch(settingsProvider).settings?.twoFactorEnabled ?? false;
+                                        return Text(
+                                          is2Fa
+                                              ? 'Your account is protected with 2-step verification.'
+                                              : 'Protect your account with an extra layer of security.',
+                                          style: TextStyle(
+                                            fontSize: 12.5,
+                                            color: isDark
+                                                ? Colors.white60
+                                                : const Color(0xFF5F6368),
+                                          ),
+                                        );
+                                      },
                                     ),
                                   ],
                                 ),
                               ),
                               const SizedBox(width: 12),
-                              // Outlined button "Set up"
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 6,
+                              if (_is2faLoading)
+                                const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              else
+                                Builder(
+                                  builder: (context) {
+                                    final is2Fa = ref.watch(settingsProvider).settings?.twoFactorEnabled ?? false;
+                                    return Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(
+                                          color: isDark
+                                              ? const Color(0xFF5F6368)
+                                              : const Color(0xFFDADCE0),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        is2Fa ? 'Manage' : 'Set up',
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500,
+                                          color: Color(0xFF1A73E8),
+                                        ),
+                                      ),
+                                    );
+                                  },
                                 ),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(
-                                    color: isDark
-                                        ? const Color(0xFF5F6368)
-                                        : const Color(0xFFDADCE0),
-                                  ),
-                                ),
-                                child: const Text(
-                                  'Set up',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                    color: Color(0xFF1A73E8),
-                                  ),
-                                ),
-                              ),
                             ],
                           ),
                         ),
@@ -2234,7 +3006,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
 
                       // Row 2: Password
                       InkWell(
-                        onTap: () {},
+                        onTap: () => _openChangePasswordDialog(isDark),
                         borderRadius: const BorderRadius.vertical(
                           bottom: Radius.circular(11),
                         ),
@@ -2269,7 +3041,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
                                     ),
                                     const SizedBox(height: 3),
                                     Text(
-                                      'Last changed 11/07/2026',
+                                      'Change your account password',
                                       style: TextStyle(
                                         fontSize: 12.5,
                                         color: isDark
@@ -2700,7 +3472,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
                           fontSize: 18,
                         ),
                         OutlinedButton(
-                          onPressed: _pickAndUploadPhoto,
+                          onPressed: _isLoading ? null : _pickAndUploadPhoto,
                           style: OutlinedButton.styleFrom(
                             foregroundColor: isDark
                                 ? Colors.white70
@@ -2718,38 +3490,51 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
                               borderRadius: BorderRadius.circular(4),
                             ),
                           ),
-                          child: const Text(
-                            'CHANGE PHOTO',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
+                          child: _isLoading
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : Text(
+                                  (account.avatarUrl != null &&
+                                          account.avatarUrl!.isNotEmpty)
+                                      ? 'CHANGE PHOTO'
+                                      : 'ADD PHOTO',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
                         ),
-                        OutlinedButton(
-                          onPressed: _removePhoto,
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: const Color(0xFFD93025),
-                            side: const BorderSide(
-                              color: Color(0xFFF28B82),
+                        if (account.avatarUrl != null &&
+                            account.avatarUrl!.isNotEmpty)
+                          OutlinedButton(
+                            onPressed: _isLoading ? null : _removePhoto,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFFD93025),
+                              side: const BorderSide(
+                                color: Color(0xFFF28B82),
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 10,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(4),
+                              ),
                             ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 10,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(4),
+                            child: const Text(
+                              'Remove',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
                           ),
-                          child: const Text(
-                            'Remove',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
                       ],
                     ),
                   ],
@@ -2824,6 +3609,38 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
         ? account.email
         : 'ravinew2004@bnxmail.com';
 
+    final planName = _subscriptionData?['plan_name']?.toString() ??
+        (_isLoadingSubscription ? 'Loading plan...' : 'Free Plan');
+    final rawDays = _subscriptionData?['subscription_days_remaining'];
+    final int? daysRemaining = (rawDays is num) ? rawDays.toInt() : null;
+    final isActive = daysRemaining != null && daysRemaining > 0;
+
+    String subscribedDate = 'Not available';
+    final rawSubDate = _subscriptionData?['when_subscribed'];
+    if (rawSubDate != null) {
+      final parsed = DateTime.tryParse(rawSubDate.toString());
+      if (parsed != null) {
+        subscribedDate = '${parsed.day.toString().padLeft(2, '0')}/${parsed.month.toString().padLeft(2, '0')}/${parsed.year}';
+      } else {
+        subscribedDate = rawSubDate.toString();
+      }
+    }
+
+    String nextDueDate = 'Not available';
+    final rawDueDate = _subscriptionData?['next_due_date'];
+    if (rawDueDate != null) {
+      final parsed = DateTime.tryParse(rawDueDate.toString());
+      if (parsed != null) {
+        nextDueDate = '${parsed.day.toString().padLeft(2, '0')}/${parsed.month.toString().padLeft(2, '0')}/${parsed.year}';
+      } else {
+        nextDueDate = rawDueDate.toString();
+      }
+    }
+
+    final String daysRemainingText = isActive
+        ? '$daysRemaining days remaining'
+        : (daysRemaining == 0 ? 'Cycle expired' : 'No active cycle');
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -2870,13 +3687,24 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Cliks Business Subscription',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                  color: isDark ? Colors.white : const Color(0xFF202124),
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Cliks Business Subscription',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white : const Color(0xFF202124),
+                    ),
+                  ),
+                  if (_isLoadingSubscription)
+                    const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                ],
               ),
               const SizedBox(height: 6),
               Text(
@@ -2924,7 +3752,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'Elite Suite',
+                                planName,
                                 style: TextStyle(
                                   fontSize: 24,
                                   fontWeight: FontWeight.bold,
@@ -2935,38 +3763,56 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
                               ),
                             ],
                           ),
-                          // Active Chip
+                          // Active / Status Chip
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 14,
                               vertical: 6,
                             ),
                             decoration: BoxDecoration(
-                              color: isDark
-                                  ? const Color(0xFF133E24)
-                                  : Colors.white,
+                              color: isActive
+                                  ? (isDark
+                                      ? const Color(0xFF133E24)
+                                      : Colors.white)
+                                  : (isDark
+                                      ? const Color(0xFF3C4043)
+                                      : const Color(0xFFF1F3F4)),
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(
-                                color: isDark
+                                color: isActive
                                     ? const Color(0xFF1E8E3E)
-                                    : const Color(0xFFDADCE0),
+                                    : (isDark
+                                        ? const Color(0xFF5F6368)
+                                        : const Color(0xFFDADCE0)),
                               ),
                             ),
-                            child: const Row(
+                            child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
-                                  Icons.check_circle_outline_rounded,
-                                  color: Color(0xFF1E8E3E),
+                                  isActive
+                                      ? Icons.check_circle_outline_rounded
+                                      : Icons.info_outline_rounded,
+                                  color: isActive
+                                      ? const Color(0xFF1E8E3E)
+                                      : (isDark
+                                          ? Colors.white70
+                                          : const Color(0xFF5F6368)),
                                   size: 16,
                                 ),
-                                SizedBox(width: 6),
+                                const SizedBox(width: 6),
                                 Text(
-                                  'Active',
+                                  isActive
+                                      ? 'Active'
+                                      : (daysRemaining == 0 ? 'Expired' : 'Free'),
                                   style: TextStyle(
                                     fontSize: 12.5,
                                     fontWeight: FontWeight.w600,
-                                    color: Color(0xFF1E8E3E),
+                                    color: isActive
+                                        ? const Color(0xFF1E8E3E)
+                                        : (isDark
+                                            ? Colors.white70
+                                            : const Color(0xFF5F6368)),
                                   ),
                                 ),
                               ],
@@ -2993,15 +3839,15 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
                                 _buildSubDetailItem(
                                   icon: Icons.calendar_today_outlined,
                                   label: 'SUBSCRIBED ON',
-                                  value: '11/07/2026',
+                                  value: subscribedDate,
                                   isDark: isDark,
                                 ),
                                 const SizedBox(height: 16),
                                 _buildSubDetailItem(
                                   icon: Icons.access_time_rounded,
                                   label: 'NEXT DUE DATE',
-                                  value: '11/07/2027',
-                                  extra: '279 days remaining',
+                                  value: nextDueDate,
+                                  extra: daysRemainingText,
                                   isDark: isDark,
                                 ),
                                 const SizedBox(height: 16),
@@ -3018,7 +3864,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
                                   child: _buildSubDetailItem(
                                     icon: Icons.calendar_today_outlined,
                                     label: 'SUBSCRIBED ON',
-                                    value: '11/07/2026',
+                                    value: subscribedDate,
                                     isDark: isDark,
                                   ),
                                 ),
@@ -3026,8 +3872,8 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
                                   child: _buildSubDetailItem(
                                     icon: Icons.access_time_rounded,
                                     label: 'NEXT DUE DATE',
-                                    value: '11/07/2027',
-                                    extra: '279 days remaining',
+                                    value: nextDueDate,
+                                    extra: daysRemainingText,
                                     isDark: isDark,
                                   ),
                                 ),
@@ -3044,6 +3890,77 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
                   ],
                 ),
               ),
+
+              if (!isActive) ...[
+                const SizedBox(height: 20),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFF2C2417)
+                        : const Color(0xFFFEF7E0),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isDark
+                          ? const Color(0xFF6B4E17)
+                          : const Color(0xFFFEEFC3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.star_rounded,
+                        color: Color(0xFFE37400),
+                        size: 28,
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Upgrade your Cliks Business plan',
+                              style: TextStyle(
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w600,
+                                color: isDark
+                                    ? Colors.white
+                                    : const Color(0xFF202124),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Unlock custom domains, multi-mailbox management, and team Sub-IDs.',
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                color: isDark
+                                    ? Colors.white70
+                                    : const Color(0xFF5F6368),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      FilledButton(
+                        onPressed: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Redirecting to Cliks Business billing portal...'),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        },
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFFE37400),
+                        ),
+                        child: const Text('Upgrade'),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -3156,49 +4073,89 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
         const SizedBox(height: 36),
 
         // Header Row: Team & Sub-IDs + "+ Create Sub-ID" button
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Team & Sub-IDs',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w600,
-                    color: isDark ? Colors.white : const Color(0xFF202124),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Manage isolated Sub-IDs and delegate access.',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: isDark ? Colors.white60 : const Color(0xFF5F6368),
-                  ),
-                ),
-              ],
-            ),
-            FilledButton.icon(
-              onPressed: () => _openCreateSubIdDialog(account, isDark),
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text(
-                'Create Sub-ID',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-              ),
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF1A73E8),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(24),
+        if (isMobile)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Team & Sub-IDs',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white : const Color(0xFF202124),
                 ),
               ),
-            ),
-          ],
-        ),
+              const SizedBox(height: 4),
+              Text(
+                'Manage isolated Sub-IDs and delegate access.',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isDark ? Colors.white60 : const Color(0xFF5F6368),
+                ),
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: () => _openCreateSubIdDialog(account, isDark),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text(
+                  'Create Sub-ID',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF1A73E8),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                ),
+              ),
+            ],
+          )
+        else
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Team & Sub-IDs',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white : const Color(0xFF202124),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Manage isolated Sub-IDs and delegate access.',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: isDark ? Colors.white60 : const Color(0xFF5F6368),
+                    ),
+                  ),
+                ],
+              ),
+              FilledButton.icon(
+                onPressed: () => _openCreateSubIdDialog(account, isDark),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text(
+                  'Create Sub-ID',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF1A73E8),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                ),
+              ),
+            ],
+          ),
         const SizedBox(height: 16),
 
         // Table Container (Image 2)
@@ -3211,7 +4168,9 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
               color: isDark ? const Color(0xFF3C4043) : const Color(0xFFE8EAED),
             ),
           ),
-          child: Column(
+          clipBehavior: Clip.antiAlias,
+          child: () {
+            final tableContent = Column(
             children: [
               // Header
               Container(
@@ -3473,8 +4432,19 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
                     );
                   });
                 }(),
-            ],
-          ),
+              ],
+            );
+            return isMobile
+                ? SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    child: SizedBox(
+                      width: 580,
+                      child: tableContent,
+                    ),
+                  )
+                : tableContent;
+          }(),
         ),
         const SizedBox(height: 40),
       ],
@@ -3584,6 +4554,13 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
     bool isDark,
     bool isMobile,
   ) {
+    final quota = _storageQuota;
+    final fraction = quota != null ? quota.fraction : 0.0;
+    final usedText = quota != null
+        ? '${quota.usedFormatted} of ${quota.limitFormatted} used (${quota.percentageFormatted})'
+        : (_isLoadingStorageQuota ? 'Loading storage quota...' : 'Storage details unavailable');
+    final mailValue = quota != null ? quota.usedFormatted : '0 MB';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -3601,24 +4578,45 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
                   ClipRRect(
                     borderRadius: BorderRadius.circular(4),
                     child: LinearProgressIndicator(
-                      value: 0.05,
+                      value: _isLoadingStorageQuota ? null : fraction,
                       minHeight: 8,
                       backgroundColor: isDark
                           ? const Color(0xFF3C4043)
                           : const Color(0xFFE8EAED),
-                      valueColor: const AlwaysStoppedAnimation<Color>(
-                        Color(0xFF1A73E8),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        quota != null ? quota.statusColor : const Color(0xFF1A73E8),
                       ),
                     ),
                   ),
                   const SizedBox(height: 12),
-                  Text(
-                    '8.88 MB of 5 GB used (0.18%)',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: isDark ? Colors.white : const Color(0xFF202124),
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        usedText,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white : const Color(0xFF202124),
+                        ),
+                      ),
+                      if (quota != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: quota.statusColor.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            quota.status,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: quota.statusColor,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ],
               ),
@@ -3628,7 +4626,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
               isDark: isDark,
               icon: Icons.mail_outline_rounded,
               label: 'BNX MAIL',
-              value: '8.88 MB',
+              value: mailValue,
             ),
             _SettingRow(
               isDark: isDark,
@@ -3671,6 +4669,8 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
   // 6. B2AUTH TAB
   // ═══════════════════════════════════════════════════════════════════════════
   Widget _buildB2AuthTab(AccountModel account, bool isDark, bool isMobile) {
+    final is2Fa = ref.watch(settingsProvider).settings?.twoFactorEnabled ?? false;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -3685,7 +4685,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
               label: '2-STEP VERIFICATION',
               valueWidget: Row(
                 children: [
-                  const Text('On'),
+                  Text(is2Fa ? 'On' : 'Off'),
                   const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -3693,32 +4693,46 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFE6F4EA),
+                      color: is2Fa
+                          ? const Color(0xFFE6F4EA)
+                          : (isDark ? const Color(0xFF3C4043) : const Color(0xFFF1F3F4)),
                       borderRadius: BorderRadius.circular(6),
                     ),
-                    child: const Text(
-                      'Secured',
+                    child: Text(
+                      is2Fa ? 'Secured' : 'Recommended',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFF137333),
+                        color: is2Fa
+                            ? const Color(0xFF137333)
+                            : const Color(0xFFE37400),
                       ),
                     ),
                   ),
                 ],
               ),
+              onTap: () => _open2FAManagement(isDark, is2Fa),
             ),
             _SettingRow(
               isDark: isDark,
               icon: Icons.key_rounded,
               label: 'PASSKEYS & SECURITY KEYS',
               value: '1 passkey registered',
+              onTap: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Passkeys are synchronized with your device security settings.'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              },
             ),
             _SettingRow(
               isDark: isDark,
               icon: Icons.password_rounded,
               label: 'PASSWORD',
-              value: 'Last changed 2 weeks ago',
+              value: 'Change password',
+              onTap: () => _openChangePasswordDialog(isDark),
               showDivider: false,
             ),
           ],
@@ -4492,10 +5506,11 @@ class _CreateSubIdDialogState extends State<_CreateSubIdDialog> {
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(color: borderColor, width: 1),
       ),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(
+        constraints: BoxConstraints(
           maxWidth: 750,
+          maxHeight: MediaQuery.of(context).size.height * 0.9,
         ),
         child: SingleChildScrollView(
           child: Padding(
@@ -4508,28 +5523,31 @@ class _CreateSubIdDialogState extends State<_CreateSubIdDialog> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Create New Sub-ID',
-                          style: TextStyle(
-                            fontSize: 19,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: -0.2,
-                            color: isDark ? Colors.white : const Color(0xFF1E2124),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Create New Sub-ID',
+                            style: TextStyle(
+                              fontSize: 19,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: -0.2,
+                              color: isDark ? Colors.white : const Color(0xFF1E2124),
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Configure account access and assign isolated permissions.',
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            color: isDark ? Colors.white60 : const Color(0xFF5F6368),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Configure account access and assign isolated permissions.',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: isDark ? Colors.white60 : const Color(0xFF5F6368),
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
+                    const SizedBox(width: 8),
                     IconButton(
                       icon: Icon(
                         Icons.close_rounded,
@@ -4587,50 +5605,55 @@ class _CreateSubIdDialogState extends State<_CreateSubIdDialog> {
                 const SizedBox(height: 16),
 
                 // Bottom Action Buttons (Directly below content, zero blank gap!)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: TextButton.styleFrom(
-                        foregroundColor: isDark ? Colors.white70 : const Color(0xFF5F6368),
-                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Wrap(
+                    alignment: WrapAlignment.end,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 12,
+                    runSpacing: 10,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: TextButton.styleFrom(
+                          foregroundColor: isDark ? Colors.white70 : const Color(0xFF5F6368),
+                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
                         ),
                       ),
-                      child: const Text(
-                        'Cancel',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    FilledButton(
-                      onPressed: _isSubmitting ? null : _submit,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF1A73E8),
-                        foregroundColor: Colors.white,
-                        elevation: 1,
-                        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 11),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
+                      FilledButton(
+                        onPressed: _isSubmitting ? null : _submit,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF1A73E8),
+                          foregroundColor: Colors.white,
+                          elevation: 1,
+                          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 11),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
                         ),
-                      ),
-                      child: _isSubmitting
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
+                        child: _isSubmitting
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text(
+                                'Create Sub-ID',
+                                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                               ),
-                            )
-                          : const Text(
-                              'Create Sub-ID',
-                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                            ),
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -4746,20 +5769,24 @@ class _CreateSubIdDialogState extends State<_CreateSubIdDialog> {
                   ),
                 ),
               ),
-              Container(
-                alignment: Alignment.center,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF181A1D) : const Color(0xFFF1F3F5),
-                  borderRadius: const BorderRadius.horizontal(right: Radius.circular(7)),
-                  border: Border(left: borderSide),
-                ),
-                child: Text(
-                  '.$suffixEmail',
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w500,
-                    color: isDark ? Colors.white70 : const Color(0xFF5F6368),
+              Flexible(
+                child: Container(
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF181A1D) : const Color(0xFFF1F3F5),
+                    borderRadius: const BorderRadius.horizontal(right: Radius.circular(7)),
+                    border: Border(left: borderSide),
+                  ),
+                  child: Text(
+                    '.$suffixEmail',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w500,
+                      color: isDark ? Colors.white70 : const Color(0xFF5F6368),
+                    ),
                   ),
                 ),
               ),

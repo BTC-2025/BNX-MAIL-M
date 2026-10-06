@@ -1,7 +1,9 @@
 import 'dart:io';
 import 'dart:math' as math;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:file_picker/file_picker.dart';
@@ -113,6 +115,14 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isMobileDevice = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS);
+    final bool isMobile = isMobileDevice ||
+        (MediaQuery.of(context).size.width < 800 &&
+            defaultTargetPlatform != TargetPlatform.macOS &&
+            defaultTargetPlatform != TargetPlatform.windows);
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: Stack(
@@ -120,31 +130,57 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
           Column(
             children: [
               // ─── 1. TOP GLOBAL HEADER BAR ───
-              _buildTopBar(),
+              if (isMobile)
+                SafeArea(
+                  bottom: false,
+                  child: _buildTopBar(isMobile: true),
+                )
+              else
+                _buildTopBar(isMobile: false),
+
+              // ─── 1.1 MOBILE TAB BAR (Only on Mobile) ───
+              if (isMobile) _buildMobileStorageTabBar(),
 
               // ─── 2. MAIN LAYOUT: SIDEBAR + CONTENT ───
               Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Left Sidebar
-                    _buildSidebar(),
-
-                    // Right Main View
-                    Expanded(
-                      child: Container(
+                child: isMobile
+                    ? Container(
                         color: const Color(0xFFF8FAFC),
                         child: _activeTab == _StorageTab.settings
-                            ? _buildSettingsView()
+                            ? _buildSettingsView(isMobile: true)
                             : SingleChildScrollView(
                                 physics: const BouncingScrollPhysics(),
-                                padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 28),
-                                child: _buildActiveTabView(),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 16,
+                                ),
+                                child: _buildActiveTabView(isMobile: true),
                               ),
+                      )
+                    : Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Left Sidebar
+                          _buildSidebar(),
+
+                          // Right Main View
+                          Expanded(
+                            child: Container(
+                              color: const Color(0xFFF8FAFC),
+                              child: _activeTab == _StorageTab.settings
+                                  ? _buildSettingsView(isMobile: false)
+                                  : SingleChildScrollView(
+                                      physics: const BouncingScrollPhysics(),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 36,
+                                        vertical: 28,
+                                      ),
+                                      child: _buildActiveTabView(isMobile: false),
+                                    ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                  ],
-                ),
               ),
             ],
           ),
@@ -161,8 +197,8 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
               ),
             ),
             Positioned(
-              top: 58,
-              right: 28,
+              top: isMobile ? (MediaQuery.of(context).padding.top + 54) : 58,
+              right: isMobile ? 12 : 28,
               child: _buildAccountDropdownCard(),
             ),
           ],
@@ -172,9 +208,86 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
   }
 
   // ═══════════════════════════════════════════════════════════════
+  // MOBILE STORAGE TAB BAR (Horizontal scrollable tabs)
+  // ═══════════════════════════════════════════════════════════════
+  Widget _buildMobileStorageTabBar() {
+    final tabs = [
+      (_StorageTab.home, LucideIcons.home, 'Home'),
+      (_StorageTab.bnxMail, LucideIcons.mail, 'BNX Mail'),
+      (_StorageTab.cliks, LucideIcons.messageSquare, 'Cliks'),
+      (_StorageTab.cliksBusiness, LucideIcons.briefcase, 'Cliks Business'),
+      (_StorageTab.storageUsage, LucideIcons.pieChart, 'Usage'),
+      (_StorageTab.recycleBin, LucideIcons.trash2, 'Recycle Bin'),
+      (_StorageTab.manageApps, LucideIcons.layoutGrid, 'Manage Apps'),
+      (_StorageTab.settings, LucideIcons.settings, 'Settings'),
+    ];
+
+    return Container(
+      height: 48,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1.0),
+        ),
+      ),
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        itemCount: tabs.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final tab = tabs[index];
+          final isSelected = _activeTab == tab.$1;
+          return InkWell(
+            onTap: () => setState(() => _activeTab = tab.$1),
+            borderRadius: BorderRadius.circular(20),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              decoration: BoxDecoration(
+                color: isSelected ? const Color(0xFF2563EB) : const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: isSelected
+                    ? [
+                        BoxShadow(
+                          color: const Color(0xFF2563EB).withValues(alpha: 0.25),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ]
+                    : null,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    tab.$2,
+                    size: 14,
+                    color: isSelected ? Colors.white : const Color(0xFF475569),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    tab.$3,
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                      color: isSelected ? Colors.white : const Color(0xFF334155),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
   // TOP BAR (Beta Logo, Return to Mail, User Account Pill)
   // ═══════════════════════════════════════════════════════════════
-  Widget _buildTopBar() {
+  Widget _buildTopBar({bool isMobile = false}) {
     final activeAccount = ref.watch(activeAccountProvider);
     final username = activeAccount.email.isNotEmpty
         ? (activeAccount.name.isNotEmpty && !activeAccount.name.contains('@')
@@ -183,8 +296,8 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
         : 'ravinew2004';
 
     return Container(
-      height: 60,
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      height: isMobile ? 54 : 60,
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 24),
       decoration: const BoxDecoration(
         color: Colors.white,
         border: Border(
@@ -193,48 +306,82 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
       ),
       child: Row(
         children: [
-          // Beta Logo & Brand Name (Back Navigation)
-          Tooltip(
-            message: widget.backButtonTooltip,
-            child: InkWell(
-              onTap: () {
+          // On mobile, show back button
+          if (isMobile) ...[
+            IconButton(
+              icon: const Icon(
+                Icons.arrow_back_rounded,
+                size: 20,
+                color: Color(0xFF0F172A),
+              ),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              tooltip: widget.backButtonTooltip,
+              onPressed: () {
                 if (widget.onBack != null) {
                   widget.onBack!();
                 } else if (Navigator.of(context).canPop()) {
                   Navigator.of(context).pop();
+                } else {
+                  context.go('/home');
                 }
               },
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _buildBetaHeaderLogo(size: 32),
-                    const SizedBox(width: 10),
-                    Text(
-                      'Beta',
-                      style: GoogleFonts.inter(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        color: const Color(0xFF0F172A),
-                        letterSpacing: -0.4,
+            ),
+            const SizedBox(width: 4),
+          ],
+          // Beta Logo & Brand Name (Back Navigation)
+          Flexible(
+            child: Tooltip(
+              message: widget.backButtonTooltip,
+              child: InkWell(
+                onTap: () {
+                  if (widget.onBack != null) {
+                    widget.onBack!();
+                  } else if (Navigator.of(context).canPop()) {
+                    Navigator.of(context).pop();
+                  } else {
+                    context.go('/home');
+                  }
+                },
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildBetaHeaderLogo(size: isMobile ? 26 : 32),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          'Storage',
+                          style: GoogleFonts.inter(
+                            fontSize: isMobile ? 17 : 20,
+                            fontWeight: FontWeight.w800,
+                            color: const Color(0xFF0F172A),
+                            letterSpacing: -0.4,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
 
-          const Spacer(),
+          const SizedBox(width: 8),
 
           // Account Button (Blue Pill Button matching screenshot)
           InkWell(
             onTap: () => setState(() => _isAccountMenuOpen = !_isAccountMenuOpen),
             borderRadius: BorderRadius.circular(22),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7.5),
+              padding: EdgeInsets.symmetric(
+                horizontal: isMobile ? 8 : 16,
+                vertical: isMobile ? 6 : 7.5,
+              ),
               decoration: BoxDecoration(
                 color: const Color(0xFF2563EB),
                 borderRadius: BorderRadius.circular(22),
@@ -249,14 +396,18 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(LucideIcons.user, size: 14.5, color: Colors.white),
-                  const SizedBox(width: 8),
-                  Text(
-                    username,
-                    style: GoogleFonts.inter(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
+                  const Icon(LucideIcons.user, size: 14, color: Colors.white),
+                  const SizedBox(width: 5),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: isMobile ? 80 : 180),
+                    child: Text(
+                      username,
+                      style: GoogleFonts.inter(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
@@ -699,22 +850,22 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
   // ═══════════════════════════════════════════════════════════════
   // MAIN CONTENT ROUTER
   // ═══════════════════════════════════════════════════════════════
-  Widget _buildActiveTabView() {
+  Widget _buildActiveTabView({bool isMobile = false}) {
     switch (_activeTab) {
       case _StorageTab.cliksBusiness:
-        return _buildCliksBusinessView();
+        return _buildCliksBusinessView(isMobile: isMobile);
       case _StorageTab.storageUsage:
-        return _buildStorageUsageView();
+        return _buildStorageUsageView(isMobile: isMobile);
       case _StorageTab.home:
-        return _buildHomeOverviewView();
+        return _buildHomeOverviewView(isMobile: isMobile);
       case _StorageTab.bnxMail:
-        return _buildBnxMailView();
+        return _buildBnxMailView(isMobile: isMobile);
       case _StorageTab.cliks:
-        return _buildCliksAppView();
+        return _buildCliksAppView(isMobile: isMobile);
       case _StorageTab.recycleBin:
-        return _buildRecycleBinView();
+        return _buildRecycleBinView(isMobile: isMobile);
       case _StorageTab.manageApps:
-        return _buildManageAppsView();
+        return _buildManageAppsView(isMobile: isMobile);
       case _StorageTab.settings:
         return const SizedBox.shrink();
     }
@@ -723,106 +874,120 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
   // ═══════════════════════════════════════════════════════════════
   // VIEW 1: CLIKS BUSINESS STORAGE (Image 1 & 4)
   // ═══════════════════════════════════════════════════════════════
-  Widget _buildCliksBusinessView() {
+  Widget _buildCliksBusinessView({bool isMobile = false}) {
     final quotaAsync = ref.watch(storageQuotaProvider);
     final quota = quotaAsync.valueOrNull;
     final bool isLoading = quotaAsync.isLoading && quota == null;
     final bool isError = quotaAsync.hasError && quota == null;
 
-    return Column(
+    final headerTitleWidget = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Breadcrumbs & Header
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.start,
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    InkWell(
-                      onTap: () => setState(() => _activeTab = _StorageTab.storageUsage),
-                      child: Text(
-                        'Storage Management',
-                        style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
-                      ),
-                    ),
-                    Text(
-                      '  ›  ',
-                      style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
-                    ),
-                    Text(
-                      'Cliks Business',
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF0F172A),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    _buildCliksBusinessLogo(size: 26),
-                    const SizedBox(width: 10),
-                    Text(
-                      'Cliks Business Storage',
-                      style: GoogleFonts.inter(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
-                        color: const Color(0xFF0F172A),
-                        letterSpacing: -0.4,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  'Track how your ${quota?.limitFormatted ?? '...'} storage is used in Cliks Business.',
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    color: const Color(0xFF64748B),
-                  ),
-                ),
-              ],
-            ),
-
-            // Last Updated Pill with Refresh Action
             InkWell(
-              onTap: _triggerRefresh,
-              borderRadius: BorderRadius.circular(8),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Last Updated: $_lastUpdatedText',
-                      style: GoogleFonts.inter(
-                        fontSize: 11.5,
-                        color: const Color(0xFF64748B),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    AnimatedRotation(
-                      turns: _isRefreshing ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 600),
-                      child: const Icon(LucideIcons.refreshCw, size: 12, color: Color(0xFF64748B)),
-                    ),
-                  ],
-                ),
+              onTap: () => setState(() => _activeTab = _StorageTab.storageUsage),
+              child: Text(
+                'Storage Management',
+                style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+              ),
+            ),
+            Text(
+              '  ›  ',
+              style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
+            ),
+            Text(
+              'Cliks Business',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF0F172A),
               ),
             ),
           ],
         ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            _buildCliksBusinessLogo(size: 26),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Cliks Business Storage',
+                style: GoogleFonts.inter(
+                  fontSize: isMobile ? 22 : 24,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF0F172A),
+                  letterSpacing: -0.4,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 3),
+        Text(
+          'Track how your ${quota?.limitFormatted ?? '...'} storage is used in Cliks Business.',
+          style: GoogleFonts.inter(
+            fontSize: 13,
+            color: const Color(0xFF64748B),
+          ),
+        ),
+      ],
+    );
+
+    final lastUpdatedWidget = InkWell(
+      onTap: _triggerRefresh,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Last Updated: $_lastUpdatedText',
+              style: GoogleFonts.inter(
+                fontSize: 11.5,
+                color: const Color(0xFF64748B),
+              ),
+            ),
+            const SizedBox(width: 6),
+            AnimatedRotation(
+              turns: _isRefreshing ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 600),
+              child: const Icon(LucideIcons.refreshCw, size: 12, color: Color(0xFF64748B)),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Breadcrumbs & Header
+        if (isMobile) ...[
+          headerTitleWidget,
+          const SizedBox(height: 12),
+          lastUpdatedWidget,
+        ] else ...[
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: headerTitleWidget),
+              const SizedBox(width: 12),
+              lastUpdatedWidget,
+            ],
+          ),
+        ],
 
         const SizedBox(height: 24),
 
@@ -1318,7 +1483,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
   // ═══════════════════════════════════════════════════════════════
   // VIEW 2: STORAGE USAGE TRACKING (Image 3 & 5)
   // ═══════════════════════════════════════════════════════════════
-  Widget _buildStorageUsageView() {
+  Widget _buildStorageUsageView({bool isMobile = false}) {
     final quotaAsync = ref.watch(storageQuotaProvider);
     final quota = quotaAsync.valueOrNull;
     final bool isLoading = quotaAsync.isLoading && quota == null;
@@ -1328,7 +1493,8 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Breadcrumbs & Header
-        Row(
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             InkWell(
               onTap: () => setState(() => _activeTab = _StorageTab.cliksBusiness),
@@ -1355,7 +1521,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
         Text(
           'Storage Usage Tracking',
           style: GoogleFonts.inter(
-            fontSize: 24,
+            fontSize: isMobile ? 20 : 24,
             fontWeight: FontWeight.w800,
             color: const Color(0xFF0F172A),
             letterSpacing: -0.4,
@@ -1375,9 +1541,9 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
         // ─── TWO COLUMN CHART & BREAKDOWN ───
         LayoutBuilder(
           builder: (context, constraints) {
-            final isNarrow = constraints.maxWidth < 680;
+            final isNarrow = isMobile || constraints.maxWidth < 680;
             final chartCard = Container(
-              padding: const EdgeInsets.all(24),
+              padding: EdgeInsets.all(isMobile ? 18 : 24),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
@@ -1449,7 +1615,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
             );
 
             final breakdownCard = Container(
-              padding: const EdgeInsets.all(24),
+              padding: EdgeInsets.all(isMobile ? 18 : 24),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
@@ -1532,11 +1698,12 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
         const SizedBox(height: 20),
 
         // ─── BOTTOM STAT CARDS (TOTAL CAPACITY & AVAILABLE) ───
-        Row(
-          children: [
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(20),
+        if (isMobile)
+          Column(
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
@@ -1558,7 +1725,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
                     Text(
                       (isLoading || isError || quota == null) ? 'Loading...' : quota.limitFormatted,
                       style: GoogleFonts.inter(
-                        fontSize: 22,
+                        fontSize: 20,
                         fontWeight: FontWeight.w900,
                         color: const Color(0xFF0F172A),
                       ),
@@ -1566,11 +1733,10 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
                   ],
                 ),
               ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(20),
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
@@ -1592,7 +1758,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
                     Text(
                       (isLoading || isError || quota == null) ? 'Loading...' : quota.availableFormatted,
                       style: GoogleFonts.inter(
-                        fontSize: 22,
+                        fontSize: 20,
                         fontWeight: FontWeight.w900,
                         color: const Color(0xFF10B981),
                       ),
@@ -1600,9 +1766,80 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
                   ],
                 ),
               ),
-            ),
-          ],
-        ),
+            ],
+          )
+        else
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'TOTAL CAPACITY',
+                        style: GoogleFonts.inter(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF64748B),
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        (isLoading || isError || quota == null) ? 'Loading...' : quota.limitFormatted,
+                        style: GoogleFonts.inter(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                          color: const Color(0xFF0F172A),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'AVAILABLE',
+                        style: GoogleFonts.inter(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF64748B),
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        (isLoading || isError || quota == null) ? 'Loading...' : quota.availableFormatted,
+                        style: GoogleFonts.inter(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                          color: const Color(0xFF10B981),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
 
         const SizedBox(height: 20),
 
@@ -1666,32 +1903,38 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Row(
-          children: [
-            if (iconWidget != null) ...[
-              iconWidget,
-              const SizedBox(width: 8),
-            ] else ...[
-              Container(
-                width: 7,
-                height: 7,
-                decoration: BoxDecoration(
-                  color: dotColor,
-                  shape: BoxShape.circle,
+        Expanded(
+          child: Row(
+            children: [
+              if (iconWidget != null) ...[
+                iconWidget,
+                const SizedBox(width: 8),
+              ] else ...[
+                Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    color: dotColor,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 10),
+              ],
+              Expanded(
+                child: Text(
+                  name,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF1E293B),
+                  ),
                 ),
               ),
-              const SizedBox(width: 10),
             ],
-            Text(
-              name,
-              style: GoogleFonts.inter(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                color: const Color(0xFF1E293B),
-              ),
-            ),
-          ],
+          ),
         ),
+        const SizedBox(width: 8),
         Column(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
@@ -1719,7 +1962,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
   // ═══════════════════════════════════════════════════════════════
   // AUXILIARY VIEWS: HOME, BNX MAIL, CLIKS, RECYCLE BIN, APPS, SETTINGS
   // ═══════════════════════════════════════════════════════════════
-  Widget _buildHomeOverviewView() {
+  Widget _buildHomeOverviewView({bool isMobile = false}) {
     final quotaAsync = ref.watch(storageQuotaProvider);
     final quota = quotaAsync.valueOrNull;
 
@@ -1746,6 +1989,57 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
     final String bnxPercentageStr = quota != null ? quota.percentageFormatted : '${bnxPercentage.toStringAsFixed(2)}%';
     final double bnxFraction = quota != null ? quota.fraction : (8.84 * 1048576 / limitBytes);
 
+    final appCardBnx = _buildApplicationCard(
+      appName: 'BNX Mail',
+      subTitle: 'Mail & Communication',
+      quotaTag: '5 GB',
+      usedText: '$bnxUsedStr Used',
+      freeText: '$bnxAvailableStr Free',
+      percentageText: '$bnxPercentageStr Used',
+      fraction: bnxFraction,
+      accentColor: const Color(0xFF2563EB),
+      bgColor: const Color(0xFFEFF6FF),
+      onTap: () => setState(() => _activeTab = _StorageTab.bnxMail),
+    );
+
+    final appCardCliks = _buildApplicationCard(
+      appName: 'Cliks',
+      subTitle: 'Workplace Collaboration',
+      quotaTag: '1 GB',
+      usedText: '0 Bytes Used',
+      freeText: '1 GB Free',
+      percentageText: '0% Used',
+      fraction: 0.0,
+      accentColor: const Color(0xFF10B981),
+      bgColor: const Color(0xFFECFDF5),
+      onTap: () => setState(() => _activeTab = _StorageTab.cliks),
+    );
+
+    final appCardCliksBiz = _buildApplicationCard(
+      appName: 'Cliks Business',
+      subTitle: 'Business Management',
+      quotaTag: '1 GB',
+      usedText: '0 Bytes Used',
+      freeText: '1 GB Free',
+      percentageText: '0% Used',
+      fraction: 0.0,
+      accentColor: const Color(0xFF7C3AED),
+      bgColor: const Color(0xFFF5F3FF),
+      onTap: () => setState(() => _activeTab = _StorageTab.cliksBusiness),
+    );
+
+    final trioCard1 = _buildStorageDistributionCard(
+      ecosystemUsedGbStr: ecosystemUsedGbStr,
+      bnxUsedStr: bnxUsedStr,
+      isMobile: isMobile,
+    );
+    final trioCard2 = _buildStorageByCategoryCard(quota: quota);
+    final trioCard3 = _buildStorageHealthCard(
+      availableGbStr: availableGbStr,
+      totalCapacityGbStr: totalCapacityGbStr,
+      quota: quota,
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1755,8 +2049,9 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
           totalGbStr: totalCapacityGbStr,
           availableGbStr: availableGbStr,
           usedPercentageIntStr: usedPercentageIntStr,
+          isMobile: isMobile,
         ),
-        const SizedBox(height: 32),
+        SizedBox(height: isMobile ? 22 : 32),
 
         // ─── 2. APPLICATION STORAGE SECTION ───
         Column(
@@ -1783,90 +2078,52 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
         ),
         const SizedBox(height: 18),
 
-        // 3 App Cards Row
-        Row(
-          children: [
-            // BNX Mail Card
-            Expanded(
-              child: _buildApplicationCard(
-                appName: 'BNX Mail',
-                subTitle: 'Mail & Communication',
-                quotaTag: '5 GB',
-                usedText: '$bnxUsedStr Used',
-                freeText: '$bnxAvailableStr Free',
-                percentageText: '$bnxPercentageStr Used',
-                fraction: bnxFraction,
-                accentColor: const Color(0xFF2563EB),
-                bgColor: const Color(0xFFEFF6FF),
-                onTap: () => setState(() => _activeTab = _StorageTab.bnxMail),
-              ),
-            ),
-            const SizedBox(width: 18),
-
-            // Cliks Card
-            Expanded(
-              child: _buildApplicationCard(
-                appName: 'Cliks',
-                subTitle: 'Workplace Collaboration',
-                quotaTag: '1 GB',
-                usedText: '0 Bytes Used',
-                freeText: '1 GB Free',
-                percentageText: '0% Used',
-                fraction: 0.0,
-                accentColor: const Color(0xFF10B981),
-                bgColor: const Color(0xFFECFDF5),
-                onTap: () => setState(() => _activeTab = _StorageTab.cliks),
-              ),
-            ),
-            const SizedBox(width: 18),
-
-            // Cliks Business Card
-            Expanded(
-              child: _buildApplicationCard(
-                appName: 'Cliks Business',
-                subTitle: 'Business Management',
-                quotaTag: '1 GB',
-                usedText: '0 Bytes Used',
-                freeText: '1 GB Free',
-                percentageText: '0% Used',
-                fraction: 0.0,
-                accentColor: const Color(0xFF7C3AED),
-                bgColor: const Color(0xFFF5F3FF),
-                onTap: () => setState(() => _activeTab = _StorageTab.cliksBusiness),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 28),
+        // 3 App Cards (Column on mobile, Row on desktop)
+        if (isMobile)
+          Column(
+            children: [
+              appCardBnx,
+              const SizedBox(height: 14),
+              appCardCliks,
+              const SizedBox(height: 14),
+              appCardCliksBiz,
+            ],
+          )
+        else
+          Row(
+            children: [
+              Expanded(child: appCardBnx),
+              const SizedBox(width: 18),
+              Expanded(child: appCardCliks),
+              const SizedBox(width: 18),
+              Expanded(child: appCardCliksBiz),
+            ],
+          ),
+        SizedBox(height: isMobile ? 20 : 28),
 
         // ─── 3. LOWER TRIO: STORAGE DISTRIBUTION, STORAGE BY CATEGORY, STORAGE HEALTH ───
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Card 1: Storage Distribution
-            Expanded(
-              child: _buildStorageDistributionCard(
-                ecosystemUsedGbStr: ecosystemUsedGbStr,
-                bnxUsedStr: bnxUsedStr,
-              ),
-            ),
-            // Card 2: Storage by Category
-            Expanded(
-              child: _buildStorageByCategoryCard(quota: quota),
-            ),
-            const SizedBox(width: 18),
-
-            // Card 3: Storage Health
-            Expanded(
-              child: _buildStorageHealthCard(
-                availableGbStr: availableGbStr,
-                totalCapacityGbStr: totalCapacityGbStr,
-                quota: quota,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 28),
+        if (isMobile)
+          Column(
+            children: [
+              trioCard1,
+              const SizedBox(height: 16),
+              trioCard2,
+              const SizedBox(height: 16),
+              trioCard3,
+            ],
+          )
+        else
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: trioCard1),
+              const SizedBox(width: 18),
+              Expanded(child: trioCard2),
+              const SizedBox(width: 18),
+              Expanded(child: trioCard3),
+            ],
+          ),
+        SizedBox(height: isMobile ? 20 : 28),
 
         // ─── 4. RECENT ACTIVITY (FULL WIDTH CARD) ───
         _buildRecentActivityCard(),
@@ -1882,7 +2139,132 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
     required String totalGbStr,
     required String availableGbStr,
     required String usedPercentageIntStr,
+    bool isMobile = false,
   }) {
+    if (isMobile) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'TOTAL ECOSYSTEM STORAGE',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
+                          color: const Color(0xFF64748B),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        usedGbStr,
+                        style: GoogleFonts.inter(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w900,
+                          color: const Color(0xFF2563EB),
+                          letterSpacing: -0.8,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'of $totalGbStr Used',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: const Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFFF8FAFC),
+                    border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+                  ),
+                  alignment: Alignment.center,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        usedPercentageIntStr,
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: const Color(0xFF0F172A),
+                        ),
+                      ),
+                      Text(
+                        'USED',
+                        style: GoogleFonts.inter(
+                          fontSize: 7.5,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.3,
+                          color: const Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Divider(color: Color(0xFFF1F5F9), height: 1),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildMobileHeroStat(
+                    icon: LucideIcons.hardDrive,
+                    iconColor: const Color(0xFF2563EB),
+                    bgColor: const Color(0xFFEFF6FF),
+                    value: usedGbStr,
+                    label: 'Used',
+                  ),
+                ),
+                Expanded(
+                  child: _buildMobileHeroStat(
+                    icon: LucideIcons.database,
+                    iconColor: const Color(0xFF10B981),
+                    bgColor: const Color(0xFFF0FDF4),
+                    value: availableGbStr,
+                    label: 'Available',
+                  ),
+                ),
+                Expanded(
+                  child: _buildMobileHeroStat(
+                    icon: LucideIcons.cloud,
+                    iconColor: const Color(0xFF60A5FA),
+                    bgColor: const Color(0xFFEFF6FF),
+                    value: totalGbStr,
+                    label: 'Capacity',
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 26),
@@ -2105,6 +2487,59 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
     );
   }
 
+  Widget _buildMobileHeroStat({
+    required IconData icon,
+    required Color iconColor,
+    required Color bgColor,
+    required String value,
+    required String label,
+  }) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Icon(icon, size: 13, color: iconColor),
+        ),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  value,
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF0F172A),
+                  ),
+                ),
+              ),
+              Text(
+                label,
+                style: GoogleFonts.inter(
+                  fontSize: 10,
+                  color: const Color(0xFF64748B),
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   // ═══════════════════════════════════════════════════════════════
   // APPLICATION STORAGE CARD
   // ═══════════════════════════════════════════════════════════════
@@ -2194,19 +2629,29 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                usedText,
-                style: GoogleFonts.inter(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w800,
-                  color: accentColor,
+              Flexible(
+                child: Text(
+                  usedText,
+                  style: GoogleFonts.inter(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w800,
+                    color: accentColor,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              Text(
-                freeText,
-                style: GoogleFonts.inter(
-                  fontSize: 12.5,
-                  color: const Color(0xFF64748B),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  freeText,
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    color: const Color(0xFF64748B),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.right,
                 ),
               ),
             ],
@@ -2229,14 +2674,19 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                percentageText,
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: accentColor,
+              Flexible(
+                child: Text(
+                  percentageText,
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: accentColor,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
+              const SizedBox(width: 8),
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -2301,7 +2751,65 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
   Widget _buildStorageDistributionCard({
     required String ecosystemUsedGbStr,
     required String bnxUsedStr,
+    bool isMobile = false,
   }) {
+    final donutGauge = SizedBox(
+      width: 100,
+      height: 100,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          CustomPaint(
+            size: const Size(100, 100),
+            painter: _StorageDistributionDonutPainter(),
+          ),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                ecosystemUsedGbStr,
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF0F172A),
+                ),
+              ),
+              Text(
+                'Used',
+                style: GoogleFonts.inter(
+                  fontSize: 10.5,
+                  color: const Color(0xFF64748B),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    final legendColumn = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLegendRow(
+          color: const Color(0xFF2563EB),
+          title: 'BNX Mail',
+          value: '$bnxUsedStr (100%)',
+        ),
+        const SizedBox(height: 12),
+        _buildLegendRow(
+          color: const Color(0xFF10B981),
+          title: 'Cliks',
+          value: '0 MB (0%)',
+        ),
+        const SizedBox(height: 12),
+        _buildLegendRow(
+          color: const Color(0xFF8B5CF6),
+          title: 'Cliks Business',
+          value: '0 MB (0%)',
+        ),
+      ],
+    );
+
     return Container(
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
@@ -2330,72 +2838,19 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
           ),
           const SizedBox(height: 22),
 
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // Circular Donut Gauge
-              SizedBox(
-                width: 100,
-                height: 100,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    CustomPaint(
-                      size: const Size(100, 100),
-                      painter: _StorageDistributionDonutPainter(),
-                    ),
-                    Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          ecosystemUsedGbStr,
-                          style: GoogleFonts.inter(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w800,
-                            color: const Color(0xFF0F172A),
-                          ),
-                        ),
-                        Text(
-                          'Used',
-                          style: GoogleFonts.inter(
-                            fontSize: 10.5,
-                            color: const Color(0xFF64748B),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 18),
-
-              // Legend items
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildLegendRow(
-                      color: const Color(0xFF2563EB),
-                      title: 'BNX Mail',
-                      value: '$bnxUsedStr (100%)',
-                    ),
-                    const SizedBox(height: 12),
-                    _buildLegendRow(
-                      color: const Color(0xFF10B981),
-                      title: 'Cliks',
-                      value: '0 MB (0%)',
-                    ),
-                    const SizedBox(height: 12),
-                    _buildLegendRow(
-                      color: const Color(0xFF8B5CF6),
-                      title: 'Cliks Business',
-                      value: '0 MB (0%)',
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+          if (isMobile) ...[
+            Center(child: donutGauge),
+            const SizedBox(height: 18),
+            legendColumn,
+          ] else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                donutGauge,
+                const SizedBox(width: 18),
+                Expanded(child: legendColumn),
+              ],
+            ),
         ],
       ),
     );
@@ -2425,8 +2880,11 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
               fontWeight: FontWeight.w500,
               color: const Color(0xFF334155),
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
+        const SizedBox(width: 8),
         Text(
           value,
           style: GoogleFonts.inter(
@@ -2434,6 +2892,8 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
             fontWeight: FontWeight.w700,
             color: const Color(0xFF0F172A),
           ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
       ],
     );
@@ -2634,75 +3094,98 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
 
           // 3 bottom stats
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              Column(
-                children: [
-                  Text(
-                    '3',
-                    style: GoogleFonts.inter(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                      color: const Color(0xFF0F172A),
+              Expanded(
+                child: Column(
+                  children: [
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        '3',
+                        style: GoogleFonts.inter(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                          color: const Color(0xFF0F172A),
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'ACTIVE APPS',
-                    style: GoogleFonts.inter(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.3,
-                      color: const Color(0xFF64748B),
+                    const SizedBox(height: 2),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        'ACTIVE APPS',
+                        style: GoogleFonts.inter(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.3,
+                          color: const Color(0xFF64748B),
+                        ),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               Container(width: 1, height: 26, color: const Color(0xFFE2E8F0)),
-              Column(
-                children: [
-                  Text(
-                    availableGbStr,
-                    style: GoogleFonts.inter(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                      color: const Color(0xFF0F172A),
+              Expanded(
+                child: Column(
+                  children: [
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        availableGbStr,
+                        style: GoogleFonts.inter(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                          color: const Color(0xFF0F172A),
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'AVAILABLE',
-                    style: GoogleFonts.inter(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.3,
-                      color: const Color(0xFF64748B),
+                    const SizedBox(height: 2),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        'AVAILABLE',
+                        style: GoogleFonts.inter(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.3,
+                          color: const Color(0xFF64748B),
+                        ),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               Container(width: 1, height: 26, color: const Color(0xFFE2E8F0)),
-              Column(
-                children: [
-                  Text(
-                    totalCapacityGbStr,
-                    style: GoogleFonts.inter(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                      color: const Color(0xFF0F172A),
+              Expanded(
+                child: Column(
+                  children: [
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        totalCapacityGbStr,
+                        style: GoogleFonts.inter(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                          color: const Color(0xFF0F172A),
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'TOTAL CAPACITY',
-                    style: GoogleFonts.inter(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.3,
-                      color: const Color(0xFF64748B),
+                    const SizedBox(height: 2),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        'TOTAL CAPACITY',
+                        style: GoogleFonts.inter(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.3,
+                          color: const Color(0xFF64748B),
+                        ),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),
@@ -2870,10 +3353,12 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
   Widget _buildBetaHeaderLogo({double size = 32}) {
     return Image.asset(
       'assets/beta_logo.jpg',
+      width: size,
       height: size,
       fit: BoxFit.contain,
       errorBuilder: (context, error, stackTrace) => Image.asset(
         'lib/standalone_macos_storage/assets/beta_logo_hd.png',
+        width: size,
         height: size,
         fit: BoxFit.contain,
         errorBuilder: (context, error, stackTrace) => Container(
@@ -2897,106 +3382,120 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
     );
   }
 
-  Widget _buildBnxMailView() {
+  Widget _buildBnxMailView({bool isMobile = false}) {
     final quotaAsync = ref.watch(storageQuotaProvider);
     final quota = quotaAsync.valueOrNull;
     final bool isLoading = quotaAsync.isLoading && quota == null;
     final bool isError = quotaAsync.hasError && quota == null;
 
-    return Column(
+    final headerTitleWidget = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ─── Breadcrumbs & Header ───
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.start,
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    InkWell(
-                      onTap: () => setState(() => _activeTab = _StorageTab.storageUsage),
-                      child: Text(
-                        'Storage Management',
-                        style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
-                      ),
-                    ),
-                    Text(
-                      '  ›  ',
-                      style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
-                    ),
-                    Text(
-                      'BNX Mail',
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF0F172A),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    _buildBnxMailLogo(size: 26),
-                    const SizedBox(width: 10),
-                    Text(
-                      'BNX Mail Storage',
-                      style: GoogleFonts.inter(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
-                        color: const Color(0xFF0F172A),
-                        letterSpacing: -0.4,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  'Track how your ${quota?.limitFormatted ?? '...'} storage is used in BNX Mail.',
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    color: const Color(0xFF64748B),
-                  ),
-                ),
-              ],
-            ),
-
-            // Last Updated Pill with Refresh Action
             InkWell(
-              onTap: _triggerRefresh,
-              borderRadius: BorderRadius.circular(8),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Last Updated: $_lastUpdatedText',
-                      style: GoogleFonts.inter(
-                        fontSize: 11.5,
-                        color: const Color(0xFF64748B),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    AnimatedRotation(
-                      turns: _isRefreshing ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 600),
-                      child: const Icon(LucideIcons.refreshCw, size: 12, color: Color(0xFF64748B)),
-                    ),
-                  ],
-                ),
+              onTap: () => setState(() => _activeTab = _StorageTab.storageUsage),
+              child: Text(
+                'Storage Management',
+                style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+              ),
+            ),
+            Text(
+              '  ›  ',
+              style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
+            ),
+            Text(
+              'BNX Mail',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF0F172A),
               ),
             ),
           ],
         ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            _buildBnxMailLogo(size: 26),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'BNX Mail Storage',
+                style: GoogleFonts.inter(
+                  fontSize: isMobile ? 22 : 24,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF0F172A),
+                  letterSpacing: -0.4,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 3),
+        Text(
+          'Track how your ${quota?.limitFormatted ?? '...'} storage is used in BNX Mail.',
+          style: GoogleFonts.inter(
+            fontSize: 13,
+            color: const Color(0xFF64748B),
+          ),
+        ),
+      ],
+    );
+
+    final lastUpdatedWidget = InkWell(
+      onTap: _triggerRefresh,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Last Updated: $_lastUpdatedText',
+              style: GoogleFonts.inter(
+                fontSize: 11.5,
+                color: const Color(0xFF64748B),
+              ),
+            ),
+            const SizedBox(width: 6),
+            AnimatedRotation(
+              turns: _isRefreshing ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 600),
+              child: const Icon(LucideIcons.refreshCw, size: 12, color: Color(0xFF64748B)),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ─── Breadcrumbs & Header ───
+        if (isMobile) ...[
+          headerTitleWidget,
+          const SizedBox(height: 12),
+          lastUpdatedWidget,
+        ] else ...[
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: headerTitleWidget),
+              const SizedBox(width: 12),
+              lastUpdatedWidget,
+            ],
+          ),
+        ],
 
         const SizedBox(height: 24),
 
@@ -3270,15 +3769,15 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
             children: [
               // Header Row
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                padding: EdgeInsets.symmetric(horizontal: isMobile ? 14 : 24, vertical: 16),
                 child: Row(
                   children: [
                     Expanded(
-                      flex: 5,
+                      flex: isMobile ? 5 : 5,
                       child: Text(
                         'Storage by Category',
                         style: GoogleFonts.inter(
-                          fontSize: 14.5,
+                          fontSize: isMobile ? 13 : 14.5,
                           fontWeight: FontWeight.w800,
                           color: const Color(0xFF0F172A),
                         ),
@@ -3297,7 +3796,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
                       ),
                     ),
                     Expanded(
-                      flex: 2,
+                      flex: isMobile ? 3 : 2,
                       child: Align(
                         alignment: Alignment.centerRight,
                         child: Text(
@@ -3360,6 +3859,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
                         name: 'Emails',
                         used: emailUsed,
                         percent: emailPct,
+                        isMobile: isMobile,
                       ),
                       const Divider(height: 1, color: Color(0xFFF8FAFC)),
 
@@ -3370,6 +3870,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
                         name: 'Attachments',
                         used: attachUsed,
                         percent: attachPct,
+                        isMobile: isMobile,
                       ),
                       const Divider(height: 1, color: Color(0xFFF8FAFC)),
 
@@ -3380,6 +3881,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
                         name: 'Recycle Bin',
                         used: '0 MB',
                         percent: '0%',
+                        isMobile: isMobile,
                       ),
                       const Divider(height: 1, color: Color(0xFFF8FAFC)),
 
@@ -3390,6 +3892,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
                         name: 'Sent',
                         used: '0 MB',
                         percent: '0%',
+                        isMobile: isMobile,
                       ),
                       const Divider(height: 1, color: Color(0xFFF8FAFC)),
 
@@ -3400,6 +3903,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
                         name: 'Drafts',
                         used: draftUsed,
                         percent: draftPct,
+                        isMobile: isMobile,
                       ),
                       const Divider(height: 1, color: Color(0xFFF8FAFC)),
 
@@ -3410,6 +3914,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
                         name: 'Others',
                         used: othersUsed,
                         percent: othersPct,
+                        isMobile: isMobile,
                       ),
                     ],
                   );
@@ -3458,9 +3963,13 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
     required String name,
     required String used,
     required String percent,
+    bool isMobile = false,
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+      padding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 14 : 24,
+        vertical: isMobile ? 12 : 14,
+      ),
       child: Row(
         children: [
           // Left: Icon + Name
@@ -3469,23 +3978,23 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
             child: Row(
               children: [
                 Container(
-                  width: 36,
-                  height: 36,
+                  width: isMobile ? 32 : 36,
+                  height: isMobile ? 32 : 36,
                   decoration: BoxDecoration(
                     color: iconBg,
                     shape: BoxShape.circle,
                   ),
                   child: Center(
-                    child: Icon(icon, size: 16, color: iconColor),
+                    child: Icon(icon, size: isMobile ? 14 : 16, color: iconColor),
                   ),
                 ),
-                const SizedBox(width: 14),
+                SizedBox(width: isMobile ? 10 : 14),
                 Expanded(
                   child: Text(
                     name,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.inter(
-                      fontSize: 14,
+                      fontSize: isMobile ? 12.5 : 14,
                       fontWeight: FontWeight.w700,
                       color: const Color(0xFF0F172A),
                     ),
@@ -3501,7 +4010,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
             child: Text(
               used,
               style: GoogleFonts.inter(
-                fontSize: 14,
+                fontSize: isMobile ? 12.5 : 14,
                 fontWeight: FontWeight.w800,
                 color: const Color(0xFF0F172A),
               ),
@@ -3517,16 +4026,16 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
                 Text(
                   percent,
                   style: GoogleFonts.inter(
-                    fontSize: 13,
+                    fontSize: isMobile ? 11.5 : 13,
                     fontWeight: FontWeight.w600,
                     color: const Color(0xFF64748B),
                   ),
                 ),
-                const SizedBox(width: 10),
-                const Icon(
+                SizedBox(width: isMobile ? 6 : 10),
+                Icon(
                   LucideIcons.chevronRight,
-                  size: 15,
-                  color: Color(0xFF94A3B8),
+                  size: isMobile ? 13 : 15,
+                  color: const Color(0xFF94A3B8),
                 ),
               ],
             ),
@@ -3536,102 +4045,117 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
     );
   }
 
-  Widget _buildCliksAppView() {
-    return Column(
+  Widget _buildCliksAppView({bool isMobile = false}) {
+    final headerTitleWidget = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ─── Breadcrumbs & Header ───
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.start,
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    InkWell(
-                      onTap: () => setState(() => _activeTab = _StorageTab.storageUsage),
-                      child: Text(
-                        'Storage Management',
-                        style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
-                      ),
-                    ),
-                    Text(
-                      '  ›  ',
-                      style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
-                    ),
-                    Text(
-                      'Cliks',
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF0F172A),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    _buildCliksLogo(size: 26),
-                    const SizedBox(width: 10),
-                    Text(
-                      'Cliks Storage',
-                      style: GoogleFonts.inter(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
-                        color: const Color(0xFF0F172A),
-                        letterSpacing: -0.4,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  // No Cliks quota API yet — demo placeholder
-                  'Cliks Storage (Demo data — API not yet available).',
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    color: const Color(0xFF64748B),
-                  ),
-                ),
-              ],
-            ),
-
-            // Last Updated Pill with Refresh Action
             InkWell(
-              onTap: _triggerRefresh,
-              borderRadius: BorderRadius.circular(8),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Last Updated: $_lastUpdatedText',
-                      style: GoogleFonts.inter(
-                        fontSize: 11.5,
-                        color: const Color(0xFF64748B),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    AnimatedRotation(
-                      turns: _isRefreshing ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 600),
-                      child: const Icon(LucideIcons.refreshCw, size: 12, color: Color(0xFF64748B)),
-                    ),
-                  ],
+              onTap: () => setState(() => _activeTab = _StorageTab.storageUsage),
+              child: Text(
+                'Storage Management',
+                style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B)),
+              ),
+            ),
+            Text(
+              '  ›  ',
+              style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
+            ),
+            Text(
+              'Cliks',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF0F172A),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            _buildCliksLogo(size: isMobile ? 22 : 26),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Cliks Storage',
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.inter(
+                  fontSize: isMobile ? 20 : 24,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF0F172A),
+                  letterSpacing: -0.4,
                 ),
               ),
             ),
           ],
         ),
+        const SizedBox(height: 3),
+        Text(
+          // No Cliks quota API yet — demo placeholder
+          'Cliks Storage (Demo data — API not yet available).',
+          style: GoogleFonts.inter(
+            fontSize: isMobile ? 12 : 13,
+            color: const Color(0xFF64748B),
+          ),
+        ),
+      ],
+    );
+
+    final lastUpdatedWidget = InkWell(
+      onTap: _triggerRefresh,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Last Updated: $_lastUpdatedText',
+              style: GoogleFonts.inter(
+                fontSize: 11.5,
+                color: const Color(0xFF64748B),
+              ),
+            ),
+            const SizedBox(width: 6),
+            AnimatedRotation(
+              turns: _isRefreshing ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 600),
+              child: const Icon(LucideIcons.refreshCw, size: 12, color: Color(0xFF64748B)),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ─── Breadcrumbs & Header ───
+        if (isMobile) ...[
+          headerTitleWidget,
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: lastUpdatedWidget,
+          ),
+        ] else
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: headerTitleWidget),
+              const SizedBox(width: 12),
+              lastUpdatedWidget,
+            ],
+          ),
 
         const SizedBox(height: 24),
 
@@ -3864,103 +4388,113 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
               ),
             ],
           ),
-          child: Column(
-            children: [
-              // Header Row
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                child: Row(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: isMobile ? const BouncingScrollPhysics() : const NeverScrollableScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minWidth: isMobile ? 540 : 0),
+              child: SizedBox(
+                width: isMobile ? 540 : null,
+                child: Column(
                   children: [
-                    Expanded(
-                      flex: 4,
-                      child: Text(
-                        'Typical Storage Share',
-                        style: GoogleFonts.inter(
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.w800,
-                          color: const Color(0xFF0F172A),
-                        ),
+                    // Header Row
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: 4,
+                            child: Text(
+                              'Typical Storage Share',
+                              style: GoogleFonts.inter(
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w800,
+                                color: const Color(0xFF0F172A),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 3,
+                            child: Text(
+                              'TYPICAL STORAGE SHARE',
+                              style: GoogleFonts.inter(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF64748B),
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 5,
+                            child: Text(
+                              'MAIN FILE TYPES',
+                              style: GoogleFonts.inter(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF64748B),
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    Expanded(
-                      flex: 3,
-                      child: Text(
-                        'TYPICAL STORAGE SHARE',
-                        style: GoogleFonts.inter(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFF64748B),
-                          letterSpacing: 0.5,
-                        ),
-                      ),
+                    const Divider(height: 1, color: Color(0xFFF1F5F9)),
+
+                    // Category Share Rows
+                    _buildCliksShareRow(
+                      dotColor: const Color(0xFF2563EB),
+                      name: 'Books & Accounting',
+                      percent: '35%',
+                      badgeBg: const Color(0xFFEFF6FF),
+                      badgeText: const Color(0xFF2563EB),
+                      fileTypes: 'Sales Invoices, Purchase Bills, Money Trackers',
                     ),
-                    Expanded(
-                      flex: 5,
-                      child: Text(
-                        'MAIN FILE TYPES',
-                        style: GoogleFonts.inter(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFF64748B),
-                          letterSpacing: 0.5,
-                        ),
-                      ),
+                    const Divider(height: 1, color: Color(0xFFF8FAFC)),
+
+                    _buildCliksShareRow(
+                      dotColor: const Color(0xFF10B981),
+                      name: 'Finance & Investments',
+                      percent: '25%',
+                      badgeBg: const Color(0xFFECFDF5),
+                      badgeText: const Color(0xFF059669),
+                      fileTypes: 'Wallet Statements, Bank Accounts, Portfolio Docs',
+                    ),
+                    const Divider(height: 1, color: Color(0xFFF8FAFC)),
+
+                    _buildCliksShareRow(
+                      dotColor: const Color(0xFF8B5CF6),
+                      name: 'Tax & Deductions',
+                      percent: '20%',
+                      badgeBg: const Color(0xFFF5F3FF),
+                      badgeText: const Color(0xFF7C3AED),
+                      fileTypes: 'ITR Worksheets, Form 16, Audit Files',
+                    ),
+                    const Divider(height: 1, color: Color(0xFFF8FAFC)),
+
+                    _buildCliksShareRow(
+                      dotColor: const Color(0xFFF59E0B),
+                      name: 'People & Reminders',
+                      percent: '10%',
+                      badgeBg: const Color(0xFFFFFBEB),
+                      badgeText: const Color(0xFFD97706),
+                      fileTypes: 'Contact Records, Reminders, Debt Statements',
+                    ),
+                    const Divider(height: 1, color: Color(0xFFF8FAFC)),
+
+                    _buildCliksShareRow(
+                      dotColor: const Color(0xFF0284C7),
+                      name: 'Social & Media',
+                      percent: '10%',
+                      badgeBg: const Color(0xFFF0F9FF),
+                      badgeText: const Color(0xFF0284C7),
+                      fileTypes: 'Profile Photos, Media Posts, Trading Attachments',
                     ),
                   ],
                 ),
               ),
-              const Divider(height: 1, color: Color(0xFFF1F5F9)),
-
-              // Category Share Rows
-              _buildCliksShareRow(
-                dotColor: const Color(0xFF2563EB),
-                name: 'Books & Accounting',
-                percent: '35%',
-                badgeBg: const Color(0xFFEFF6FF),
-                badgeText: const Color(0xFF2563EB),
-                fileTypes: 'Sales Invoices, Purchase Bills, Money Trackers',
-              ),
-              const Divider(height: 1, color: Color(0xFFF8FAFC)),
-
-              _buildCliksShareRow(
-                dotColor: const Color(0xFF10B981),
-                name: 'Finance & Investments',
-                percent: '25%',
-                badgeBg: const Color(0xFFECFDF5),
-                badgeText: const Color(0xFF059669),
-                fileTypes: 'Wallet Statements, Bank Accounts, Portfolio Docs',
-              ),
-              const Divider(height: 1, color: Color(0xFFF8FAFC)),
-
-              _buildCliksShareRow(
-                dotColor: const Color(0xFF8B5CF6),
-                name: 'Tax & Deductions',
-                percent: '20%',
-                badgeBg: const Color(0xFFF5F3FF),
-                badgeText: const Color(0xFF7C3AED),
-                fileTypes: 'ITR Worksheets, Form 16, Audit Files',
-              ),
-              const Divider(height: 1, color: Color(0xFFF8FAFC)),
-
-              _buildCliksShareRow(
-                dotColor: const Color(0xFFF59E0B),
-                name: 'People & Reminders',
-                percent: '10%',
-                badgeBg: const Color(0xFFFFFBEB),
-                badgeText: const Color(0xFFD97706),
-                fileTypes: 'Contact Records, Reminders, Debt Statements',
-              ),
-              const Divider(height: 1, color: Color(0xFFF8FAFC)),
-
-              _buildCliksShareRow(
-                dotColor: const Color(0xFF0284C7),
-                name: 'Social & Media',
-                percent: '10%',
-                badgeBg: const Color(0xFFF0F9FF),
-                badgeText: const Color(0xFF0284C7),
-                fileTypes: 'Profile Photos, Media Posts, Trading Attachments',
-              ),
-            ],
+            ),
           ),
         ),
 
@@ -4077,7 +4611,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
     );
   }
 
-  Widget _buildRecycleBinView() {
+  Widget _buildRecycleBinView({bool isMobile = false}) {
     final allEmails = ref.watch(emailListProvider);
     final trashEmails = allEmails.where((e) => e.isTrash || e.memberOfFolders.contains('Trash')).toList();
 
@@ -4169,7 +4703,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
         // ─── 2. TOP 3 APP RECYCLE SUMMARY CARDS (Matching Image 2) ───
         LayoutBuilder(
           builder: (context, constraints) {
-            final isNarrow = constraints.maxWidth < 650;
+            final isNarrow = isMobile || constraints.maxWidth < 650;
             final cardBnx = _buildRecycleSummaryCard(
               title: 'BNX Mail',
               iconWidget: _buildBnxMailLogo(size: 20),
@@ -4177,6 +4711,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
               deletedCount: bnxCount,
               sizeText: bnxSize > 0 ? '${bnxSize.toStringAsFixed(1)} MB' : '0 MB',
               accentColor: const Color(0xFF2563EB),
+              isExpanded: !isNarrow,
               onTapViewDetails: () {
                 setState(() {
                   _selectedRecycleFilter = 'BNX MAIL';
@@ -4191,6 +4726,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
               deletedCount: cliksBizCount,
               sizeText: cliksBizSize > 0 ? '${cliksBizSize.toStringAsFixed(1)} MB' : '0 MB',
               accentColor: const Color(0xFF7C3AED),
+              isExpanded: !isNarrow,
               onTapViewDetails: () {
                 setState(() {
                   _selectedRecycleFilter = 'CLIKS BUSINESS';
@@ -4205,6 +4741,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
               deletedCount: cliksCount,
               sizeText: cliksSize > 0 ? '${cliksSize.toStringAsFixed(1)} MB' : '0 MB',
               accentColor: const Color(0xFF0D9488),
+              isExpanded: !isNarrow,
               onTapViewDetails: () {
                 setState(() {
                   _selectedRecycleFilter = 'CLIKS';
@@ -4350,104 +4887,105 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
     required String sizeText,
     required Color accentColor,
     required VoidCallback onTapViewDetails,
+    bool isExpanded = true,
   }) {
-    return Expanded(
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.02),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
+    final cardContent = Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              width: 4,
+              color: accentColor,
             ),
-          ],
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(
-                width: 4,
-                color: accentColor,
-              ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(7),
-                        decoration: BoxDecoration(
-                          color: iconBgColor,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: iconWidget ??
-                            Icon(
-                              icon ?? LucideIcons.circleCheck,
-                              size: 16,
-                              color: iconColor ?? accentColor,
-                            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(7),
+                      decoration: BoxDecoration(
+                        color: iconBgColor,
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      const SizedBox(height: 12),
-                      Text(
-                        title,
-                        style: GoogleFonts.inter(
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.bold,
-                          color: const Color(0xFF0F172A),
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '$deletedCount deleted items',
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          color: const Color(0xFF64748B),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            sizeText,
-                            style: GoogleFonts.inter(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              color: accentColor,
-                            ),
+                      child: iconWidget ??
+                          Icon(
+                            icon ?? LucideIcons.circleCheck,
+                            size: 16,
+                            color: iconColor ?? accentColor,
                           ),
-                          InkWell(
-                            onTap: onTapViewDetails,
-                            borderRadius: BorderRadius.circular(6),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                              child: Text(
-                                'View Details →',
-                                style: GoogleFonts.inter(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: accentColor,
-                                ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      title,
+                      style: GoogleFonts.inter(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF0F172A),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '$deletedCount deleted items',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: const Color(0xFF64748B),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          sizeText,
+                          style: GoogleFonts.inter(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: accentColor,
+                          ),
+                        ),
+                        InkWell(
+                          onTap: onTapViewDetails,
+                          borderRadius: BorderRadius.circular(6),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                            child: Text(
+                              'View Details →',
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: accentColor,
                               ),
                             ),
                           ),
-                        ],
-                      ),
-                    ],
-                  ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
+
+    return isExpanded ? Expanded(child: cardContent) : cardContent;
   }
 
   Widget _buildRecycleFilterTabs() {
@@ -4581,7 +5119,8 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
                       ),
                     ),
                     const SizedBox(height: 3),
-                    Row(
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         _buildAppTinyBadge(item.app),
                         const SizedBox(width: 6),
@@ -5248,13 +5787,14 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
   // ═══════════════════════════════════════════════════════════════
   // VIEW: MANAGE APPS (Screenshot 2)
   // ═══════════════════════════════════════════════════════════════
-  Widget _buildManageAppsView({bool showBreadcrumbs = true}) {
+  Widget _buildManageAppsView({bool showBreadcrumbs = true, bool isMobile = false}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (showBreadcrumbs) ...[
           // Breadcrumbs
-          Row(
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               InkWell(
                 onTap: () => setState(() => _activeTab = _StorageTab.storageUsage),
@@ -5284,7 +5824,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
         Text(
           'Manage Apps',
           style: GoogleFonts.inter(
-            fontSize: 24,
+            fontSize: isMobile ? 20 : 24,
             fontWeight: FontWeight.w800,
             color: const Color(0xFF0F172A),
             letterSpacing: -0.4,
@@ -5325,7 +5865,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
 
         // Top Pool Sizing Card (Screenshot 2)
         Container(
-          padding: const EdgeInsets.all(22),
+          padding: EdgeInsets.all(isMobile ? 16 : 22),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
@@ -5338,83 +5878,169 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
               ),
             ],
           ),
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEFF6FF),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFBFDBFE)),
+          child: isMobile
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEFF6FF),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFBFDBFE)),
+                          ),
+                          alignment: Alignment.center,
+                          child: const Icon(LucideIcons.server, size: 20, color: Color(0xFF2563EB)),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Total Capacity Pool Size (GB)',
+                                style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: const Color(0xFF0F172A),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Container(
+                                width: 90,
+                                height: 36,
+                                padding: const EdgeInsets.symmetric(horizontal: 12),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: const Color(0xFFCBD5E1)),
+                                ),
+                                alignment: Alignment.centerLeft,
+                                child: TextField(
+                                  controller: _poolSizeController,
+                                  keyboardType: TextInputType.number,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: const Color(0xFF0F172A),
+                                  ),
+                                  decoration: const InputDecoration(
+                                    border: InputBorder.none,
+                                    isDense: true,
+                                    contentPadding: EdgeInsets.zero,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Unallocated Space:',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: const Color(0xFF64748B),
+                          ),
+                        ),
+                        Text(
+                          '2 GB',
+                          style: GoogleFonts.inter(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w900,
+                            color: const Color(0xFF059669),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                )
+              : Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEFF6FF),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFBFDBFE)),
+                      ),
+                      alignment: Alignment.center,
+                      child: const Icon(LucideIcons.server, size: 22, color: Color(0xFF2563EB)),
+                    ),
+                    const SizedBox(width: 16),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Total Capacity Pool Size (GB)',
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF0F172A),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          width: 90,
+                          height: 36,
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFFCBD5E1)),
+                          ),
+                          alignment: Alignment.centerLeft,
+                          child: TextField(
+                            controller: _poolSizeController,
+                            keyboardType: TextInputType.number,
+                            style: GoogleFonts.inter(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFF0F172A),
+                            ),
+                            decoration: const InputDecoration(
+                              border: InputBorder.none,
+                              isDense: true,
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Spacer(),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          'Unallocated Space:',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: const Color(0xFF64748B),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '2 GB',
+                          style: GoogleFonts.inter(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w900,
+                            color: const Color(0xFF059669),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-                alignment: Alignment.center,
-                child: const Icon(LucideIcons.server, size: 22, color: Color(0xFF2563EB)),
-              ),
-              const SizedBox(width: 16),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Total Capacity Pool Size (GB)',
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF0F172A),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    width: 90,
-                    height: 36,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFFCBD5E1)),
-                    ),
-                    alignment: Alignment.centerLeft,
-                    child: TextField(
-                      controller: _poolSizeController,
-                      keyboardType: TextInputType.number,
-                      style: GoogleFonts.inter(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: const Color(0xFF0F172A),
-                      ),
-                      decoration: const InputDecoration(
-                        border: InputBorder.none,
-                        isDense: true,
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const Spacer(),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    'Unallocated Space:',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      color: const Color(0xFF64748B),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '2 GB',
-                    style: GoogleFonts.inter(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w900,
-                      color: const Color(0xFF059669),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
         ),
 
         const SizedBox(height: 28),
@@ -5433,7 +6059,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
         // Row of 3 Connected App Cards (Screenshot 2)
         LayoutBuilder(
           builder: (context, constraints) {
-            final isNarrow = constraints.maxWidth < 650;
+            final isNarrow = isMobile || constraints.maxWidth < 650;
             final cardBnx = _buildConnectedAppCard(
               title: 'BNX Mail',
               iconWidget: _buildBnxMailLogo(size: 22),
@@ -5593,7 +6219,42 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
   // ═══════════════════════════════════════════════════════════════
   // VIEW: SETTINGS (Screenshots 3, 4, 5)
   // ═══════════════════════════════════════════════════════════════
-  Widget _buildSettingsView() {
+  Widget _buildSettingsView({bool isMobile = false}) {
+    if (isMobile) {
+      return SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Settings Category Horizontal Chips
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              child: Row(
+                children: [
+                  _buildMobileSettingsChip('general', LucideIcons.settings, 'General'),
+                  const SizedBox(width: 8),
+                  _buildMobileSettingsChip('privacy', LucideIcons.shield, 'Privacy & Control'),
+                  const SizedBox(width: 8),
+                  _buildMobileSettingsChip('apps', LucideIcons.layoutGrid, 'Manage Apps'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              padding: const EdgeInsets.all(16),
+              child: _getSettingsSubSectionContent(isMobile: true),
+            ),
+          ],
+        ),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 28),
       child: Column(
@@ -5707,14 +6368,51 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
     );
   }
 
-  Widget _getSettingsSubSectionContent() {
+  Widget _getSettingsSubSectionContent({bool isMobile = false}) {
     if (_settingsSubSection == 'privacy') {
-      return _buildSettingsPrivacyContent();
+      return _buildSettingsPrivacyContent(isMobile: isMobile);
     } else if (_settingsSubSection == 'apps') {
-      return _buildManageAppsView(showBreadcrumbs: false);
+      return _buildManageAppsView(showBreadcrumbs: false, isMobile: isMobile);
     } else {
-      return _buildSettingsGeneralContent();
+      return _buildSettingsGeneralContent(isMobile: isMobile);
     }
+  }
+
+  Widget _buildMobileSettingsChip(String id, IconData icon, String label) {
+    final isSelected = _settingsSubSection == id;
+    return InkWell(
+      onTap: () => _selectSettingsSubSection(id),
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF2563EB) : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF2563EB) : const Color(0xFFE2E8F0),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 15,
+              color: isSelected ? Colors.white : const Color(0xFF64748B),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 12.5,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected ? Colors.white : const Color(0xFF334155),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _selectSettingsSubSection(String id) {
@@ -5788,7 +6486,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
     );
   }
 
-  Widget _buildSettingsGeneralContent() {
+  Widget _buildSettingsGeneralContent({bool isMobile = false}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -5822,12 +6520,15 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
               ),
             ),
             const SizedBox(width: 6),
-            Text(
-              _settingsStatusText,
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF059669),
+            Expanded(
+              child: Text(
+                _settingsStatusText,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF059669),
+                ),
               ),
             ),
           ],
@@ -6117,40 +6818,76 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
         _buildSettingsCard(
           title: 'APPEARANCE',
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Theme',
-                  style: GoogleFonts.inter(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF0F172A),
+            isMobile
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Theme',
+                        style: GoogleFonts.inter(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF0F172A),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 8,
+                        children: [
+                          _buildRadioChoice(
+                            label: 'Light',
+                            isSelected: _selectedTheme == 'Light',
+                            onTap: () => setState(() => _selectedTheme = 'Light'),
+                          ),
+                          _buildRadioChoice(
+                            label: 'System',
+                            isSelected: _selectedTheme == 'System',
+                            onTap: () => setState(() => _selectedTheme = 'System'),
+                          ),
+                          _buildRadioChoice(
+                            label: 'Dark',
+                            isSelected: _selectedTheme == 'Dark',
+                            onTap: () => setState(() => _selectedTheme = 'Dark'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Theme',
+                        style: GoogleFonts.inter(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF0F172A),
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          _buildRadioChoice(
+                            label: 'Light',
+                            isSelected: _selectedTheme == 'Light',
+                            onTap: () => setState(() => _selectedTheme = 'Light'),
+                          ),
+                          const SizedBox(width: 16),
+                          _buildRadioChoice(
+                            label: 'System',
+                            isSelected: _selectedTheme == 'System',
+                            onTap: () => setState(() => _selectedTheme = 'System'),
+                          ),
+                          const SizedBox(width: 16),
+                          _buildRadioChoice(
+                            label: 'Dark',
+                            isSelected: _selectedTheme == 'Dark',
+                            onTap: () => setState(() => _selectedTheme = 'Dark'),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                ),
-                Row(
-                  children: [
-                    _buildRadioChoice(
-                      label: 'Light',
-                      isSelected: _selectedTheme == 'Light',
-                      onTap: () => setState(() => _selectedTheme = 'Light'),
-                    ),
-                    const SizedBox(width: 16),
-                    _buildRadioChoice(
-                      label: 'System',
-                      isSelected: _selectedTheme == 'System',
-                      onTap: () => setState(() => _selectedTheme = 'System'),
-                    ),
-                    const SizedBox(width: 16),
-                    _buildRadioChoice(
-                      label: 'Dark',
-                      isSelected: _selectedTheme == 'Dark',
-                      onTap: () => setState(() => _selectedTheme = 'Dark'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
           ],
         ),
 
@@ -6259,69 +6996,74 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
     );
   }
 
-  Widget _buildSettingsPrivacyContent() {
+  Widget _buildSettingsPrivacyContent({bool isMobile = false}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Header Row
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Privacy & Data Control',
-                  style: GoogleFonts.inter(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                    color: const Color(0xFF0F172A),
-                    letterSpacing: -0.4,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Manage privacy and access to your stored data',
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    color: const Color(0xFF64748B),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF059669),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      _settingsStatusText,
+        if (isMobile)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Privacy & Data Control',
                       style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF059669),
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF0F172A),
+                        letterSpacing: -0.4,
                       ),
                     ),
-                  ],
-                ),
-              ],
-            ),
-            // Protected Pill Badge
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: const Color(0xFFECFDF5),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: const Color(0xFFA7F3D0)),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFECFDF5),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFFA7F3D0)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF059669),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        const Icon(LucideIcons.shieldCheck, size: 13, color: Color(0xFF059669)),
+                        const SizedBox(width: 5),
+                        Text(
+                          'Protected',
+                          style: GoogleFonts.inter(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF059669),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
+              const SizedBox(height: 4),
+              Text(
+                'Manage privacy and access to your stored data',
+                style: GoogleFonts.inter(
+                  fontSize: 12.5,
+                  color: const Color(0xFF64748B),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Row(
                 children: [
                   Container(
                     width: 6,
@@ -6332,21 +7074,108 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
                     ),
                   ),
                   const SizedBox(width: 6),
-                  const Icon(LucideIcons.shieldCheck, size: 14, color: Color(0xFF059669)),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Protected',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFF059669),
+                  Expanded(
+                    child: Text(
+                      _settingsStatusText,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF059669),
+                      ),
                     ),
                   ),
                 ],
               ),
-            ),
-          ],
-        ),
+            ],
+          )
+        else
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Privacy & Data Control',
+                      style: GoogleFonts.inter(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF0F172A),
+                        letterSpacing: -0.4,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Manage privacy and access to your stored data',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        color: const Color(0xFF64748B),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF059669),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          _settingsStatusText,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF059669),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Protected Pill Badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFECFDF5),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFFA7F3D0)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF059669),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    const Icon(LucideIcons.shieldCheck, size: 14, color: Color(0xFF059669)),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Protected',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF059669),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
 
         const SizedBox(height: 24),
 
