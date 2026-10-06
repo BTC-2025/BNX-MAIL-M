@@ -24,61 +24,277 @@
 
 # 1. Storage APIs
 
-Handles real-time mail server quota, mailbox storage consumption, and account plan limits.
+# BNX Mail - Storage & Vault API Documentation
+
+The **Storage** system in **BNX Mail** manages two primary aspects:
+1. **Mailbox Storage Quota API (`/api/mail/storage-quota`)**: Real-time mailbox disk space tracking, usage calculation, limit enforcement via Dovecot/IMAP, and User settings.
+2. **File Storage Vault API (`/api/vault`)**: Cloud drive / personal file storage allowing users to upload, manage, and download persistent files.
+3. **Draft & Attachment Storage Engine**: Local disk storage service with automatic quota enforcement.
 
 ---
 
-### 1.1 Get Live Mail Storage Quota
-Fetches real-time mailbox quota from Dovecot / IMAP.
+## 1. Global Specifications
 
+| Property | Details |
+|---|---|
+| **Base URLs** | `http(s)://<server>:8080/api/mail` (Mailbox Storage Quota)<br>`http(s)://<server>:8080/api/vault` (File Storage Vault) |
+| **Authentication** | Bearer JWT Token in `Authorization` header (`Authorization: Bearer <accessToken>`) |
+| **Controllers** | `com.btctech.mailapp.controller.MailReceiveController`<br>`com.btctech.mailapp.controller.VaultController` |
+| **Services** | `com.btctech.mailapp.service.MailReceiveService`<br>`com.btctech.mailapp.service.VaultService`<br>`com.btctech.mailapp.service.FileStorageService`<br>`com.btctech.mailapp.service.AttachmentSecurityService` |
+| **Database Tables** | `vault_files`, `mail_accounts`, `user_settings` |
+
+---
+
+## 2. Mailbox Storage Quota API (`/api/mail`)
+
+### 2.1 Get Mailbox Storage Quota
+
+Retrieves real-time storage usage, overall quota limit, and consumption percentage for the authenticated user's mailbox. Uses low-level `doveadm quota get` or IMAP `QUOTA` RFC extension.
+
+- **Endpoint:** `GET /api/mail/storage-quota`
 - **Method:** `GET`
-- **Route:** `/api/mail/storage-quota`
-- **Headers:**
-  ```http
-  Authorization: Bearer <token>
-  ```
+- **Authentication:** Required (Bearer Token)
+- **Controller:** [MailReceiveController.java](file:///c:/Users/ASHWIN/Downloads/BNX-MAIL-BE/src/main/java/com/btctech/mailapp/controller/MailReceiveController.java#L169-L193)
+- **Service:** [MailReceiveService.java](file:///c:/Users/ASHWIN/Downloads/BNX-MAIL-BE/src/main/java/com/btctech/mailapp/service/MailReceiveService.java#L190-L261)
+
+#### Headers
+```http
+Authorization: Bearer <accessToken>
+```
 
 #### Response (`200 OK`)
+Wrapped in standard `ApiResponse<StorageQuotaDTO>`:
 ```json
 {
   "success": true,
   "message": "Storage quota fetched successfully",
   "data": {
-    "email": "user@bnxmail.com",
+    "email": "john.smith@bnxmail.com",
     "storageLimit": 5368709120,
-    "storageUsed": 268435456,
-    "storagePercentage": 5.0
+    "storageUsed": 722518016,
+    "storagePercentage": 13.458
   },
-  "error": null
+  "timestamp": 1712836200000
 }
 ```
 
-#### Field Specifications
+#### Fields Description (`StorageQuotaDTO`)
 | Field | Type | Description |
-| :--- | :--- | :--- |
-| `email` | `String` | Email address of the authenticated mailbox |
-| `storageLimit` | `Long` | Maximum storage allocated on mail server in **Bytes** (`5368709120` = 5 GB) |
-| `storageUsed` | `Long` | Consumed storage in **Bytes** (`268435456` = 256 MB) |
-| `storagePercentage` | `Double` | Utilization percentage |
+|---|---|---|
+| `email` | `string` | The user's mailbox email address |
+| `storageLimit` | `number` (long) | Total allocated storage capacity in **bytes** (Default: 5 GB = `5368709120` bytes, or plan limit) |
+| `storageUsed` | `number` (long) | Currently used storage space in **bytes** |
+| `storagePercentage` | `number` (double) | Calculated usage percentage (`(storageUsed / storageLimit) * 100`) |
 
 ---
 
-### 1.2 Storage Unit Reference
-| Unit | Size in Bytes |
-| :--- | :--- |
-| **1 GB** | `1073741824` |
-| **5 GB** *(Default Server Quota)* | `5368709120` |
-| **15 GB** *(Default User Plan Limit)* | `16106127360` |
-| **30 GB** | `32212254720` |
+## 3. File Storage Vault API (`/api/vault`)
+
+The **Vault** acts as a personal cloud drive for storing files (documents, images, archives) directly associated with the user account.
+
+### 3.1 Upload File to Vault
+
+Uploads a file into personal storage. Maximum file size allowed is **5MB**.
+
+- **Endpoint:** `POST /api/vault/upload`
+- **Method:** `POST`
+- **Authentication:** Required (Bearer Token)
+- **Content-Type:** `multipart/form-data`
+- **Controller:** [VaultController.java](file:///c:/Users/ASHWIN/Downloads/BNX-MAIL-BE/src/main/java/com/btctech/mailapp/controller/VaultController.java#L40-L58)
+
+#### Form-Data Parameters
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `file` | `File` (binary) | **Yes** | The file to upload (Max size: 5 MB) |
+
+#### cURL Example
+```bash
+curl -X POST "http://localhost:8080/api/vault/upload" \
+  -H "Authorization: Bearer <accessToken>" \
+  -F "file=@/path/to/invoice.pdf"
+```
+
+#### Response (`200 OK`)
+```json
+{
+  "message": "File uploaded successfully",
+  "id": 14,
+  "filename": "invoice.pdf"
+}
+```
+
+#### Error Responses
+- `400 Bad Request` (File size exceeds limit):
+  ```json
+  {
+    "error": "File size exceeds the 5MB limit"
+  }
+  ```
+- `500 Internal Server Error`:
+  ```json
+  {
+    "error": "Could not upload the file: <details>"
+  }
+  ```
 
 ---
 
-# 2. Subscription & Organization Plans [REMOVED]
+### 3.2 List All Uploaded Files
 
-> [!NOTE]
-> Section 2 Business and Organization Plans have been completely removed from the application flow.
+Retrieves metadata for all files owned by the authenticated user, sorted in descending order by upload time.
+
+- **Endpoint:** `GET /api/vault`
+- **Method:** `GET`
+- **Authentication:** Required (Bearer Token)
+- **Controller:** [VaultController.java](file:///c:/Users/ASHWIN/Downloads/BNX-MAIL-BE/src/main/java/com/btctech/mailapp/controller/VaultController.java#L60-L70)
+
+#### Headers
+```http
+Authorization: Bearer <accessToken>
+```
+
+#### Response (`200 OK`)
+Returns `Array<VaultFileMetadata>` (Raw JSON):
+```json
+[
+  {
+    "id": 14,
+    "filename": "invoice.pdf",
+    "contentType": "application/pdf",
+    "size": 1048576,
+    "ownerEmail": "john.smith@bnxmail.com",
+    "uploadedAt": "2026-10-03T14:30:00"
+  },
+  {
+    "id": 12,
+    "filename": "project_notes.docx",
+    "contentType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "size": 256000,
+    "ownerEmail": "john.smith@bnxmail.com",
+    "uploadedAt": "2026-10-02T10:15:00"
+  }
+]
+```
 
 ---
+
+### 3.3 Download File
+
+Downloads the raw binary content of a file by its ID. Enforces ownership verification so users can only access their own files.
+
+- **Endpoint:** `GET /api/vault/{id}/download`
+- **Method:** `GET`
+- **Authentication:** Required (Bearer Token)
+- **Path Parameter:**
+  - `id` (`number`): The ID of the file in the vault.
+- **Controller:** [VaultController.java](file:///c:/Users/ASHWIN/Downloads/BNX-MAIL-BE/src/main/java/com/btctech/mailapp/controller/VaultController.java#L72-L87)
+
+#### Response (`200 OK`)
+- **Content-Type:** Matches uploaded MIME type (e.g., `application/pdf`, `image/png`, `application/octet-stream`)
+- **Headers:** `Content-Disposition: attachment; filename="<original_filename>"`
+- **Body:** Raw binary byte stream
+
+#### Error Response (`404 Not Found`)
+```json
+{
+  "error": "File not found"
+}
+```
+*(or `"Unauthorized access to file"` if requested file belongs to another user)*
+
+---
+
+### 3.4 Delete File
+
+Permanently removes a file from the vault storage.
+
+- **Endpoint:** `DELETE /api/vault/{id}`
+- **Method:** `DELETE`
+- **Authentication:** Required (Bearer Token)
+- **Path Parameter:**
+  - `id` (`number`): The ID of the file to delete.
+- **Controller:** [VaultController.java](file:///c:/Users/ASHWIN/Downloads/BNX-MAIL-BE/src/main/java/com/btctech/mailapp/controller/VaultController.java#L89-L100)
+
+#### Response (`200 OK`)
+```json
+{
+  "message": "File deleted successfully"
+}
+```
+
+---
+
+## 4. User Account Storage Limit (`/api/users/settings`)
+
+User account storage limits are configurable in [UserSettings.java](file:///c:/Users/ASHWIN/Downloads/BNX-MAIL-BE/src/main/java/com/btctech/mailapp/entity/UserSettings.java#L64):
+
+- **Default Storage Limit:** `16106127360` bytes (15 GB)
+- **API Endpoint:** `GET /api/users/settings` & `PUT /api/users/settings`
+
+```json
+{
+  "success": true,
+  "data": {
+    "storageLimit": 16106127360
+  }
+}
+```
+
+---
+
+## 5. Administrative Storage Metrics (`/api/admin/metrics`)
+
+Server administrators can retrieve aggregated storage statistics across all accounts on the server:
+
+- **Endpoint:** `GET /api/admin/metrics`
+- **Auth:** Required (`ROLE_ADMIN`)
+- **Field:** `totalStorageBytes` (Sum of `storageUsed` across all mail accounts)
+
+---
+
+## 6. TypeScript Interface Definitions
+
+```typescript
+// Mailbox Storage Quota
+export interface StorageQuotaDTO {
+  email: string;
+  storageLimit: number;      // in bytes
+  storageUsed: number;       // in bytes
+  storagePercentage: number; // 0.0 - 100.0%
+}
+
+// Vault File Metadata
+export interface VaultFileMetadata {
+  id: number;
+  filename: string;
+  contentType: string;
+  size: number;              // in bytes
+  ownerEmail: string;
+  uploadedAt: string;        // ISO-8601
+}
+
+// Vault Upload Response
+export interface VaultUploadResponse {
+  message: string;
+  id: number;
+  filename: string;
+}
+```
+
+---
+
+## 7. HTTP Status & Error Codes
+
+| Status Code | Description | Typical Cause |
+|---|---|---|
+| `200 OK` | Success | Operation succeeded. |
+| `400 Bad Request` | Bad Request / File Size Exceeded | File size exceeds 5MB or invalid parameters. |
+| `401 Unauthorized` | Auth Failure / Session Expired | Missing or expired JWT Bearer token. |
+| `404 Not Found` | Not Found / Access Denied | File ID does not exist or unauthorized access. |
+| `500 Internal Server Error` | Server Exception | Storage read/write error or server failure. |
+
+---
+
 
 
 # 3. Mail Backup & Data Vault
@@ -506,3 +722,237 @@ Multi-mailbox management, primary account switching, and Sub-ID provisioning.
   "workAddress": "100 Innovation Blvd"
 }
 ```
+
+
+
+
+
+
+
+# BNX Account UI - Mobile API Reference
+
+This document outlines the API endpoints used by the `bnx-account-ui` (the authenticated account dashboard) so that you can implement the equivalent functionality in the mobile app.
+
+**Base URL:** `http(s)://<server>:8080`
+**Authentication:** Pass the JWT access token in the header: `Authorization: Bearer <accessToken>` (where noted).
+**Standard Response Wrapper:**
+Unless noted otherwise, all JSON responses use the following wrapper format:
+```json
+{
+  "success": true, // or false on error
+  "message": "Operation successful",
+  "data": { ... }, // the actual payload
+  "timestamp": 1712836200000
+}
+```
+
+---
+
+## 1. User & Profile APIs
+
+### 1.1 Get Current User Profile
+Fetch the current logged-in user's profile and account state.
+- **Endpoint:** `GET /api/users/me`
+- **Auth Required:** Yes
+- **Body:** None
+- **Response `data`:** 
+```json
+{
+  "userId": 1,
+  "username": "siva",
+  "email": "siva@bnxmail.com",
+  "firstName": "Siva",
+  "lastName": "Kumar",
+  "role": "PUBLIC",
+  "accountType": "PERSONAL",
+  "isPrimary": true,
+  "profilePicture": "file.png",
+  "mailboxes": [{ "emailId": 1, "email": "siva@bnxmail.com", "isPrimary": true }]
+}
+```
+
+### 1.2 Update User Profile
+Update profile fields for the logged-in user.
+- **Endpoint:** `PATCH /api/users/profile`
+- **Auth Required:** Yes
+- **Body:**
+```json
+{
+  "firstName": "NewName",
+  "lastName": "NewLastName",
+  "recoveryEmail": "backup@example.com",
+  "phoneNumber": "9876543210"
+}
+```
+- **Response `data`:** The updated user object.
+
+### 1.3 Upload Profile Picture
+Upload or replace the user's avatar.
+- **Endpoint:** `POST /api/users/profile-picture`
+- **Auth Required:** Yes
+- **Content-Type:** `multipart/form-data`
+- **Body:** 
+  - `file`: The image file (binary).
+- **Response `data`:** 
+```json
+{
+  "profilePicture": "filename.png",
+  "profilePictureUrl": "/api/users/profile-picture/siva"
+}
+```
+
+### 1.4 Delete Profile Picture
+Remove the user's avatar.
+- **Endpoint:** `DELETE /api/users/profile-picture`
+- **Auth Required:** Yes
+- **Body:** None
+- **Response `data`:** `null`
+
+---
+
+## 2. Mailbox & Storage APIs
+
+### 2.1 Get Email Aliases / Mailboxes
+List all mailboxes attached to the user's account.
+- **Endpoint:** `GET /api/emails/list`
+- **Auth Required:** Yes
+- **Body:** None
+- **Response `data`:** 
+```json
+{
+  "count": 1,
+  "emails": [
+    {
+      "id": 1,
+      "email": "siva@bnxmail.com",
+      "isPrimary": true,
+      "active": true
+    }
+  ]
+}
+```
+
+### 2.2 Get Storage Quota
+Fetch the used and available storage space for the user's emails.
+- **Endpoint:** `GET /api/mail/storage-quota`
+- **Auth Required:** Yes
+- **Body:** None
+- **Response `data`:** 
+```json
+{
+  "email": "siva@bnxmail.com",
+  "storageLimit": 5368709120,    // in bytes (e.g., 5GB)
+  "storageUsed": 1048576,        // in bytes
+  "storagePercentage": 0.02
+}
+```
+
+---
+
+## 3. Two-Factor Authentication (2FA)
+
+### 3.1 Initiate 2FA Setup
+Generates the secret and QR code URI for authenticator apps.
+- **Endpoint:** `POST /api/users/2fa/setup`
+- **Auth Required:** Yes
+- **Body:** `{}` (Empty JSON object)
+- **Response `data`:** 
+```json
+{
+  "secret": "JBSWY3DPEHPK3PXP",
+  "qrCodeUri": "otpauth://totp/BNXMail:siva?secret=JBSWY3DPEHPK3PXP&issuer=BNXMail"
+}
+```
+
+### 3.2 Verify and Enable 2FA
+Verify the code from the authenticator app to fully enable 2FA.
+- **Endpoint:** `POST /api/users/2fa/verify`
+- **Auth Required:** Yes
+- **Body:** 
+```json
+{
+  "code": "123456" // The 6-digit TOTP code
+}
+```
+- **Response `data`:** `null` (Success message in wrapper)
+
+### 3.3 Disable 2FA
+Turn off two-factor authentication.
+- **Endpoint:** `POST /api/users/2fa/disable`
+- **Auth Required:** Yes
+- **Body:** `{}` (Empty JSON object)
+- **Response `data`:** `null`
+
+*(Note: There is also an older `/api/users/2fa/enable` route that might be called before `/verify` depending on the exact flow used, but typically `setup` -> `verify` is the standard).*
+
+---
+
+## 4. Sub-ID (Sub-account) Management
+
+### 4.1 List Sub-IDs
+Get a list of child accounts created by this primary user.
+- **Endpoint:** `GET /api/subid/list`
+- **Auth Required:** Yes
+- **Body:** None
+- **Response `data`:** Array of User objects (similar to the `/users/me` response).
+```json
+[
+  {
+    "userId": 2,
+    "username": "child.siva",
+    "email": "child.siva@bnxmail.com",
+    "accountType": "SUB_ID"
+  }
+]
+```
+
+### 4.2 Create Sub-ID
+Create a new sub-account under the current user's domain/prefix.
+- **Endpoint:** `POST /api/subid/create`
+- **Auth Required:** Yes
+- **Body:** 
+```json
+{
+  "prefix": "child",            // Will create child.siva@bnxmail.com
+  "password": "SecurePassword123" 
+}
+```
+- **Response `data`:** Details of the newly created sub-user account.
+
+---
+
+## 5. Account Verification
+
+### 5.1 Initiate Email Verification
+Trigger a verification email to be sent to a specific mailbox.
+- **Endpoint:** `GET /api/verification/initiate/{emailId}`
+- **Auth Required:** Yes
+- **Body:** None
+- **Response `data`:** `null`
+
+---
+
+## 6. Payment & Subscription (External API)
+
+The `bnx-account-ui` fetches active subscription details to display in the Billing tab. Note that this endpoint points to a different service domain.
+
+### 6.1 Get Active Subscription
+Fetches the active Cliks Business subscription details for the user.
+- **Endpoint:** `GET https://cliks.beta-softnet.com/api/v1/business/subscription/{userEmail}`
+- **Auth Required:** No (in the frontend implementation, it makes a direct GET request)
+- **Body:** None
+- **Response:**
+```json
+{
+  "success": true,
+  "message": "Subscription retrieved",
+  "data": {
+    "plan_name": "Pro Business Plan",
+    "subscription_days_remaining": 34,
+    "when_subscribed": "2026-09-01T10:00:00Z",
+    "next_due_date": "2026-11-04T10:00:00Z",
+    "email": "user@example.com"
+  }
+}
+```
+*(Note: If the user is on the "Free Plan" or `subscription_days_remaining` is 0, the UI will display a prompt to upgrade instead).*

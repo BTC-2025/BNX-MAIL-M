@@ -388,37 +388,54 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
     String? filePath,
     String? filename,
   }) async {
+    final cleanId = id.trim().toLowerCase();
+
+    // 1. Instantly display preview for immediate UI feedback
     state = state.map((acc) {
-      if (acc.id == id) {
+      final accEmail = acc.email.trim().toLowerCase();
+      final accId = acc.id.trim().toLowerCase();
+      if (accId == cleanId || accEmail == cleanId) {
         return acc.copyWith(avatarUrl: avatarUrl);
       }
       return acc;
     }).toList();
 
+    // Clear Flutter's in-memory image cache so old photos do not linger
+    PaintingBinding.instance.imageCache.clear();
+    PaintingBinding.instance.imageCache.clearLiveImages();
+
     final active = state.firstWhere(
-      (a) => a.id == id,
+      (a) =>
+          a.id.trim().toLowerCase() == cleanId ||
+          a.email.trim().toLowerCase() == cleanId,
       orElse: () => activeAccount,
     );
-    if (active.email.isNotEmpty && avatarUrl.isNotEmpty) {
-      await TokenService.saveUserAvatar(active.email, avatarUrl);
-    }
+    final targetEmail = active.email.isNotEmpty
+        ? active.email
+        : (await TokenService.getUserEmail() ?? '');
 
     try {
       final remoteUrl = await UserRepository.uploadAvatar(
-        active.email,
+        targetEmail,
         avatarUrl,
         bytes: bytes,
         filePath: filePath,
         filename: filename,
       );
       if (remoteUrl != null && remoteUrl.isNotEmpty) {
+        // Clear Flutter image cache again before setting the versioned remote URL
+        PaintingBinding.instance.imageCache.clear();
+        PaintingBinding.instance.imageCache.clearLiveImages();
+
         state = state.map((acc) {
-          if (acc.id == id) {
+          final accEmail = acc.email.trim().toLowerCase();
+          final accId = acc.id.trim().toLowerCase();
+          if (accId == cleanId || accEmail == cleanId) {
             return acc.copyWith(avatarUrl: remoteUrl);
           }
           return acc;
         }).toList();
-        await TokenService.saveUserAvatar(active.email, remoteUrl);
+        await TokenService.saveUserAvatar(targetEmail, remoteUrl);
       }
     } catch (e) {
       print('[AVATAR SYNC ERROR] Failed to upload avatar to backend: $e');
@@ -426,23 +443,41 @@ class AccountsNotifier extends StateNotifier<List<AccountModel>> {
   }
 
   Future<void> removeAvatar(String id) async {
+    final cleanId = id.trim().toLowerCase();
+
+    // Evict old images from memory cache
+    PaintingBinding.instance.imageCache.clear();
+    PaintingBinding.instance.imageCache.clearLiveImages();
+
     state = state.map((acc) {
-      if (acc.id == id) {
+      final accEmail = acc.email.trim().toLowerCase();
+      final accId = acc.id.trim().toLowerCase();
+      if (accId == cleanId || accEmail == cleanId) {
         return acc.copyWith(avatarUrl: null);
       }
       return acc;
     }).toList();
 
     final active = state.firstWhere(
-      (a) => a.id == id,
+      (a) =>
+          a.id.trim().toLowerCase() == cleanId ||
+          a.email.trim().toLowerCase() == cleanId,
       orElse: () => activeAccount,
     );
-    if (active.email.isNotEmpty) {
-      await TokenService.saveUserAvatar(active.email, '');
+    final targetEmail = active.email.isNotEmpty
+        ? active.email
+        : (await TokenService.getUserEmail() ?? '');
+
+    if (targetEmail.isNotEmpty) {
+      await TokenService.saveUserAvatar(targetEmail, '');
+    }
+    final loggedInEmail = await TokenService.getUserEmail();
+    if (loggedInEmail != null && loggedInEmail.isNotEmpty) {
+      await TokenService.saveUserAvatar(loggedInEmail, '');
     }
 
     try {
-      await UserRepository.deleteAvatar(active.email);
+      await UserRepository.deleteAvatar(targetEmail);
     } catch (e) {
       print('[AVATAR REMOVE ERROR] Failed to remove avatar: $e');
     }

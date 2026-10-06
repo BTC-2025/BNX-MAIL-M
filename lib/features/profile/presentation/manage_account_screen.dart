@@ -1089,6 +1089,9 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
 
         if (fileBytes != null || (filePath != null && filePath.isNotEmpty)) {
           final activeAccount = ref.read(activeAccountProvider);
+          final accountId = activeAccount.email.isNotEmpty
+              ? activeAccount.email
+              : activeAccount.id;
           final ext = (file.extension ?? 'jpg').toLowerCase();
           final mime = ext == 'png' ? 'image/png' : 'image/jpeg';
           final localPreviewUri = fileBytes != null
@@ -1096,7 +1099,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
               : (filePath ?? '');
 
           await ref.read(accountsProvider.notifier).updateAvatar(
-                activeAccount.id,
+                accountId,
                 localPreviewUri,
                 bytes: fileBytes,
                 filePath: filePath,
@@ -1130,6 +1133,9 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
 
   Future<void> _removePhoto() async {
     final activeAccount = ref.read(activeAccountProvider);
+    final accountId = activeAccount.email.isNotEmpty
+        ? activeAccount.email
+        : activeAccount.id;
     if (activeAccount.avatarUrl == null || activeAccount.avatarUrl!.isEmpty) {
       return;
     }
@@ -1160,7 +1166,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
       try {
         await ref
             .read(accountsProvider.notifier)
-            .removeAvatar(activeAccount.id);
+            .removeAvatar(accountId);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(

@@ -297,12 +297,36 @@ class TokenService {
   static String _kAvatarKey(String email) =>
       'bnx_user_avatar_${email.trim().toLowerCase()}';
 
+  /// Update avatarUrl for an account in the saved accounts registry
+  static Future<void> updateAccountAvatarInRegistry(String email, String avatarUrl) async {
+    final cleanEmail = email.trim().toLowerCase();
+    if (cleanEmail.isEmpty) return;
+    try {
+      final existing = await getSavedAccountsFromRegistry();
+      if (existing.isEmpty) return;
+      final updated = existing.map((a) {
+        if (a['email']?.toString().trim().toLowerCase() == cleanEmail) {
+          return {...a, 'avatarUrl': avatarUrl};
+        }
+        return a;
+      }).toList();
+      await _safeWrite(key: _kSavedAccountsRegistry, value: jsonEncode(updated));
+    } catch (_) {}
+  }
+
   static Future<void> saveUserAvatar(String email, String avatarUrl) async {
     final cleanEmail = email.trim().toLowerCase();
     if (avatarUrl.isNotEmpty) {
       await _safeWrite(key: _kGlobalAvatar, value: avatarUrl);
       if (cleanEmail.isNotEmpty) {
         await _safeWrite(key: _kAvatarKey(cleanEmail), value: avatarUrl);
+        await updateAccountAvatarInRegistry(cleanEmail, avatarUrl);
+      }
+    } else {
+      await _safeDelete(key: _kGlobalAvatar);
+      if (cleanEmail.isNotEmpty) {
+        await _safeDelete(key: _kAvatarKey(cleanEmail));
+        await updateAccountAvatarInRegistry(cleanEmail, '');
       }
     }
   }
@@ -311,9 +335,13 @@ class TokenService {
     final cleanEmail = email.trim().toLowerCase();
     if (cleanEmail.isNotEmpty) {
       final val = await _safeRead(key: _kAvatarKey(cleanEmail));
-      if (val != null && val.isNotEmpty) return val;
+      if (val != null) {
+        return val.isNotEmpty ? val : null;
+      }
+      return null;
     }
-    return await _safeRead(key: _kGlobalAvatar);
+    final globalVal = await _safeRead(key: _kGlobalAvatar);
+    return (globalVal != null && globalVal.isNotEmpty) ? globalVal : null;
   }
 
   static String _kSettingsKey(String email) =>

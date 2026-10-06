@@ -54,7 +54,9 @@ class AvatarWidget extends StatelessWidget {
       return _buildLetterAvatar(firstLetter);
     }
 
-    if (avatarUrl != null && avatarUrl!.trim().isNotEmpty) {
+    if (avatarUrl != null &&
+        avatarUrl!.trim().isNotEmpty &&
+        avatarUrl!.trim() != 'null') {
       final url = avatarUrl!.trim();
       final isDataUri = url.startsWith('data:image') || url.contains(';base64,');
 
@@ -68,7 +70,7 @@ class AvatarWidget extends StatelessWidget {
         } catch (_) {}
       }
 
-      final isRelativeApi = url.startsWith('/api/') || url.startsWith('/uploads/') || url.startsWith('/static/');
+      final isRelativeApi = url.startsWith('/');
       final isNetwork = url.startsWith('http://') || url.startsWith('https://') || isRelativeApi;
 
       bool isRawBase64 = false;
@@ -87,6 +89,7 @@ class AvatarWidget extends StatelessWidget {
           final bytes = base64Decode(base64Str.trim());
           imageWidget = Image.memory(
             bytes,
+            key: ValueKey(url.hashCode),
             width: size,
             height: size,
             fit: BoxFit.cover,
@@ -101,6 +104,7 @@ class AvatarWidget extends StatelessWidget {
           final file = File(url);
           imageWidget = Image.file(
             file,
+            key: ValueKey(url),
             width: size,
             height: size,
             fit: BoxFit.cover,
@@ -122,6 +126,7 @@ class AvatarWidget extends StatelessWidget {
           }
           imageWidget = Image.network(
             absoluteUrl,
+            key: ValueKey(absoluteUrl),
             width: size,
             height: size,
             fit: BoxFit.cover,

@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_bnx_mail/data/repositories/mail_repository.dart';
 import 'package:flutter_bnx_mail/models/account_model.dart';
 import 'package:flutter_bnx_mail/models/user_model.dart';
+import 'package:flutter_bnx_mail/core/widgets/email_html_view.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -405,6 +406,58 @@ void main() {
         'email': 'siva@bnxmail.com',
       });
       expect(userWithoutPic.avatarUrl, isNull);
+    });
+
+    test('Avatar cache-busting timestamp preservation logic', () {
+      const serverUrl = '/api/users/profile-picture/ravi';
+      const savedVersionedUrl = '/api/users/profile-picture/ravi?t=1738838383838';
+
+      final remoteBase = serverUrl.split('?').first.trim();
+      final savedBase = savedVersionedUrl.split('?').first.trim();
+      expect(savedBase, equals(remoteBase));
+      expect(savedVersionedUrl.contains('?t='), isTrue);
+
+      // Verify that when server returns unversioned base, the preserved URL keeps the timestamp
+      final preservedUrl = (savedBase == remoteBase && savedVersionedUrl.contains('?t='))
+          ? savedVersionedUrl
+          : serverUrl;
+      expect(preservedUrl, equals(savedVersionedUrl));
+    });
+
+    test('Deleted avatar does not resurrect when server returns null profilePictureUrl', () {
+      final user = UserModel.fromJson({
+        'name': 'Ravi',
+        'email': 'ravi@bnxmail.com',
+        'profilePictureUrl': null,
+        'profilePicture': null,
+      });
+      expect(user.avatarUrl, isNull);
+
+      final account = AccountModel.fromJson({
+        'email': 'ravi@bnxmail.com',
+        'profilePictureUrl': null,
+        'profilePicture': null,
+      });
+      expect(account.avatarUrl, isNull);
+    });
+  });
+
+  group('EmailHtmlView Engine Tests', () {
+    test('looksLikeHtml detects common HTML tags correctly', () {
+      expect(EmailHtmlView.looksLikeHtml('<p>Hello world</p>'), isTrue);
+      expect(EmailHtmlView.looksLikeHtml('<div>Some content</div>'), isTrue);
+      expect(EmailHtmlView.looksLikeHtml('<table><tr><td>cell</td></tr></table>'), isTrue);
+      expect(EmailHtmlView.looksLikeHtml('<style>.btn { color: red; }</style>'), isTrue);
+      expect(EmailHtmlView.looksLikeHtml('<center><b>Announcement</b></center>'), isTrue);
+      expect(EmailHtmlView.looksLikeHtml('<a href="https://bnxmail.com">Click</a>'), isTrue);
+      expect(EmailHtmlView.looksLikeHtml('<h1>Header</h1>'), isTrue);
+    });
+
+    test('looksLikeHtml rejects plain text and markdown', () {
+      expect(EmailHtmlView.looksLikeHtml('Hello, this is a plain text message.'), isFalse);
+      expect(EmailHtmlView.looksLikeHtml('Check out https://bnxmail.com for updates!'), isFalse);
+      expect(EmailHtmlView.looksLikeHtml('Price is < 50 and > 10.'), isFalse);
+      expect(EmailHtmlView.looksLikeHtml('User <john@example.com> sent an email.'), isFalse);
     });
   });
 }

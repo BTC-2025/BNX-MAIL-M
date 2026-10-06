@@ -72,8 +72,10 @@ class _EmailHtmlViewState extends State<EmailHtmlView> {
     final source = widget.html.trim().isNotEmpty ? widget.html : widget.text;
     final isHtml = EmailHtmlView.looksLikeHtml(source);
 
-    // WebView is natively supported on macOS (WKWebView), iOS, and Android
-    if (isHtml && !kIsWeb && (Platform.isMacOS || Platform.isIOS || Platform.isAndroid)) {
+    // WebView is used exclusively on macOS (desktop WKWebView).
+    // On Android and iOS, native Flutter HtmlWidget is used to eliminate PlatformView
+    // surface recreation loops, infinite height glitches, and gesture conflicts.
+    if (isHtml && !kIsWeb && Platform.isMacOS) {
       try {
         _controller = WebViewController()
           ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -337,6 +339,8 @@ class _EmailHtmlViewState extends State<EmailHtmlView> {
     final textColor = isHtml ? const Color(0xFF1F2937) : (widget.isDark ? const Color(0xFFE5E7EB) : const Color(0xFF1F2937));
     final baseStyle = TextStyle(fontSize: 14, height: 1.55, color: textColor);
 
+    final bool isMobile = MediaQuery.of(context).size.width < 600;
+
     final fallbackWidget = SelectionArea(
       child: HtmlWidget(
         content,
@@ -357,6 +361,12 @@ class _EmailHtmlViewState extends State<EmailHtmlView> {
           if (e.localName == 'table') {
             return {'max-width': '100%'};
           }
+          if (e.localName == 'pre' || e.localName == 'code') {
+            return {
+              'white-space': 'pre-wrap',
+              'word-break': 'break-word',
+            };
+          }
           return null;
         },
       ),
@@ -369,7 +379,10 @@ class _EmailHtmlViewState extends State<EmailHtmlView> {
     return Container(
       width: double.infinity,
       clipBehavior: Clip.antiAlias,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      padding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 14 : 20,
+        vertical: isMobile ? 16 : 24,
+      ),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),

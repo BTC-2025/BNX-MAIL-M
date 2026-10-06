@@ -1336,7 +1336,7 @@ class EmailBody extends ConsumerWidget {
         buildToolbar(),
         Expanded(
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(24, 0, 24, 110),
+            padding: EdgeInsets.fromLTRB(isMobile ? 12 : 24, 0, isMobile ? 12 : 24, 110),
             children: [
               buildHeaderSection(),
               const Divider(),

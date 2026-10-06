@@ -33,12 +33,25 @@ class UserRepository {
         await TokenService.saveUserSettings(cleanEmail, {...existing, ...data});
       }
       final savedAvatar = await TokenService.getUserAvatar(user.email);
-      final loggedInEmail = await TokenService.getUserEmail() ?? '';
+      final loggedInEmail = (await TokenService.getUserEmail() ?? '').trim().toLowerCase();
       final savedAvatarAlt = await TokenService.getUserAvatar(loggedInEmail);
+      final effectiveSavedAvatar = savedAvatar ?? savedAvatarAlt;
 
-      final avatarToUse = (user.avatarUrl != null && user.avatarUrl!.isNotEmpty)
-          ? user.avatarUrl
-          : (savedAvatar ?? savedAvatarAlt);
+      String? avatarToUse;
+      if (user.avatarUrl != null && user.avatarUrl!.isNotEmpty && user.avatarUrl != 'null') {
+        // If local storage has a versioned URL with a cache-buster (?t=...) for this same base URL, preserve it!
+        final remoteBase = user.avatarUrl!.split('?').first.trim();
+        if (effectiveSavedAvatar != null &&
+            effectiveSavedAvatar.split('?').first.trim() == remoteBase &&
+            effectiveSavedAvatar.contains('?t=')) {
+          avatarToUse = effectiveSavedAvatar;
+        } else {
+          avatarToUse = user.avatarUrl;
+        }
+      } else {
+        // Server indicates no profile picture exists or it was removed
+        avatarToUse = null;
+      }
 
       if (avatarToUse != null && avatarToUse.isNotEmpty) {
         await TokenService.saveUserAvatar(user.email, avatarToUse);
@@ -46,8 +59,14 @@ class UserRepository {
           await TokenService.saveUserAvatar(loggedInEmail, avatarToUse);
         }
         return user.copyWith(avatarUrl: avatarToUse);
+      } else {
+        // Avatar was cleared/removed on backend
+        await TokenService.saveUserAvatar(user.email, '');
+        if (loggedInEmail.isNotEmpty) {
+          await TokenService.saveUserAvatar(loggedInEmail, '');
+        }
+        return user.copyWith(avatarUrl: null);
       }
-      return user;
     } catch (_) {
       return null;
     }
@@ -132,14 +151,6 @@ class UserRepository {
     final cleanEmail = email.trim().toLowerCase();
     final loggedInEmail = (await TokenService.getUserEmail())?.trim().toLowerCase();
 
-    // Cache local image immediately for instant UI feedback
-    if (cleanEmail.isNotEmpty) {
-      await TokenService.saveUserAvatar(cleanEmail, imagePath);
-    }
-    if (loggedInEmail != null && loggedInEmail.isNotEmpty) {
-      await TokenService.saveUserAvatar(loggedInEmail, imagePath);
-    }
-
     try {
       final res = await ApiClient.uploadProfilePicture(
         filePath ?? imagePath,
@@ -170,14 +181,19 @@ class UserRepository {
         }
       }
 
-      if (serverAvatarUrl != null && serverAvatarUrl.isNotEmpty) {
+      if (serverAvatarUrl != null && serverAvatarUrl.isNotEmpty && serverAvatarUrl != 'null') {
+        // Append cache-buster timestamp so Flutter NetworkImage and HTTP caches fetch the fresh photo
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final cleanServerUrl = serverAvatarUrl.split('?').first;
+        final versionedUrl = '$cleanServerUrl?t=$timestamp';
+
         if (cleanEmail.isNotEmpty) {
-          await TokenService.saveUserAvatar(cleanEmail, serverAvatarUrl);
+          await TokenService.saveUserAvatar(cleanEmail, versionedUrl);
         }
         if (loggedInEmail != null && loggedInEmail.isNotEmpty) {
-          await TokenService.saveUserAvatar(loggedInEmail, serverAvatarUrl);
+          await TokenService.saveUserAvatar(loggedInEmail, versionedUrl);
         }
-        return serverAvatarUrl;
+        return versionedUrl;
       }
     } catch (e) {
       print('[AVATAR UPLOAD ERROR] $e');
