@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../data/email_provider.dart';
 import '../../../data/app_state_provider.dart';
 import '../../../core/widgets/email_tile.dart';
+import '../../../core/widgets/bnx_animations.dart';
 import '../../../core/theme/colors.dart';
 import '../../../models/email_model.dart';
 import '../../../models/label_model.dart';
@@ -704,10 +705,8 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
                             );
                           },
                         ))
-                : AnimatedSwitcher(
+                : BNXSectionSwitcher(
                     duration: const Duration(milliseconds: 200),
-                    switchInCurve: Curves.easeOutCubic,
-                    switchOutCurve: Curves.easeInCubic,
                     child: KeyedSubtree(
                       key: ValueKey(
                         '${uiState.activeFolder}_${uiState.activeLabel}_$currentTabIndex',
@@ -724,13 +723,16 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
                         }
 
                         if (filtered.isEmpty) {
-                          return _buildEmptyState(
-                            (uiState.activeFolder == 'Inbox' ||
-                                        uiState.activeFolder == 'Primary') &&
-                                    uiState.activeLabel == null
-                                ? _tabs[currentTabIndex]
-                                : uiState.activeFolder,
-                            isDark,
+                          return FadeInWidget(
+                            key: ValueKey('empty_${uiState.activeFolder}_${uiState.activeLabel}'),
+                            child: _buildEmptyState(
+                              (uiState.activeFolder == 'Inbox' ||
+                                          uiState.activeFolder == 'Primary') &&
+                                      uiState.activeLabel == null
+                                  ? _tabs[currentTabIndex]
+                                  : uiState.activeFolder,
+                              isDark,
+                            ),
                           );
                         }
 
@@ -969,7 +971,7 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text('📬', style: TextStyle(fontSize: 44)),
+            const Text('\u{1F4EC}', style: TextStyle(fontSize: 44)),
             const SizedBox(height: 12),
             Text(
               'Your folder is empty',
@@ -983,95 +985,56 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
         ),
       );
     }
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: isDark ? Colors.white10 : BNXColors.lightBg,
-              shape: BoxShape.circle,
+    return FadeInWidget(
+      duration: BNXDurations.medium,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white10 : BNXColors.lightBg,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.mail_outline_rounded,
+                size: 48,
+                color: isDark ? Colors.white30 : Colors.grey,
+              ),
             ),
-            child: Icon(
-              Icons.mail_outline_rounded,
-              size: 48,
-              color: isDark ? Colors.white30 : Colors.grey,
+            const SizedBox(height: 16),
+            Text(
+              'No emails in $folder',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'No emails in $folder',
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Everything is clear and up to date!',
-            style: TextStyle(color: Colors.grey, fontSize: 13),
-          ),
-        ],
+            const SizedBox(height: 4),
+            const Text(
+              'Everything is clear and up to date!',
+              style: TextStyle(color: Colors.grey, fontSize: 13),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildLoadingState(bool isDark) {
     return ListView.builder(
-      itemCount: 6,
-      padding: const EdgeInsets.symmetric(vertical: 12),
+      itemCount: 7,
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      physics: const NeverScrollableScrollPhysics(),
       itemBuilder: (context, index) {
         return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          height: 72,
+          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.05)
-                : Colors.white.withValues(alpha: 0.7),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isDark ? Colors.white10 : Colors.grey.shade200,
+            color: isDark ? const Color(0xFF1E293B) : Colors.white,
+            borderRadius: BorderRadius.vertical(
+              top: index == 0 ? const Radius.circular(16) : Radius.zero,
+              bottom: index == 6 ? const Radius.circular(16) : Radius.zero,
             ),
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.white10 : Colors.grey.shade300,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        width: 140,
-                        height: 12,
-                        decoration: BoxDecoration(
-                          color: isDark ? Colors.white10 : Colors.grey.shade300,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Container(
-                        width: 200,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: isDark ? Colors.white10 : Colors.grey.shade200,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
+          child: EmailSkeletonTile(isDark: isDark),
         );
       },
     );

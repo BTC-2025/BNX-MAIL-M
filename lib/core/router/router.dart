@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
+import '../widgets/bnx_animations.dart';
 import '../../features/dashboard/presentation/dashboard_shell.dart';
 import '../../features/dashboard/presentation/splash_screen.dart';
 import '../../features/inbox/presentation/email_list_screen.dart';
@@ -15,6 +16,7 @@ import '../../features/auth/presentation/pages/register_account_type_screen.dart
 import '../widgets/email_body.dart';
 import '../../features/dashboard/presentation/connect_settings_screen.dart';
 import '../../features/profile/presentation/manage_account_screen.dart';
+import '../../features/profile/presentation/profile_screen.dart';
 import '../../standalone_macos_storage/standalone_macos_storage.dart';
 
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>(
@@ -33,7 +35,24 @@ final goRouter = GoRouter(
     ),
     GoRoute(
       path: '/manage-account',
-      builder: (context, state) => const ManageAccountScreen(),
+      pageBuilder: (context, state) {
+        if (defaultTargetPlatform == TargetPlatform.macOS) {
+          return NoTransitionPage(key: state.pageKey, child: const ManageAccountScreen());
+        }
+        return CustomTransitionPage(
+          key: state.pageKey,
+          child: const ManageAccountScreen(),
+          transitionDuration: BNXDurations.normal,
+          reverseTransitionDuration: BNXDurations.fast,
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            if (MediaQuery.of(context).disableAnimations) return child;
+            final fade = CurvedAnimation(parent: animation, curve: BNXCurves.enter);
+            final slide = Tween<Offset>(begin: const Offset(0, 0.04), end: Offset.zero)
+                .animate(CurvedAnimation(parent: animation, curve: BNXCurves.enter));
+            return FadeTransition(opacity: fade, child: SlideTransition(position: slide, child: child));
+          },
+        );
+      },
     ),
     GoRoute(
       path: '/storage',
@@ -82,9 +101,14 @@ final goRouter = GoRouter(
         ),
         GoRoute(
           path: '/profile',
-          redirect: (context, state) => '/manage-account',
+          redirect: (context, state) {
+            if (defaultTargetPlatform == TargetPlatform.macOS) {
+              return '/manage-account';
+            }
+            return null;
+          },
           builder: (context, state) {
-            return const ManageAccountScreen();
+            return const ProfileScreen();
           },
         ),
         GoRoute(
@@ -92,14 +116,20 @@ final goRouter = GoRouter(
           pageBuilder: (context, state) {
             final id = state.pathParameters['id']!;
             if (defaultTargetPlatform == TargetPlatform.macOS) {
-              return NoTransitionPage(
-                key: state.pageKey,
-                child: EmailBody(emailId: id),
-              );
+              return NoTransitionPage(key: state.pageKey, child: EmailBody(emailId: id));
             }
-            return MaterialPage(
+            return CustomTransitionPage(
               key: state.pageKey,
               child: EmailBody(emailId: id),
+              transitionDuration: BNXDurations.normal,
+              reverseTransitionDuration: BNXDurations.fast,
+              transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                if (MediaQuery.of(context).disableAnimations) return child;
+                final fade = CurvedAnimation(parent: animation, curve: BNXCurves.enter);
+                final slide = Tween<Offset>(begin: const Offset(0.06, 0), end: Offset.zero)
+                    .animate(CurvedAnimation(parent: animation, curve: BNXCurves.enter));
+                return FadeTransition(opacity: fade, child: SlideTransition(position: slide, child: child));
+              },
             );
           },
         ),
@@ -108,14 +138,20 @@ final goRouter = GoRouter(
           pageBuilder: (context, state) {
             final id = state.pathParameters['id']!;
             if (defaultTargetPlatform == TargetPlatform.macOS) {
-              return NoTransitionPage(
-                key: state.pageKey,
-                child: DraftDetailScreen(draftId: id),
-              );
+              return NoTransitionPage(key: state.pageKey, child: DraftDetailScreen(draftId: id));
             }
-            return MaterialPage(
+            return CustomTransitionPage(
               key: state.pageKey,
               child: DraftDetailScreen(draftId: id),
+              transitionDuration: BNXDurations.normal,
+              reverseTransitionDuration: BNXDurations.fast,
+              transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                if (MediaQuery.of(context).disableAnimations) return child;
+                final fade = CurvedAnimation(parent: animation, curve: BNXCurves.enter);
+                final slide = Tween<Offset>(begin: const Offset(0.06, 0), end: Offset.zero)
+                    .animate(CurvedAnimation(parent: animation, curve: BNXCurves.enter));
+                return FadeTransition(opacity: fade, child: SlideTransition(position: slide, child: child));
+              },
             );
           },
         ),

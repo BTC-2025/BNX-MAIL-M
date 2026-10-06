@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'avatar_widget.dart';
+import 'bnx_animations.dart';
 import 'label_chip.dart';
 import '../../models/email_model.dart';
 import '../../models/label_model.dart';
@@ -366,13 +367,8 @@ class _EmailTileState extends ConsumerState<EmailTile> {
                                   .read(emailProvider.notifier)
                                   .toggleStar(email.id, 'Inbox');
                             },
-                            child: Icon(
-                              email.isStarred
-                                  ? Icons.star_rounded
-                                  : Icons.star_border_rounded,
-                              color: email.isStarred
-                                  ? BNXColors.starActive
-                                  : BNXColors.starInactive,
+                            child: AnimatedStarIcon(
+                              isStarred: email.isStarred,
                               size: 20,
                             ),
                           ),
@@ -470,13 +466,8 @@ class _EmailTileState extends ConsumerState<EmailTile> {
                 ),
               ),
               IconButton(
-                icon: Icon(
-                  email.isStarred
-                      ? Icons.star_rounded
-                      : Icons.star_border_rounded,
-                  color: email.isStarred
-                      ? BNXColors.starActive
-                      : BNXColors.starInactive,
+                icon: AnimatedStarIcon(
+                  isStarred: email.isStarred,
                   size: 20,
                 ),
                 onPressed: () {

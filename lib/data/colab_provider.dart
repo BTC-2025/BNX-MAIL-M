@@ -490,6 +490,7 @@ final colabListProvider =
     });
 
 final selectedColabIdProvider = StateProvider<String?>((ref) => null);
+final selectedCasboxThreadProvider = StateProvider<String?>((ref) => null);
 
 final colabInvitationsProvider =
     StateNotifierProvider<ColabInvitationsNotifier, List<ColabInvitation>>((ref) {

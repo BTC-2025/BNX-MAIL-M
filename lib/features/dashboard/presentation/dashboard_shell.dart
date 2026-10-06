@@ -12,6 +12,7 @@ import '../../../core/widgets/sidebar.dart';
 import '../../../core/widgets/top_search_bar.dart';
 import '../../../core/widgets/compose_dialog.dart';
 import '../../../core/widgets/avatar_widget.dart';
+import '../../../core/widgets/bnx_animations.dart';
 import '../../../models/account_model.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../data/email_provider.dart';
@@ -137,7 +138,8 @@ class DashboardShell extends ConsumerWidget {
                   currentRoute != '/compose' &&
                   currentRoute != '/connect-settings' &&
                   !(currentRoute == '/colab' &&
-                      ref.watch(selectedColabIdProvider) != null) &&
+                      (ref.watch(selectedColabIdProvider) != null ||
+                          ref.watch(selectedCasboxThreadProvider) != null)) &&
                   MediaQuery.of(context).viewInsets.bottom == 0 &&
                   uiState.composeStatus == ComposeStatus.closed)
               ? Container(
@@ -217,7 +219,8 @@ class DashboardShell extends ConsumerWidget {
                   uiState.composeStatus == ComposeStatus.closed &&
                   (currentRoute == '/home' ||
                       (currentRoute == '/colab' &&
-                          uiState.activeFolder == 'Casbox')) &&
+                          uiState.activeFolder == 'Casbox' &&
+                          ref.watch(selectedCasboxThreadProvider) == null)) &&
                   uiState.activeFolder != 'Templates' &&
                   uiState.activeFolder != 'Settings')
               ? Padding(
@@ -396,24 +399,19 @@ class DashboardShell extends ConsumerWidget {
                                               : BNXConstants.softShadow,
                                         ),
                                         child: AnimatedSwitcher(
-                                          duration: const Duration(
-                                            milliseconds: 180,
-                                          ),
-                                          switchInCurve: Curves.easeOutCubic,
-                                          switchOutCurve: Curves.easeInCubic,
-                                          transitionBuilder:
-                                              (
-                                                Widget child,
-                                                Animation<double> animation,
-                                              ) {
-                                                return FadeTransition(
-                                                  opacity: CurvedAnimation(
-                                                    parent: animation,
-                                                    curve: Curves.easeInOut,
-                                                  ),
-                                                  child: child,
-                                                );
-                                              },
+                                          duration: BNXDurations.normal,
+                                          switchInCurve: BNXCurves.enter,
+                                          switchOutCurve: BNXCurves.exit,
+                                          transitionBuilder: (child, animation) {
+                                            final slide = Tween<Offset>(
+                                              begin: const Offset(0, 0.02),
+                                              end: Offset.zero,
+                                            ).animate(CurvedAnimation(parent: animation, curve: BNXCurves.enter));
+                                            return FadeTransition(
+                                              opacity: CurvedAnimation(parent: animation, curve: Curves.easeIn),
+                                              child: SlideTransition(position: slide, child: child),
+                                            );
+                                          },
                                           child: child,
                                         ),
                                       ),
@@ -2445,12 +2443,13 @@ class DashboardShell extends ConsumerWidget {
     required VoidCallback onTap,
     required bool isDark,
   }) {
-    return GestureDetector(
+    return PressScaleEffect(
+      scaleFactor: 0.93,
+      duration: BNXDurations.micro,
       onTap: onTap,
-      behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeInOut,
+        duration: BNXDurations.normal,
+        curve: BNXCurves.standard,
         padding: EdgeInsets.symmetric(
           horizontal: isSelected ? 16.0 : 12.0,
           vertical: 8.0,
@@ -2462,16 +2461,22 @@ class DashboardShell extends ConsumerWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              icon,
-              color: isSelected
-                  ? Colors.white
-                  : (isDark ? Colors.white54 : Colors.black54),
-              size: 20,
+            AnimatedSwitcher(
+              duration: BNXDurations.fast,
+              transitionBuilder: (child, anim) =>
+                  FadeTransition(opacity: anim, child: child),
+              child: Icon(
+                icon,
+                key: ValueKey(isSelected),
+                color: isSelected
+                    ? Colors.white
+                    : (isDark ? Colors.white54 : Colors.black54),
+                size: 20,
+              ),
             ),
             AnimatedSize(
-              duration: const Duration(milliseconds: 250),
-              curve: Curves.easeInOut,
+              duration: BNXDurations.normal,
+              curve: BNXCurves.standard,
               child: isSelected
                   ? Row(
                       children: [

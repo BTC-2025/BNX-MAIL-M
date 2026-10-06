@@ -66,6 +66,11 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
       ref.read(selectedColabIdProvider.notifier).state = null;
       return;
     }
+    final selectedCasboxThread = ref.read(selectedCasboxThreadProvider);
+    if (selectedCasboxThread != null) {
+      ref.read(selectedCasboxThreadProvider.notifier).state = null;
+      return;
+    }
     final uiState = ref.read(appUiProvider);
     if (uiState.activeFolder == 'Casbox') {
       ref.read(appUiProvider.notifier).selectFolder('Inbox');
@@ -2345,6 +2350,24 @@ class _CasboxInteractiveWidgetState
     });
   }
 
+  void _toggleConnectionsPopup() {
+    setState(() {
+      _showConnectionsPopup = !_showConnectionsPopup;
+    });
+    if (_showConnectionsPopup) {
+      CasboxRepository.getAuthorizedContacts().then((authContacts) {
+        if (mounted && authContacts.isNotEmpty) {
+          setState(() {
+            _authorizedContacts = authContacts;
+            for (final c in authContacts) {
+              _contactConnectionStatus[c] = true;
+            }
+          });
+        }
+      });
+    }
+  }
+
   @override
   void dispose() {
     _casboxPollingTimer?.cancel();
@@ -2459,71 +2482,7 @@ class _CasboxInteractiveWidgetState
     });
   }
 
-  Widget _buildTabButton(String label, int count, bool isDark) {
-    final bool isSelected = _activeTab == label ||
-        (label == 'Messages' && _activeTab == 'Received') ||
-        (label == 'Received' && _activeTab == 'Messages');
-    final Color activeColor = const Color(0xFF195BAC);
 
-    return GestureDetector(
-      onTap: () => setState(() {
-        if (label == 'Messages') {
-          _activeTab = 'Received';
-        } else {
-          _activeTab = label;
-        }
-        _selectedDesktopMessage = null;
-      }),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? (isDark ? Colors.white.withValues(alpha: 0.1) : Colors.white)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: isSelected && !isDark
-              ? [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-              : [],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                color: isSelected
-                    ? (isDark ? Colors.white : activeColor)
-                    : (isDark ? Colors.white38 : Colors.grey.shade600),
-              ),
-            ),
-            if (count >= 0) ...[
-              const SizedBox(width: 4),
-              Text(
-                '($count)',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w400,
-                  color: isSelected
-                      ? (isDark
-                            ? Colors.white70
-                            : activeColor.withValues(alpha: 0.7))
-                      : (isDark ? Colors.white24 : Colors.grey.shade400),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -2545,36 +2504,6 @@ class _CasboxInteractiveWidgetState
     }
 
     final filteredUserMessages = allMessages;
-
-    // ── Tab classification ──
-    final rawReceived = filteredUserMessages
-        .where((m) =>
-            !isSentByMe(m) &&
-            m.status.toUpperCase() != 'PENDING' &&
-            m.status.toUpperCase() != 'REQUEST' &&
-            !_archivedIds.contains(m.id))
-        .toList();
-    final rawCombined = filteredUserMessages
-        .where((m) => !isSentByMe(m) && !_archivedIds.contains(m.id))
-        .toList();
-    final rawRequests = filteredUserMessages
-        .where(
-          (m) =>
-              !isSentByMe(m) &&
-              (m.status.toUpperCase() == 'PENDING' ||
-                  m.status.toUpperCase() == 'REQUEST') &&
-              !_archivedIds.contains(m.id),
-        )
-        .toList();
-    final rawArchived = filteredUserMessages
-        .where((m) => _archivedIds.contains(m.id))
-        .toList();
-
-    final receivedCount = rawReceived.where((m) => !m.isRead).length;
-    final combinedCount = rawCombined.where((m) => !m.isRead).length;
-    final sentCount = -1;
-    final requestsCount = rawRequests.length;
-    final archivedCount = rawArchived.length;
 
     final messages = filteredUserMessages.where((m) {
       if (_activeTab == 'Archived') {
@@ -2604,257 +2533,49 @@ class _CasboxInteractiveWidgetState
 
     messages.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
-    final isSelectionMode = _selectedIds.isNotEmpty;
-    final allSelected =
-        messages.isNotEmpty && _selectedIds.length == messages.length;
-
-    Widget headerWidget;
-    if (isSelectionMode) {
-      headerWidget = Container(
-        key: const ValueKey('selection_header'),
-        color: isDark ? const Color(0xFF1E293B) : Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 10.0),
-        child: Row(
-          children: [
-            IconButton(
-              icon: const Icon(Icons.arrow_back_rounded),
-              onPressed: _clearSelection,
-              tooltip: 'Clear selection',
-            ),
-            Checkbox(
-              value: allSelected,
-              activeColor: const Color(0xFF195BAC),
-              onChanged: (val) {
-                setState(() {
-                  if (val == true) {
-                    _selectedIds.addAll(messages.map((m) => m.id));
-                  } else {
-                    _selectedIds.clear();
-                  }
-                });
-              },
-            ),
-            const SizedBox(width: 4),
-            Text(
-              '${_selectedIds.length} selected',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: isDark ? Colors.white70 : const Color(0xFF195BAC),
-              ),
-            ),
-            const Spacer(),
-            if (_activeTab == 'Archived')
-              IconButton(
-                icon: const Icon(Icons.unarchive_outlined),
-                onPressed: () {
-                  setState(() {
-                    _archivedIds.removeAll(_selectedIds);
-                  });
-                  _clearSelection();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Unarchived casbox items.')),
-                  );
-                },
-                tooltip: 'Unarchive',
-              )
-            else
-              IconButton(
-                icon: const Icon(Icons.archive_outlined),
-                onPressed: () {
-                  setState(() {
-                    _archivedIds.addAll(_selectedIds);
-                  });
-                  _clearSelection();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Archived casbox items.')),
-                  );
-                },
-                tooltip: 'Archive',
-              ),
-            IconButton(
-              icon: const Icon(Icons.delete_outline_rounded),
-              onPressed: () {
-                for (final id in _selectedIds) {
-                  ref.read(casboxMessagesProvider.notifier).deleteMessage(id);
-                }
-                _clearSelection();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Deleted casbox items.')),
-                );
-              },
-              tooltip: 'Delete',
-            ),
-            IconButton(
-              icon: const Icon(Icons.mark_email_unread_outlined),
-              onPressed: () {
-                _clearSelection();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Marked as unread.')),
-                );
-              },
-              tooltip: 'Mark as unread',
-            ),
-          ],
-        ),
-      );
-    } else {
-      headerWidget = Container(
-        key: const ValueKey('normal_header'),
-        color: isDark ? BNXColors.darkSurface : Colors.white,
-        padding: const EdgeInsets.fromLTRB(12.0, 10.0, 12.0, 16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.menu_rounded),
-                  onPressed: () => Scaffold.of(context).openDrawer(),
-                  tooltip: 'Open menu',
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  'Casbox',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : BNXColors.lightTextPrimary,
-                  ),
-                ),
-                const Spacer(),
-                if (_isRefreshing)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12),
-                    child: SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Color(0xFF195bac),
-                      ),
-                    ),
-                  )
-                else
-                  IconButton(
-                    onPressed: _triggerRefresh,
-                    icon: const Icon(Icons.refresh_rounded),
-                    tooltip: 'Refresh',
-                  ),
-                GestureDetector(
-                  onTap: () => context.push('/connect-settings'),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 7,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF195BAC),
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(
-                            0xFF195BAC,
-                          ).withValues(alpha: 0.25),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.person_add_rounded,
-                          color: Colors.white,
-                          size: 16,
-                        ),
-                        SizedBox(width: 5),
-                        Text(
-                          'Connect',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                            letterSpacing: 0.2,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.05)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                physics: const BouncingScrollPhysics(),
-                child: Row(
-                  children: [
-                    _buildTabButton('Messages', receivedCount, isDark),
-                    _buildTabButton('Combined Chat', combinedCount, isDark),
-                    _buildTabButton('Sent', sentCount, isDark),
-                    _buildTabButton('Requests', requestsCount, isDark),
-                    _buildTabButton('Archived', archivedCount, isDark),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
+    final selectedThreadId = ref.watch(selectedCasboxThreadProvider);
+    if (selectedThreadId == null && _selectedDesktopMessage != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _selectedDesktopMessage != null) {
+          setState(() {
+            _selectedDesktopMessage = null;
+          });
+        }
+      });
+    } else if (selectedThreadId != null && _selectedDesktopMessage == null) {
+      final matching = allMessages.where((m) => m.id == selectedThreadId);
+      if (matching.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _selectedDesktopMessage == null) {
+            setState(() {
+              _selectedDesktopMessage = matching.first;
+            });
+          }
+        });
+      }
     }
 
-    final bool isDesktopOS =
-        !kIsWeb &&
-        (defaultTargetPlatform == TargetPlatform.macOS ||
-            defaultTargetPlatform == TargetPlatform.windows);
-
-    if (isDesktopOS) {
-      return _buildDesktopCasboxView(
-        isDark,
-        messages,
-        allMessages,
-        activeAccount,
-      );
-    }
-
-    return Scaffold(
-      backgroundColor: isDark ? BNXColors.darkBg : BNXColors.lightBg,
-      body: SafeArea(
+    return PopScope(
+      canPop: _selectedDesktopMessage == null && !_showConnectionsPopup,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (_showConnectionsPopup) {
+          setState(() => _showConnectionsPopup = false);
+          return;
+        }
+        if (_selectedDesktopMessage != null) {
+          setState(() => _selectedDesktopMessage = null);
+          ref.read(selectedCasboxThreadProvider.notifier).state = null;
+        }
+      },
+      child: SafeArea(
+        top: widget.isMobile,
         bottom: false,
-        child: Container(
-          color: isDark ? BNXColors.darkBg : const Color(0xFFE9F4FF),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
-                child: headerWidget,
-              ),
-              Expanded(
-                child: _activeTab == 'Combined Chat'
-                    ? _buildCombinedChatMobileMailList(
-                        isDark,
-                        isSelectionMode,
-                        messages,
-                      )
-                    : _buildMessageListContent(
-                        isDark,
-                        isSelectionMode,
-                        messages,
-                      ),
-              ),
-            ],
-          ),
+        child: _buildDesktopCasboxView(
+          isDark,
+          messages,
+          allMessages,
+          activeAccount,
         ),
       ),
     );
@@ -2866,8 +2587,10 @@ class _CasboxInteractiveWidgetState
     List<CasboxMessage> allMessages,
     AccountModel activeAccount,
   ) {
-    if ((_activeTab == 'Messages' || _activeTab == 'Received') &&
-        _selectedDesktopMessage != null) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isNarrow = screenWidth < 680;
+
+    if (_selectedDesktopMessage != null) {
       return Container(
         color: isDark ? BNXColors.darkSurface : Colors.white,
         child: _buildDesktopChatConversationView(
@@ -2885,7 +2608,7 @@ class _CasboxInteractiveWidgetState
         children: [
           Column(
             children: [
-              _buildDesktopCasboxHeader(isDark),
+              _buildDesktopCasboxHeader(isDark, screenWidth),
               Expanded(
                 child: _activeTab == 'Combined Chat'
                     ? _buildDesktopCombinedChatMailList(
@@ -2901,18 +2624,220 @@ class _CasboxInteractiveWidgetState
               ),
             ],
           ),
-          if (_showConnectionsPopup)
-            Positioned(
-              top: 52,
-              right: 80,
-              child: _buildConnectionsPopup(isDark),
+          if (_showConnectionsPopup) ...[
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: () => setState(() => _showConnectionsPopup = false),
+                child: const SizedBox.expand(),
+              ),
             ),
+            Positioned(
+              top: isNarrow ? 98 : 52,
+              right: isNarrow ? 12 : 80,
+              left: isNarrow ? 12 : null,
+              child: _buildConnectionsPopup(isDark, screenWidth),
+            ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildDesktopCasboxHeader(bool isDark) {
+  Widget _buildDesktopCasboxHeader(bool isDark, double screenWidth) {
+    final isNarrow = screenWidth < 680;
+
+    if (isNarrow) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isDark ? BNXColors.darkSurface : Colors.white,
+          border: Border(
+            bottom: BorderSide(
+              color: isDark ? Colors.white12 : const Color(0xFFF1F5F9),
+              width: 1,
+            ),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.menu_rounded),
+                  onPressed: () => Scaffold.of(context).openDrawer(),
+                  tooltip: 'Open menu',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  visualDensity: VisualDensity.compact,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  'Casbox',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : BNXColors.lightTextPrimary,
+                  ),
+                ),
+                const Spacer(),
+                Flexible(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Button 1: Connections icon button
+                        MouseRegion(
+                          cursor: SystemMouseCursors.click,
+                          child: GestureDetector(
+                            onTap: _toggleConnectionsPopup,
+                            child: Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: _showConnectionsPopup
+                                    ? const Color(0xFFDBEAFE)
+                                    : (isDark ? Colors.white10 : const Color(0xFFEFF6FF)),
+                              ),
+                              alignment: Alignment.center,
+                              child: const Icon(
+                                Icons.person_add_alt_1_rounded,
+                                size: 16,
+                                color: Color(0xFF195BAC),
+                              ),
+                            ),
+                          ),
+                        ),
+                        // Button 2: Compose button (hidden on Android and iOS mobile)
+                        if (defaultTargetPlatform != TargetPlatform.android &&
+                            defaultTargetPlatform != TargetPlatform.iOS) ...[
+                          const SizedBox(width: 6),
+                          ElevatedButton(
+                            onPressed: () {
+                              ref
+                                  .read(appUiProvider.notifier)
+                                  .setComposeStatus(ComposeStatus.normal);
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF195BAC),
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                            ),
+                            child: const Text(
+                              'Compose',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(width: 2),
+                        // Button 3: Block Users list icon
+                        IconButton(
+                          icon: Icon(
+                            Icons.do_not_disturb_alt_outlined,
+                            size: 19,
+                            color: isDark ? Colors.white70 : const Color(0xFF475569),
+                          ),
+                          tooltip: 'Blocked Users',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () => _showBlockedUsersDialog(context, isDark),
+                        ),
+                        // Button 4: Refresh icon
+                        IconButton(
+                          icon: _isRefreshing
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Color(0xFF195BAC),
+                                  ),
+                                )
+                              : Icon(
+                                  Icons.refresh_rounded,
+                                  size: 19,
+                                  color: isDark ? Colors.white70 : const Color(0xFF475569),
+                                ),
+                          tooltip: 'Refresh',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                          visualDensity: VisualDensity.compact,
+                          onPressed: _triggerRefresh,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildDesktopSegment('Messages', _activeTab == 'Received' || _activeTab == 'Messages', () {
+                      setState(() {
+                        _activeTab = 'Received';
+                        _selectedDesktopMessage = null;
+                      });
+                      ref.read(selectedCasboxThreadProvider.notifier).state = null;
+                    }, isDark),
+                    _buildDesktopSegment('Combined Chat', _activeTab == 'Combined Chat', () {
+                      setState(() {
+                        _activeTab = 'Combined Chat';
+                        _selectedDesktopMessage = null;
+                      });
+                      ref.read(selectedCasboxThreadProvider.notifier).state = null;
+                    }, isDark),
+                    _buildDesktopSegment('Requests', _activeTab == 'Requests', () {
+                      setState(() {
+                        _activeTab = 'Requests';
+                        _selectedDesktopMessage = null;
+                      });
+                      ref.read(selectedCasboxThreadProvider.notifier).state = null;
+                    }, isDark),
+                    _buildDesktopSegment('Archived', _activeTab == 'Archived', () {
+                      setState(() {
+                        _activeTab = 'Archived';
+                        _selectedDesktopMessage = null;
+                      });
+                      ref.read(selectedCasboxThreadProvider.notifier).state = null;
+                    }, isDark),
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: 16,
+                      color: isDark ? Colors.white38 : const Color(0xFF94A3B8),
+                    ),
+                    const SizedBox(width: 4),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
@@ -2941,24 +2866,28 @@ class _CasboxInteractiveWidgetState
                     _activeTab = 'Received';
                     _selectedDesktopMessage = null;
                   });
+                  ref.read(selectedCasboxThreadProvider.notifier).state = null;
                 }, isDark),
                 _buildDesktopSegment('Combined Chat', _activeTab == 'Combined Chat', () {
                   setState(() {
                     _activeTab = 'Combined Chat';
                     _selectedDesktopMessage = null;
                   });
+                  ref.read(selectedCasboxThreadProvider.notifier).state = null;
                 }, isDark),
                 _buildDesktopSegment('Requests', _activeTab == 'Requests', () {
                   setState(() {
                     _activeTab = 'Requests';
                     _selectedDesktopMessage = null;
                   });
+                  ref.read(selectedCasboxThreadProvider.notifier).state = null;
                 }, isDark),
                 _buildDesktopSegment('Archived', _activeTab == 'Archived', () {
                   setState(() {
                     _activeTab = 'Archived';
                     _selectedDesktopMessage = null;
                   });
+                  ref.read(selectedCasboxThreadProvider.notifier).state = null;
                 }, isDark),
                 const SizedBox(width: 4),
                 Icon(
@@ -2975,23 +2904,7 @@ class _CasboxInteractiveWidgetState
           MouseRegion(
             cursor: SystemMouseCursors.click,
             child: GestureDetector(
-              onTap: () {
-                setState(() {
-                  _showConnectionsPopup = !_showConnectionsPopup;
-                });
-                if (_showConnectionsPopup) {
-                  CasboxRepository.getAuthorizedContacts().then((authContacts) {
-                    if (mounted && authContacts.isNotEmpty) {
-                      setState(() {
-                        _authorizedContacts = authContacts;
-                        for (final c in authContacts) {
-                          _contactConnectionStatus[c] = true;
-                        }
-                      });
-                    }
-                  });
-                }
-              },
+              onTap: _toggleConnectionsPopup,
               child: Container(
                 width: 34,
                 height: 34,
@@ -3045,11 +2958,20 @@ class _CasboxInteractiveWidgetState
           ),
           // Button 4: Refresh icon
           IconButton(
-            icon: Icon(
-              Icons.refresh_rounded,
-              size: 20,
-              color: isDark ? Colors.white70 : const Color(0xFF475569),
-            ),
+            icon: _isRefreshing
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Color(0xFF195BAC),
+                    ),
+                  )
+                : Icon(
+                    Icons.refresh_rounded,
+                    size: 20,
+                    color: isDark ? Colors.white70 : const Color(0xFF475569),
+                  ),
             tooltip: 'Refresh',
             onPressed: _triggerRefresh,
           ),
@@ -3058,7 +2980,12 @@ class _CasboxInteractiveWidgetState
     );
   }
 
-  Widget _buildConnectionsPopup(bool isDark) {
+  Widget _buildConnectionsPopup(bool isDark, [double? screenWidth]) {
+    final isNarrow = screenWidth != null && screenWidth < 680;
+    final popupWidth = isNarrow
+        ? (screenWidth - 24).clamp(280.0, 430.0)
+        : 430.0;
+
     final contacts = <Map<String, dynamic>>[];
     if (_authorizedContacts.isNotEmpty) {
       for (final email in _authorizedContacts) {
@@ -3091,7 +3018,7 @@ class _CasboxInteractiveWidgetState
     }
 
     return Container(
-      width: 430,
+      width: popupWidth,
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E293B) : Colors.white,
         borderRadius: BorderRadius.circular(20),
@@ -3108,7 +3035,7 @@ class _CasboxInteractiveWidgetState
           ),
         ],
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      padding: EdgeInsets.symmetric(horizontal: isNarrow ? 12 : 18, vertical: 16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3217,7 +3144,6 @@ class _CasboxInteractiveWidgetState
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                                 color: Color(0xFF195BAC),
-                                fontSize: 14,
                               ),
                             ),
                           ),
@@ -3269,7 +3195,7 @@ class _CasboxInteractiveWidgetState
                       ],
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
                   // Connected pill button
                   GestureDetector(
                     onTap: () async {
@@ -3282,9 +3208,9 @@ class _CasboxInteractiveWidgetState
                       await CasboxRepository.updateAuthorizedContacts(_authorizedContacts);
                     },
                     child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isNarrow ? 5 : 8,
+                        vertical: 3.5,
                       ),
                       decoration: BoxDecoration(
                         color: isConnected
@@ -3310,12 +3236,12 @@ class _CasboxInteractiveWidgetState
                               size: 11,
                               color: Color(0xFF16A34A),
                             ),
-                            const SizedBox(width: 4),
+                            const SizedBox(width: 3),
                           ],
                           Text(
                             'Connected',
                             style: TextStyle(
-                              fontSize: 11,
+                              fontSize: isNarrow ? 9.5 : 11,
                               fontWeight: isConnected
                                   ? FontWeight.w600
                                   : FontWeight.w400,
@@ -3330,7 +3256,7 @@ class _CasboxInteractiveWidgetState
                       ),
                     ),
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 4),
                   // Disconnected button
                   GestureDetector(
                     onTap: () async {
@@ -3341,9 +3267,9 @@ class _CasboxInteractiveWidgetState
                       await CasboxRepository.updateAuthorizedContacts(_authorizedContacts);
                     },
                     child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isNarrow ? 5 : 8,
+                        vertical: 3.5,
                       ),
                       decoration: BoxDecoration(
                         color: !isConnected
@@ -3361,9 +3287,9 @@ class _CasboxInteractiveWidgetState
                         ),
                       ),
                       child: Text(
-                        'Disconnected',
+                        isNarrow ? 'Disconnect' : 'Disconnected',
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: isNarrow ? 9.5 : 11,
                           fontWeight: !isConnected
                               ? FontWeight.w600
                               : FontWeight.w400,
@@ -3754,12 +3680,17 @@ class _CasboxInteractiveWidgetState
     // Full Width Mail List View
     final allSelected =
         messages.isNotEmpty && _selectedIds.length == messages.length;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isNarrow = screenWidth < 600;
 
     return Column(
       children: [
         // Subheader bar matching BNX Mail Inbox
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: EdgeInsets.symmetric(
+            horizontal: isNarrow ? 8 : 16,
+            vertical: 4,
+          ),
           decoration: BoxDecoration(
             color: isDark
                 ? BNXColors.darkSurface
@@ -3776,6 +3707,8 @@ class _CasboxInteractiveWidgetState
               Checkbox(
                 value: allSelected,
                 activeColor: const Color(0xFF195BAC),
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 onChanged: (val) {
                   setState(() {
                     if (val == true) {
@@ -3786,21 +3719,29 @@ class _CasboxInteractiveWidgetState
                   });
                 },
               ),
-              const SizedBox(width: 8),
-              Text(
-                'INCOMING MESSAGES (${messages.length})',
-                style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.8,
-                  color: isDark ? Colors.white54 : const Color(0xFF64748B),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  _selectedIds.isNotEmpty
+                      ? '${_selectedIds.length} SELECTED'
+                      : 'INCOMING MESSAGES (${messages.length})',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8,
+                    color: isDark ? Colors.white54 : const Color(0xFF64748B),
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const Spacer(),
               if (_selectedIds.isNotEmpty) ...[
+                const SizedBox(width: 4),
                 IconButton(
                   icon: const Icon(Icons.mark_email_read_outlined, size: 18),
                   tooltip: 'Mark as read',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  visualDensity: VisualDensity.compact,
                   onPressed: () {
                     for (final id in _selectedIds) {
                       ref.read(casboxMessagesProvider.notifier).markAsRead(id);
@@ -3811,6 +3752,9 @@ class _CasboxInteractiveWidgetState
                 IconButton(
                   icon: const Icon(Icons.archive_outlined, size: 18),
                   tooltip: 'Archive',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  visualDensity: VisualDensity.compact,
                   onPressed: () {
                     setState(() {
                       _archivedIds.addAll(_selectedIds);
@@ -3821,6 +3765,9 @@ class _CasboxInteractiveWidgetState
                 IconButton(
                   icon: const Icon(Icons.delete_outline_rounded, size: 18),
                   tooltip: 'Delete',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  visualDensity: VisualDensity.compact,
                   onPressed: () {
                     for (final id in _selectedIds) {
                       ref
@@ -3908,263 +3855,433 @@ class _CasboxInteractiveWidgetState
                         ),
                       ],
                     ),
-                    child: Row(
-                      children: [
-                        // 1. Unread dot
-                        Container(
-                          width: 8,
-                          height: 8,
-                          margin: const EdgeInsets.only(right: 8),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: !msg.isRead
-                                ? const Color(0xFF195BAC)
-                                : Colors.transparent,
-                          ),
-                        ),
-                        // 2. Star Icon
-                        IconButton(
-                          icon: Icon(
-                            msg.isStarred
-                                ? Icons.star_rounded
-                                : Icons.star_border_rounded,
-                            color: msg.isStarred
-                                ? Colors.amber
-                                : (isDark
-                                    ? Colors.white30
-                                    : Colors.grey.shade400),
-                            size: 20,
-                          ),
-                          onPressed: () {
-                            ref
-                                .read(casboxMessagesProvider.notifier)
-                                .toggleStar(msg.id);
-                          },
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                        ),
-                        const SizedBox(width: 12),
-                        // 3. Checkbox or Avatar
-                        GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              if (_selectedIds.contains(msg.id)) {
-                                _selectedIds.remove(msg.id);
-                              } else {
-                                _selectedIds.add(msg.id);
-                              }
-                            });
-                          },
-                          child: SizedBox(
-                            width: 28,
-                            height: 28,
-                            child: (isHovered || _selectedIds.isNotEmpty)
-                                ? Checkbox(
-                                    value: isBulkSelected,
-                                    activeColor: const Color(0xFF195BAC),
-                                    onChanged: (val) {
-                                      setState(() {
-                                        if (val == true) {
-                                          _selectedIds.add(msg.id);
-                                        } else {
-                                          _selectedIds.remove(msg.id);
-                                        }
-                                      });
-                                    },
-                                  )
-                                : Container(
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: isDark
-                                          ? const Color(0xFF1E3A5F)
-                                          : const Color(0xFFDBEAFE),
+                    child: isNarrow
+                        ? Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // 1. Unread dot
+                              Container(
+                                width: 8,
+                                height: 8,
+                                margin: const EdgeInsets.only(top: 6, right: 6),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: !msg.isRead
+                                      ? const Color(0xFF195BAC)
+                                      : Colors.transparent,
+                                ),
+                              ),
+                              // 2. Star Icon
+                              IconButton(
+                                icon: Icon(
+                                  msg.isStarred
+                                      ? Icons.star_rounded
+                                      : Icons.star_border_rounded,
+                                  color: msg.isStarred
+                                      ? Colors.amber
+                                      : (isDark
+                                          ? Colors.white30
+                                          : Colors.grey.shade400),
+                                  size: 18,
+                                ),
+                                onPressed: () {
+                                  ref
+                                      .read(casboxMessagesProvider.notifier)
+                                      .toggleStar(msg.id);
+                                },
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(
+                                    minWidth: 24, minHeight: 24),
+                              ),
+                              const SizedBox(width: 6),
+                              // 3. Avatar or Checkbox
+                              GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    if (_selectedIds.contains(msg.id)) {
+                                      _selectedIds.remove(msg.id);
+                                    } else {
+                                      _selectedIds.add(msg.id);
+                                    }
+                                  });
+                                },
+                                child: SizedBox(
+                                  width: 28,
+                                  height: 28,
+                                  child: _selectedIds.isNotEmpty
+                                      ? Checkbox(
+                                          value: isBulkSelected,
+                                          activeColor: const Color(0xFF195BAC),
+                                          onChanged: (val) {
+                                            setState(() {
+                                              if (val == true) {
+                                                _selectedIds.add(msg.id);
+                                              } else {
+                                                _selectedIds.remove(msg.id);
+                                              }
+                                            });
+                                          },
+                                        )
+                                      : Container(
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: isDark
+                                                ? const Color(0xFF1E3A5F)
+                                                : const Color(0xFFDBEAFE),
+                                          ),
+                                          alignment: Alignment.center,
+                                          child: Text(
+                                            avatarLetter,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFF195BAC),
+                                            ),
+                                          ),
+                                        ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              // 4. Content Column
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            displaySender,
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: !msg.isRead
+                                                  ? FontWeight.bold
+                                                  : FontWeight.w600,
+                                              color: !msg.isRead
+                                                  ? (isDark
+                                                      ? Colors.white
+                                                      : const Color(
+                                                          0xFF0F172A))
+                                                  : (isDark
+                                                      ? Colors.white70
+                                                      : const Color(
+                                                          0xFF475569)),
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          _formatMailDate(msg.timestamp),
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: !msg.isRead
+                                                ? FontWeight.bold
+                                                : FontWeight.normal,
+                                            color: isDark
+                                                ? Colors.white38
+                                                : Colors.grey.shade500,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    alignment: Alignment.center,
-                                    child: Text(
-                                      avatarLetter,
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        color: Color(0xFF195BAC),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      displaySubject,
+                                      style: TextStyle(
+                                        fontSize: 12.5,
+                                        fontWeight: !msg.isRead
+                                            ? FontWeight.w600
+                                            : FontWeight.w500,
+                                        color: isDark
+                                            ? Colors.white
+                                            : const Color(0xFF1E293B),
                                       ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                  ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        // 4. Sender Name (flex 3)
-                        Expanded(
-                          flex: 3,
-                          child: Text(
-                            displaySender,
-                            style: TextStyle(
-                              fontSize: 13.5,
-                              fontWeight: !msg.isRead
-                                  ? FontWeight.bold
-                                  : FontWeight.w600,
-                              color: !msg.isRead
-                                  ? (isDark
-                                      ? Colors.white
-                                      : const Color(0xFF0F172A))
-                                  : (isDark
-                                      ? Colors.white70
-                                      : const Color(0xFF475569)),
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        // 5. Subject & Body Preview (flex 6)
-                        Expanded(
-                          flex: 6,
-                          child: RichText(
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            text: TextSpan(
-                              children: [
-                                TextSpan(
-                                  text: displaySubject,
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      msg.body.replaceAll('\n', ' '),
+                                      style: TextStyle(
+                                        fontSize: 11.5,
+                                        color: isDark
+                                            ? Colors.white54
+                                            : Colors.grey.shade600,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          )
+                        : Row(
+                            children: [
+                              // 1. Unread dot
+                              Container(
+                                width: 8,
+                                height: 8,
+                                margin: const EdgeInsets.only(right: 8),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: !msg.isRead
+                                      ? const Color(0xFF195BAC)
+                                      : Colors.transparent,
+                                ),
+                              ),
+                              // 2. Star Icon
+                              IconButton(
+                                icon: Icon(
+                                  msg.isStarred
+                                      ? Icons.star_rounded
+                                      : Icons.star_border_rounded,
+                                  color: msg.isStarred
+                                      ? Colors.amber
+                                      : (isDark
+                                          ? Colors.white30
+                                          : Colors.grey.shade400),
+                                  size: 20,
+                                ),
+                                onPressed: () {
+                                  ref
+                                      .read(casboxMessagesProvider.notifier)
+                                      .toggleStar(msg.id);
+                                },
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                              ),
+                              const SizedBox(width: 12),
+                              // 3. Checkbox or Avatar
+                              GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    if (_selectedIds.contains(msg.id)) {
+                                      _selectedIds.remove(msg.id);
+                                    } else {
+                                      _selectedIds.add(msg.id);
+                                    }
+                                  });
+                                },
+                                child: SizedBox(
+                                  width: 28,
+                                  height: 28,
+                                  child: (isHovered || _selectedIds.isNotEmpty)
+                                      ? Checkbox(
+                                          value: isBulkSelected,
+                                          activeColor:
+                                              const Color(0xFF195BAC),
+                                          onChanged: (val) {
+                                            setState(() {
+                                              if (val == true) {
+                                                _selectedIds.add(msg.id);
+                                              } else {
+                                                _selectedIds.remove(msg.id);
+                                              }
+                                            });
+                                          },
+                                        )
+                                      : Container(
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: isDark
+                                                ? const Color(0xFF1E3A5F)
+                                                : const Color(0xFFDBEAFE),
+                                          ),
+                                          alignment: Alignment.center,
+                                          child: Text(
+                                            avatarLetter,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFF195BAC),
+                                            ),
+                                          ),
+                                        ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              // 4. Sender Name (flex 3)
+                              Expanded(
+                                flex: 3,
+                                child: Text(
+                                  displaySender,
                                   style: TextStyle(
-                                    fontSize: 13,
+                                    fontSize: 13.5,
                                     fontWeight: !msg.isRead
                                         ? FontWeight.bold
                                         : FontWeight.w600,
-                                    color: isDark
-                                        ? Colors.white
-                                        : const Color(0xFF0F172A),
+                                    color: !msg.isRead
+                                        ? (isDark
+                                            ? Colors.white
+                                            : const Color(0xFF0F172A))
+                                        : (isDark
+                                            ? Colors.white70
+                                            : const Color(0xFF475569)),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              // 5. Subject & Body Preview (flex 6)
+                              Expanded(
+                                flex: 6,
+                                child: RichText(
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  text: TextSpan(
+                                    children: [
+                                      TextSpan(
+                                        text: displaySubject,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: !msg.isRead
+                                            ? FontWeight.bold
+                                            : FontWeight.w600,
+                                          color: isDark
+                                              ? Colors.white
+                                              : const Color(0xFF0F172A),
+                                        ),
+                                      ),
+                                      TextSpan(
+                                        text:
+                                            ' — ${msg.body.replaceAll('\n', ' ')}',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.normal,
+                                          color: isDark
+                                              ? Colors.white54
+                                              : Colors.grey.shade600,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                TextSpan(
-                                  text: ' — ${msg.body.replaceAll('\n', ' ')}',
+                              ),
+                              // 6. Request tag chip (if pending request)
+                              if (msg.status.toUpperCase() == 'PENDING' ||
+                                  msg.status.toUpperCase() == 'REQUEST') ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 7, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF195BAC)
+                                        .withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Text(
+                                    'Request',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF195BAC),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              // 7. Attachment icon
+                              if (msg.attachments.isNotEmpty) ...[
+                                const SizedBox(width: 8),
+                                Icon(
+                                  Icons.attachment_rounded,
+                                  size: 15,
+                                  color: isDark
+                                      ? Colors.white38
+                                      : Colors.grey.shade500,
+                                ),
+                              ],
+                              const SizedBox(width: 12),
+                              // 8. Date or Quick Hover Actions
+                              if (isHovered) ...[
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: Icon(
+                                        !msg.isRead
+                                            ? Icons.mark_email_read_outlined
+                                            : Icons.mark_email_unread_outlined,
+                                        size: 16,
+                                        color: isDark
+                                            ? Colors.white70
+                                            : Colors.grey.shade700,
+                                      ),
+                                      tooltip: !msg.isRead
+                                          ? 'Mark as read'
+                                          : 'Mark as unread',
+                                      onPressed: () {
+                                        if (!msg.isRead) {
+                                          ref
+                                              .read(
+                                                  casboxMessagesProvider.notifier)
+                                              .markAsRead(msg.id);
+                                        }
+                                      },
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(
+                                          minWidth: 26, minHeight: 26),
+                                    ),
+                                    IconButton(
+                                      icon: Icon(
+                                        Icons.archive_outlined,
+                                        size: 16,
+                                        color: isDark
+                                            ? Colors.white70
+                                            : Colors.grey.shade700,
+                                      ),
+                                      tooltip: 'Archive',
+                                      onPressed: () {
+                                        setState(() {
+                                          _archivedIds.add(msg.id);
+                                        });
+                                      },
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(
+                                          minWidth: 26, minHeight: 26),
+                                    ),
+                                    IconButton(
+                                      icon: Icon(
+                                        Icons.delete_outline_rounded,
+                                        size: 16,
+                                        color: isDark
+                                            ? Colors.white70
+                                            : Colors.grey.shade700,
+                                      ),
+                                      tooltip: 'Delete',
+                                      onPressed: () {
+                                        ref
+                                            .read(
+                                                casboxMessagesProvider.notifier)
+                                            .deleteMessage(msg.id);
+                                      },
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(
+                                          minWidth: 26, minHeight: 26),
+                                    ),
+                                  ],
+                                ),
+                              ] else ...[
+                                Text(
+                                  _formatMailDate(msg.timestamp),
                                   style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.normal,
+                                    fontSize: 12,
+                                    fontWeight: !msg.isRead
+                                        ? FontWeight.bold
+                                        : FontWeight.w500,
                                     color: isDark
-                                        ? Colors.white54
+                                        ? Colors.white38
                                         : Colors.grey.shade600,
                                   ),
                                 ),
                               ],
-                            ),
-                          ),
-                        ),
-                        // 6. Request tag chip (if pending request)
-                        if (msg.status.toUpperCase() == 'PENDING' ||
-                            msg.status.toUpperCase() == 'REQUEST') ...[
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 7, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF195BAC)
-                                  .withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: const Text(
-                              'Request',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF195BAC),
-                              ),
-                            ),
-                          ),
-                        ],
-                        // 7. Attachment icon
-                        if (msg.attachments.isNotEmpty) ...[
-                          const SizedBox(width: 8),
-                          Icon(
-                            Icons.attachment_rounded,
-                            size: 15,
-                            color:
-                                isDark ? Colors.white38 : Colors.grey.shade500,
-                          ),
-                        ],
-                        const SizedBox(width: 12),
-                        // 8. Date or Quick Hover Actions
-                        if (isHovered) ...[
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: Icon(
-                                  !msg.isRead
-                                      ? Icons.mark_email_read_outlined
-                                      : Icons.mark_email_unread_outlined,
-                                  size: 16,
-                                  color: isDark
-                                      ? Colors.white70
-                                      : Colors.grey.shade700,
-                                ),
-                                tooltip: !msg.isRead
-                                    ? 'Mark as read'
-                                    : 'Mark as unread',
-                                onPressed: () {
-                                  if (!msg.isRead) {
-                                    ref
-                                        .read(casboxMessagesProvider.notifier)
-                                        .markAsRead(msg.id);
-                                  }
-                                },
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(
-                                    minWidth: 26, minHeight: 26),
-                              ),
-                              IconButton(
-                                icon: Icon(
-                                  Icons.archive_outlined,
-                                  size: 16,
-                                  color: isDark
-                                      ? Colors.white70
-                                      : Colors.grey.shade700,
-                                ),
-                                tooltip: 'Archive',
-                                onPressed: () {
-                                  setState(() {
-                                    _archivedIds.add(msg.id);
-                                  });
-                                },
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(
-                                    minWidth: 26, minHeight: 26),
-                              ),
-                              IconButton(
-                                icon: Icon(
-                                  Icons.delete_outline_rounded,
-                                  size: 16,
-                                  color: isDark
-                                      ? Colors.white70
-                                      : Colors.grey.shade700,
-                                ),
-                                tooltip: 'Delete',
-                                onPressed: () {
-                                  ref
-                                      .read(casboxMessagesProvider.notifier)
-                                      .deleteMessage(msg.id);
-                                },
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(
-                                    minWidth: 26, minHeight: 26),
-                              ),
                             ],
                           ),
-                        ] else ...[
-                          Text(
-                            _formatMailDate(msg.timestamp),
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: !msg.isRead
-                                  ? FontWeight.bold
-                                  : FontWeight.w500,
-                              color: isDark
-                                  ? Colors.white38
-                                  : Colors.grey.shade600,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
                   ),
                 ),
               );
@@ -4175,274 +4292,7 @@ class _CasboxInteractiveWidgetState
     );
   }
 
-  Widget _buildCombinedChatMobileMailList(
-    bool isDark,
-    bool isSelectionMode,
-    List<CasboxMessage> messages,
-  ) {
-    if (_isLoading) {
-      return _buildLoadingIndicator(isDark);
-    }
 
-    if (messages.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.mark_email_read_outlined,
-              size: 48,
-              color: isDark ? Colors.white10 : Colors.grey.shade300,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No incoming messages in Combined Chat.',
-              style: TextStyle(color: isDark ? Colors.white30 : Colors.grey),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return ListView.builder(
-      itemCount: messages.length,
-      padding: const EdgeInsets.only(
-        left: 8.0,
-        right: 8.0,
-        top: 8.0,
-        bottom: 88.0,
-      ),
-      itemBuilder: (context, idx) {
-        final msg = messages[idx];
-        final isChecked = _selectedIds.contains(msg.id);
-        final displaySender = msg.sender.contains('@')
-            ? msg.sender.split('@').first
-            : msg.sender;
-        final avatarLetter = displaySender.isNotEmpty
-            ? displaySender[0].toUpperCase()
-            : 'M';
-        final displaySubject = msg.subject.trim().isNotEmpty
-            ? msg.subject.trim()
-            : 'No subject';
-
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 4.0),
-          child: Container(
-            decoration: BoxDecoration(
-              color: isDark ? BNXColors.darkSurface : Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: isDark ? Colors.white10 : Colors.grey.shade200,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: () {
-                if (isSelectionMode) {
-                  setState(() {
-                    if (isChecked) {
-                      _selectedIds.remove(msg.id);
-                    } else {
-                      _selectedIds.add(msg.id);
-                    }
-                  });
-                } else {
-                  _openCasboxThreadPage(context, msg, isDark);
-                }
-              },
-              onLongPress: () {
-                setState(() {
-                  _selectedIds.add(msg.id);
-                });
-              },
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 14.0, vertical: 12.0),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (isSelectionMode) ...[
-                      GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            if (isChecked) {
-                              _selectedIds.remove(msg.id);
-                            } else {
-                              _selectedIds.add(msg.id);
-                            }
-                          });
-                        },
-                        child: Icon(
-                          isChecked
-                              ? Icons.check_box_rounded
-                              : Icons.check_box_outline_blank_rounded,
-                          size: 22,
-                          color: isChecked
-                              ? const Color(0xFF195BAC)
-                              : (isDark
-                                  ? Colors.white30
-                                  : Colors.grey.shade400),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                    ],
-                    Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        Container(
-                          width: 38,
-                          height: 38,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: isDark
-                                ? const Color(0xFF1E3A5F)
-                                : const Color(0xFFDBEAFE),
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            avatarLetter,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF195BAC),
-                            ),
-                          ),
-                        ),
-                        if (!msg.isRead)
-                          Positioned(
-                            top: -1,
-                            right: -1,
-                            child: Container(
-                              width: 10,
-                              height: 10,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: const Color(0xFF195BAC),
-                                border: Border.all(
-                                  color: isDark
-                                      ? const Color(0xFF1E293B)
-                                      : Colors.white,
-                                  width: 1.5,
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  displaySender,
-                                  style: TextStyle(
-                                    fontWeight: !msg.isRead
-                                        ? FontWeight.bold
-                                        : FontWeight.w600,
-                                    fontSize: 14,
-                                    color: isDark
-                                        ? Colors.white
-                                        : const Color(0xFF0F172A),
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                _formatMailDate(msg.timestamp),
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: isDark
-                                      ? Colors.white38
-                                      : Colors.grey.shade500,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            displaySubject,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: !msg.isRead
-                                  ? FontWeight.bold
-                                  : FontWeight.w500,
-                              color: isDark
-                                  ? Colors.white
-                                  : const Color(0xFF1E293B),
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 2),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  msg.body.replaceAll('\n', ' '),
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: isDark
-                                        ? Colors.white54
-                                        : Colors.grey.shade600,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              if (msg.attachments.isNotEmpty) ...[
-                                const SizedBox(width: 6),
-                                Icon(
-                                  Icons.attachment_rounded,
-                                  size: 14,
-                                  color: isDark
-                                      ? Colors.white38
-                                      : Colors.grey.shade400,
-                                ),
-                              ],
-                              const SizedBox(width: 6),
-                              GestureDetector(
-                                onTap: () => ref
-                                    .read(casboxMessagesProvider.notifier)
-                                    .toggleStar(msg.id),
-                                child: Icon(
-                                  msg.isStarred
-                                      ? Icons.star_rounded
-                                      : Icons.star_outline_rounded,
-                                  size: 20,
-                                  color: msg.isStarred
-                                      ? Colors.amber
-                                      : (isDark
-                                          ? Colors.white30
-                                          : Colors.grey.shade400),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
 
   Widget _buildDesktopMessageList(
     bool isDark,
@@ -4577,6 +4427,7 @@ class _CasboxInteractiveWidgetState
               setState(() {
                 _selectedDesktopMessage = latestMsg;
               });
+              ref.read(selectedCasboxThreadProvider.notifier).state = latestMsg.id;
               if (chat.contactEmail.isNotEmpty) {
                 ref
                     .read(casboxMessagesProvider.notifier)
@@ -4717,7 +4568,61 @@ class _CasboxInteractiveWidgetState
                             }
                           },
                         )
-                      else if (chat.unreadCount > 0)
+                      else if (_activeTab == 'Requests' && !sentByMe) ...[
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            TextButton(
+                              onPressed: () {
+                                ref
+                                    .read(casboxMessagesProvider.notifier)
+                                    .deleteMessage(latestMsg.id);
+                              },
+                              style: TextButton.styleFrom(
+                                foregroundColor: Colors.red,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              child: const Text('Reject',
+                                  style: TextStyle(fontSize: 11.5)),
+                            ),
+                            const SizedBox(width: 4),
+                            ElevatedButton(
+                              onPressed: () {
+                                ref
+                                    .read(casboxMessagesProvider.notifier)
+                                    .acceptRequest(latestMsg.id);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Request accepted!'),
+                                    duration: Duration(seconds: 1),
+                                  ),
+                                );
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF195BAC),
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 4),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              child: const Text(
+                                'Accept',
+                                style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ] else if (chat.unreadCount > 0)
                         Container(
                           width: 8,
                           height: 8,
@@ -4783,12 +4688,20 @@ class _CasboxInteractiveWidgetState
 
     threadMessages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isNarrow = screenWidth < 600;
+
+    final isPendingRequest = (_activeTab == 'Requests' ||
+            selectedMsg.status.toUpperCase() == 'PENDING' ||
+            selectedMsg.status.toUpperCase() == 'REQUEST') &&
+        !isSentByMe(selectedMsg);
+
     return Column(
       children: [
         // 1. Conversation Header matching Screenshot 2
         Container(
           height: 56,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: EdgeInsets.symmetric(horizontal: isNarrow ? 12 : 16),
           decoration: BoxDecoration(
             color: isDark ? BNXColors.darkSurface : Colors.white,
             border: Border(
@@ -4802,7 +4715,10 @@ class _CasboxInteractiveWidgetState
             children: [
               IconButton(
                 icon: const Icon(Icons.arrow_back_rounded, size: 20),
-                onPressed: () => setState(() => _selectedDesktopMessage = null),
+                onPressed: () {
+                  setState(() => _selectedDesktopMessage = null);
+                  ref.read(selectedCasboxThreadProvider.notifier).state = null;
+                },
                 tooltip: 'Back to full list',
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
@@ -4828,30 +4744,36 @@ class _CasboxInteractiveWidgetState
                 ),
               ),
               const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    otherName,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                      color: isDark ? Colors.white : const Color(0xFF0F172A),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      otherName,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  Text(
-                    otherEmail.contains('@')
-                        ? otherEmail
-                        : '$otherEmail@bnxmail.com',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: isDark ? Colors.white54 : Colors.grey.shade600,
+                    Text(
+                      otherEmail.contains('@')
+                          ? otherEmail
+                          : '$otherEmail@bnxmail.com',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isDark ? Colors.white54 : Colors.grey.shade600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-              const Spacer(),
+              const SizedBox(width: 4),
               IconButton(
                 icon: const Icon(Icons.move_to_inbox_outlined, size: 19),
                 tooltip: 'Move to Inbox',
@@ -4867,6 +4789,7 @@ class _CasboxInteractiveWidgetState
                     _archivedIds.add(selectedMsg.id);
                     _selectedDesktopMessage = null;
                   });
+                  ref.read(selectedCasboxThreadProvider.notifier).state = null;
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Archived conversation.')),
                   );
@@ -4882,6 +4805,7 @@ class _CasboxInteractiveWidgetState
                       .read(casboxMessagesProvider.notifier)
                       .deleteMessage(selectedMsg.id);
                   setState(() => _selectedDesktopMessage = null);
+                  ref.read(selectedCasboxThreadProvider.notifier).state = null;
                 },
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
@@ -4897,6 +4821,86 @@ class _CasboxInteractiveWidgetState
           ),
         ),
 
+        // Incoming Request Banner if pending
+        if (isPendingRequest)
+          Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: isNarrow ? 12 : 16,
+              vertical: 10,
+            ),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFEFF6FF),
+              border: Border(
+                bottom: BorderSide(
+                  color: isDark ? Colors.white12 : const Color(0xFFBFDBFE),
+                  width: 1,
+                ),
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '$otherName wants to connect with you.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white70 : const Color(0xFF1E3A5F),
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {
+                    ref
+                        .read(casboxMessagesProvider.notifier)
+                        .deleteMessage(selectedMsg.id);
+                    setState(() => _selectedDesktopMessage = null);
+                    ref.read(selectedCasboxThreadProvider.notifier).state = null;
+                  },
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.red,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text('Reject',
+                      style:
+                          TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: () {
+                    ref
+                        .read(casboxMessagesProvider.notifier)
+                        .acceptRequest(selectedMsg.id);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Request accepted!'),
+                        duration: Duration(seconds: 1),
+                      ),
+                    );
+                    setState(() {});
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF195BAC),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 6),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: const Text('Accept',
+                      style:
+                          TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ),
+
         // 2. Chat Messages Stream matching Screenshot 2
         Expanded(
           child: threadMessages.isEmpty
@@ -4910,8 +4914,8 @@ class _CasboxInteractiveWidgetState
                 )
               : ListView.builder(
                   controller: _desktopChatScrollController,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isNarrow ? 12 : 20,
                     vertical: 16,
                   ),
                   itemCount: threadMessages.length,
@@ -4942,9 +4946,9 @@ class _CasboxInteractiveWidgetState
                         children: [
                           // SENDER BADGE PILL on the left matching Screenshot 2:
                           Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6,
+                            padding: EdgeInsets.symmetric(
+                              horizontal: isNarrow ? 8 : 10,
+                              vertical: isNarrow ? 5 : 6,
                             ),
                             decoration: BoxDecoration(
                               color: isDark
@@ -4989,7 +4993,7 @@ class _CasboxInteractiveWidgetState
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 6),
+                                const SizedBox(width: 5),
                                 Container(
                                   width: 6,
                                   height: 6,
@@ -4998,94 +5002,104 @@ class _CasboxInteractiveWidgetState
                                     color: Color(0xFF22C55E), // green online dot
                                   ),
                                 ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  senderDisplayName,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: isDark
-                                        ? Colors.white70
-                                        : const Color(0xFF1E293B),
+                                const SizedBox(width: 6),
+                                ConstrainedBox(
+                                  constraints: BoxConstraints(
+                                    maxWidth: isNarrow ? 70 : 120,
+                                  ),
+                                  child: Text(
+                                    senderDisplayName,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: isDark
+                                          ? Colors.white70
+                                          : const Color(0xFF1E293B),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                          const SizedBox(width: 20),
+                          SizedBox(width: isNarrow ? 10 : 20),
                           // MESSAGE BUBBLE + TIMESTAMP COLUMN matching Screenshot 2:
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Container(
-                                constraints: BoxConstraints(
-                                  maxWidth:
-                                      MediaQuery.of(context).size.width * 0.55,
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 18,
-                                  vertical: 12,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: byMe
-                                      ? const Color(0xFF0066FF)
-                                      : (isDark
-                                          ? const Color(0xFF1E293B)
-                                          : Colors.white),
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: byMe
-                                      ? null
-                                      : Border.all(
-                                          color: isDark
-                                              ? Colors.white12
-                                              : const Color(0xFFE2E8F0),
-                                          width: 1,
-                                        ),
-                                  boxShadow: byMe
-                                      ? null
-                                      : [
-                                          BoxShadow(
-                                            color: Colors.black.withValues(
-                                              alpha: isDark ? 0.2 : 0.04,
-                                            ),
-                                            blurRadius: 4,
-                                            offset: const Offset(0, 2),
-                                          ),
-                                        ],
-                                ),
-                                child: Text(
-                                  m.body,
-                                  style: TextStyle(
-                                    fontSize: 13.5,
-                                    color: byMe
-                                        ? Colors.white
-                                        : (isDark
-                                            ? Colors.white
-                                            : const Color(0xFF1E293B)),
-                                    height: 1.35,
+                          Flexible(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  constraints: BoxConstraints(
+                                    maxWidth: isNarrow
+                                        ? (screenWidth - 140).clamp(160.0, 480.0)
+                                        : screenWidth * 0.55,
                                   ),
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    time,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 18,
+                                    vertical: 12,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: byMe
+                                        ? const Color(0xFF0066FF)
+                                        : (isDark
+                                            ? const Color(0xFF1E293B)
+                                            : Colors.white),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: byMe
+                                        ? null
+                                        : Border.all(
+                                            color: isDark
+                                                ? Colors.white12
+                                                : const Color(0xFFE2E8F0),
+                                            width: 1,
+                                          ),
+                                    boxShadow: byMe
+                                        ? null
+                                        : [
+                                            BoxShadow(
+                                              color: Colors.black.withValues(
+                                                alpha: isDark ? 0.2 : 0.04,
+                                              ),
+                                              blurRadius: 4,
+                                              offset: const Offset(0, 2),
+                                            ),
+                                          ],
+                                  ),
+                                  child: Text(
+                                    m.body,
                                     style: TextStyle(
-                                      fontSize: 10,
-                                      color: isDark
-                                          ? Colors.white38
-                                          : Colors.grey.shade400,
+                                      fontSize: 13.5,
+                                      color: byMe
+                                          ? Colors.white
+                                          : (isDark
+                                              ? Colors.white
+                                              : const Color(0xFF1E293B)),
+                                      height: 1.35,
                                     ),
                                   ),
-                                  if (byMe) ...[
-                                    const SizedBox(width: 4),
-                                    _buildChatTick(m, isDark),
+                                ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      time,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: isDark
+                                            ? Colors.white38
+                                            : Colors.grey.shade400,
+                                      ),
+                                    ),
+                                    if (byMe) ...[
+                                      const SizedBox(width: 4),
+                                      _buildChatTick(m, isDark),
+                                    ],
                                   ],
-                                ],
-                              ),
-                            ],
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
@@ -5096,7 +5110,10 @@ class _CasboxInteractiveWidgetState
 
         // 3. Bottom Chat Input Bar matching Screenshot 2
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: EdgeInsets.symmetric(
+            horizontal: isNarrow ? 10 : 16,
+            vertical: 10,
+          ),
           decoration: BoxDecoration(
             color: isDark ? BNXColors.darkSurface : Colors.white,
             border: Border(
@@ -5106,74 +5123,77 @@ class _CasboxInteractiveWidgetState
               ),
             ),
           ),
-          child: Row(
-            children: [
-              IconButton(
-                icon: Icon(
-                  Icons.sentiment_satisfied_alt_outlined,
-                  color: isDark ? Colors.white54 : Colors.grey.shade600,
-                  size: 22,
-                ),
-                onPressed: () {},
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Container(
-                  height: 42,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.white10 : Colors.white,
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(
-                      color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
-                      width: 1,
-                    ),
+          child: SafeArea(
+            top: false,
+            child: Row(
+              children: [
+                IconButton(
+                  icon: Icon(
+                    Icons.sentiment_satisfied_alt_outlined,
+                    color: isDark ? Colors.white54 : Colors.grey.shade600,
+                    size: 22,
                   ),
-                  child: TextField(
-                    controller: _desktopChatInputController,
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      color: isDark ? Colors.white : Colors.black87,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'Type a message...',
-                      hintStyle: TextStyle(
-                        fontSize: 13.5,
-                        color: isDark ? Colors.white38 : Colors.grey.shade400,
+                  onPressed: () {},
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Container(
+                    height: 42,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white10 : Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                        width: 1,
                       ),
-                      border: InputBorder.none,
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 11),
                     ),
-                    onSubmitted: (val) => _sendDesktopCasboxMessage(
-                      otherEmail,
-                      selectedMsg.subject,
+                    child: TextField(
+                      controller: _desktopChatInputController,
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        color: isDark ? Colors.white : Colors.black87,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Type a message...',
+                        hintStyle: TextStyle(
+                          fontSize: 13.5,
+                          color: isDark ? Colors.white38 : Colors.grey.shade400,
+                        ),
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 11),
+                      ),
+                      onSubmitted: (val) => _sendDesktopCasboxMessage(
+                        otherEmail,
+                        selectedMsg.subject,
+                      ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              GestureDetector(
-                onTap: () =>
-                    _sendDesktopCasboxMessage(otherEmail, selectedMsg.subject),
-                child: Container(
-                  width: 38,
-                  height: 38,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Color(0xFF3B82F6),
-                  ),
-                  alignment: Alignment.center,
-                  child: const Icon(
-                    Icons.send_rounded,
-                    color: Colors.white,
-                    size: 19,
+                const SizedBox(width: 10),
+                GestureDetector(
+                  onTap: () =>
+                      _sendDesktopCasboxMessage(otherEmail, selectedMsg.subject),
+                  child: Container(
+                    width: 38,
+                    height: 38,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Color(0xFF3B82F6),
+                    ),
+                    alignment: Alignment.center,
+                    child: const Icon(
+                      Icons.send_rounded,
+                      color: Colors.white,
+                      size: 19,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ],
@@ -5220,329 +5240,7 @@ class _CasboxInteractiveWidgetState
     }
   }
 
-  Widget _buildMessageListContent(
-    bool isDark,
-    bool isSelectionMode,
-    List<CasboxMessage> messages,
-  ) {
-    if (_isLoading) {
-      return _buildLoadingIndicator(isDark);
-    }
 
-    if (messages.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              _activeTab == 'Requests'
-                  ? Icons.person_add_outlined
-                  : Icons.mail_outline_rounded,
-              size: 48,
-              color: isDark ? Colors.white10 : Colors.grey.shade300,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              _activeTab == 'Requests'
-                  ? 'No pending requests.'
-                  : 'No Casbox secure messages.',
-              style: TextStyle(color: isDark ? Colors.white30 : Colors.grey),
-            ),
-          ],
-        ),
-      );
-    }
-
-    final activeAccount = ref.read(activeAccountProvider);
-    final currentUserEmail = activeAccount.email.toLowerCase().trim();
-
-    bool isSentByMe(CasboxMessage m) {
-      final s = m.sender.toLowerCase().trim();
-      if (s == 'me' || s == 'ravi' || m.id.startsWith('local_')) return true;
-      if (currentUserEmail.isEmpty) return false;
-      if (s == currentUserEmail) return true;
-      final sHandle = s.contains('@') ? s.split('@').first : s;
-      final meHandle = currentUserEmail.contains('@')
-          ? currentUserEmail.split('@').first
-          : currentUserEmail;
-      return sHandle.isNotEmpty && sHandle == meHandle;
-    }
-
-    return ListView.builder(
-      itemCount: messages.length,
-      padding: const EdgeInsets.only(
-        left: 8.0,
-        right: 8.0,
-        top: 12.0,
-        bottom: 88.0,
-      ),
-      itemBuilder: (context, idx) {
-        final msg = messages[idx];
-        final isChecked = _selectedIds.contains(msg.id);
-        final sentByMe = isSentByMe(msg);
-        String extractUsername(String email) {
-          if (email.contains('@')) return email.split('@').first;
-          return email;
-        }
-
-        final displayTitle = sentByMe
-            ? (msg.to.isNotEmpty ? extractUsername(msg.to) : 'Support')
-            : (msg.sender.isNotEmpty ? extractUsername(msg.sender) : 'Support');
-
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 3.0),
-          child: Container(
-            decoration: BoxDecoration(
-              color: isDark ? BNXColors.darkSurface : Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-              border: Border.all(
-                color: isDark ? Colors.white10 : Colors.grey.shade100,
-              ),
-            ),
-            child: InkWell(
-              onTap: () {
-                if (isSelectionMode) {
-                  setState(() {
-                    if (isChecked) {
-                      _selectedIds.remove(msg.id);
-                    } else {
-                      _selectedIds.add(msg.id);
-                    }
-                  });
-                } else {
-                  _openCasboxThreadPage(context, msg, isDark);
-                }
-              },
-              onLongPress: () {
-                setState(() {
-                  _selectedIds.add(msg.id);
-                });
-              },
-              borderRadius: BorderRadius.circular(16),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Row(
-                  children: [
-                    if (isSelectionMode) ...[
-                      GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            if (isChecked) {
-                              _selectedIds.remove(msg.id);
-                            } else {
-                              _selectedIds.add(msg.id);
-                            }
-                          });
-                        },
-                        child: Icon(
-                          isChecked
-                              ? Icons.check_box_rounded
-                              : Icons.check_box_outline_blank_rounded,
-                          size: 22,
-                          color: isChecked
-                              ? const Color(0xFF195bac)
-                              : (isDark
-                                    ? Colors.white30
-                                    : Colors.grey.shade400),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                    ],
-                    GestureDetector(
-                      onTap: () => ref
-                          .read(casboxMessagesProvider.notifier)
-                          .toggleStar(msg.id),
-                      child: Icon(
-                        msg.isStarred
-                            ? Icons.star_rounded
-                            : Icons.star_outline_rounded,
-                        size: 22,
-                        color: msg.isStarred
-                            ? Colors.amber
-                            : (isDark ? Colors.white38 : Colors.grey.shade400),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  displayTitle,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                '${msg.timestamp.toLocal().hour.toString().padLeft(2, '0')}:${msg.timestamp.toLocal().minute.toString().padLeft(2, '0')}',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: isDark
-                                      ? Colors.white38
-                                      : Colors.grey.shade500,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            msg.body,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: isDark ? Colors.white70 : Colors.black87,
-                            ),
-                          ),
-                          if (!sentByMe &&
-                              msg.status.toUpperCase() != 'ACCEPTED') ...[
-                            const SizedBox(height: 10),
-                            SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
-                                  OutlinedButton.icon(
-                                    onPressed: () {
-                                      ref
-                                          .read(casboxMessagesProvider.notifier)
-                                          .rejectRequest(msg.id);
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        const SnackBar(
-                                          content: Text('Request rejected.'),
-                                          duration: Duration(seconds: 1),
-                                        ),
-                                      );
-                                    },
-                                    icon: const Icon(
-                                      Icons.cancel_outlined,
-                                      size: 14,
-                                      color: Colors.red,
-                                    ),
-                                    label: const Text(
-                                      'Reject',
-                                      style: TextStyle(
-                                        color: Colors.red,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                    style: OutlinedButton.styleFrom(
-                                      side: const BorderSide(
-                                        color: Colors.red,
-                                        width: 1,
-                                      ),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 6,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  ElevatedButton.icon(
-                                    onPressed: () {
-                                      ref
-                                          .read(casboxMessagesProvider.notifier)
-                                          .acceptRequest(msg.id);
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                            'Request accepted! Moved to Received tab.',
-                                          ),
-                                          duration: Duration(seconds: 1),
-                                        ),
-                                      );
-                                    },
-                                    icon: const Icon(
-                                      Icons.check_circle_outline,
-                                      size: 14,
-                                      color: Colors.white,
-                                    ),
-                                    label: const Text(
-                                      'Accept',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFF195BAC),
-                                      elevation: 0,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 14,
-                                        vertical: 6,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    if (sentByMe) _buildDeliveryTickWidget(msg, isDark),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildDeliveryTickWidget(CasboxMessage msg, bool isDark) {
-    final status = msg.status.trim().toUpperCase();
-    if (msg.isRead ||
-        status == 'READ' ||
-        status == 'SEEN' ||
-        status == 'ACCEPTED') {
-      return const Icon(
-        Icons.done_all_rounded,
-        size: 16,
-        color: Color(0xFF195BAC),
-      );
-    } else if (status == 'RESOLVED' || status == 'DELIVERED') {
-      return Icon(
-        Icons.done_all_rounded,
-        size: 16,
-        color: isDark ? Colors.white38 : Colors.grey.shade500,
-      );
-    } else {
-      return Icon(
-        Icons.check_rounded,
-        size: 16,
-        color: isDark ? Colors.white38 : Colors.grey.shade500,
-      );
-    }
-  }
 
   void _openCasboxThreadPage(
     BuildContext context,
@@ -5552,12 +5250,20 @@ class _CasboxInteractiveWidgetState
     if (!initialMsg.isRead) {
       ref.read(casboxMessagesProvider.notifier).markAsRead(initialMsg.id);
     }
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) =>
-            _CasboxDetailPage(initialMsg: initialMsg, isDark: isDark),
-      ),
-    );
+    setState(() {
+      _selectedDesktopMessage = initialMsg;
+    });
+    ref.read(selectedCasboxThreadProvider.notifier).state = initialMsg.id;
+    final other = initialMsg.sender.toLowerCase().trim() == 'me' ||
+            initialMsg.sender.toLowerCase().trim() == 'ravi' ||
+            initialMsg.id.startsWith('local_')
+        ? initialMsg.to
+        : initialMsg.sender;
+    if (other.isNotEmpty) {
+      ref.read(casboxMessagesProvider.notifier).fetchThreadMessages(other);
+      ref.read(casboxMessagesProvider.notifier).markThreadAsSeen(other);
+    }
+    _scrollToBottom();
   }
 }
 

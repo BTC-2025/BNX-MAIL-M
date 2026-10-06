@@ -4,7 +4,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_bnx_mail/standalone_macos_storage/pages/macos_storage_page.dart';
 import 'package:flutter_bnx_mail/features/profile/presentation/manage_account_screen.dart';
+import 'package:flutter_bnx_mail/features/profile/presentation/profile_screen.dart';
 import 'package:flutter_bnx_mail/features/settings/presentation/settings_screen.dart';
+import 'package:flutter_bnx_mail/features/dashboard/presentation/colab_screen.dart';
+import 'package:flutter_bnx_mail/data/app_state_provider.dart';
+import 'package:flutter_bnx_mail/data/account_provider.dart';
+import 'package:flutter_bnx_mail/models/account_model.dart';
+import 'package:flutter_bnx_mail/data/colab_provider.dart';
+import 'package:flutter_bnx_mail/models/email_model.dart';
 
 void main() {
   testWidgets('MacOsStoragePage renders on 360px mobile viewport without overflow errors', (tester) async {
@@ -63,6 +70,43 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(errors, isEmpty, reason: 'RenderFlex overflow errors occurred on mobile manage account screen');
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+      FlutterError.onError = oldOnError;
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    }
+  });
+
+  testWidgets('ProfileScreen renders on 360px mobile viewport without overflow errors', (tester) async {
+    final List<FlutterErrorDetails> errors = [];
+    final oldOnError = FlutterError.onError;
+    FlutterError.onError = (details) {
+      if (details.exceptionAsString().contains('overflowed')) {
+        errors.add(details);
+      }
+    };
+
+    try {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      tester.view.physicalSize = const Size(360, 780);
+      tester.view.devicePixelRatio = 1.0;
+
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: ProfileScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(errors, isEmpty, reason: 'RenderFlex overflow errors occurred on mobile profile screen');
+      expect(find.text('Manage your BNX Account'), findsNothing); // Removed completely from blue part
+      expect(find.text('Manage Account'), findsOneWidget); // Present in action list below
+      expect(find.text('Add another account'), findsNWidgets(2)); // in dropdown and action list
+      expect(find.text('Sign out of this account'), findsOneWidget);
+      expect(find.text('Sign out of all accounts'), findsOneWidget);
     } finally {
       debugDefaultTargetPlatformOverride = null;
       FlutterError.onError = oldOnError;
@@ -268,5 +312,292 @@ void main() {
       tester.view.resetDevicePixelRatio();
     }
   });
+
+  testWidgets('Casbox main view renders on 360px mobile viewport without overflow errors', (tester) async {
+    final List<FlutterErrorDetails> errors = [];
+    final oldOnError = FlutterError.onError;
+    FlutterError.onError = (details) {
+      if (details.exceptionAsString().contains('overflowed')) {
+        errors.add(details);
+      }
+    };
+
+    try {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      tester.view.physicalSize = const Size(360, 780);
+      tester.view.devicePixelRatio = 1.0;
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appUiProvider.overrideWith((ref) => _TestAppUiNotifier(activeFolder: 'Casbox')),
+            casboxMessagesProvider.overrideWith((ref) => _TestCasboxNotifier(_testCasboxMessages)),
+            activeAccountProvider.overrideWithValue(
+              const AccountModel(
+                id: 'user_1',
+                name: 'Ravi',
+                email: 'ravi@bnxmail.com',
+                avatarColor: Color(0xFF195BAC),
+                isActive: true,
+              ),
+            ),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(
+              drawer: Drawer(),
+              body: ColabScreen(),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.text('Casbox'), findsOneWidget);
+      // Top-right Compose button is removed on mobile (FAB is used)
+      expect(find.widgetWithText(ElevatedButton, 'Compose'), findsNothing);
+      expect(errors, isEmpty, reason: 'RenderFlex overflow errors occurred on mobile Casbox main view');
+
+      // Tap select-all checkbox to test toolbar with all action buttons visible on 360px screen
+      final checkboxFinder = find.byType(Checkbox);
+      if (checkboxFinder.evaluate().isNotEmpty) {
+        await tester.tap(checkboxFinder.first);
+        await tester.pump();
+      }
+      expect(errors, isEmpty, reason: 'RenderFlex overflow errors occurred on mobile Casbox selection toolbar');
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+      FlutterError.onError = oldOnError;
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    }
+  });
+
+  testWidgets('Casbox tabs and connections popup render on 360px mobile without overflow errors', (tester) async {
+    final List<FlutterErrorDetails> errors = [];
+    final oldOnError = FlutterError.onError;
+    FlutterError.onError = (details) {
+      if (details.exceptionAsString().contains('overflowed')) {
+        errors.add(details);
+      }
+    };
+
+    try {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      tester.view.physicalSize = const Size(360, 780);
+      tester.view.devicePixelRatio = 1.0;
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appUiProvider.overrideWith((ref) => _TestAppUiNotifier(activeFolder: 'Casbox')),
+            casboxMessagesProvider.overrideWith((ref) => _TestCasboxNotifier(_testCasboxMessages)),
+            activeAccountProvider.overrideWithValue(
+              const AccountModel(
+                id: 'user_1',
+                name: 'Ravi',
+                email: 'ravi@bnxmail.com',
+                avatarColor: Color(0xFF195BAC),
+                isActive: true,
+              ),
+            ),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(
+              drawer: Drawer(),
+              body: ColabScreen(),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      // Tap 'Requests' tab
+      final requestsTabFinder = find.text('Requests');
+      if (requestsTabFinder.evaluate().isNotEmpty) {
+        await tester.tap(requestsTabFinder.first, warnIfMissed: false);
+        await tester.pump();
+      }
+      expect(errors, isEmpty, reason: 'Overflow in Casbox Requests tab on mobile');
+
+      // Tap 'Combined Chat' tab
+      final combinedChatFinder = find.text('Combined Chat');
+      if (combinedChatFinder.evaluate().isNotEmpty) {
+        await tester.tap(combinedChatFinder.first, warnIfMissed: false);
+        await tester.pump();
+      }
+      expect(errors, isEmpty, reason: 'Overflow in Casbox Combined Chat tab on mobile');
+
+      // Tap Connections popup circle icon (person_add_alt_1_rounded)
+      final connectionsBtnFinder = find.byIcon(Icons.person_add_alt_1_rounded);
+      if (connectionsBtnFinder.evaluate().isNotEmpty) {
+        await tester.tap(connectionsBtnFinder.first, warnIfMissed: false);
+        await tester.pump();
+      }
+      expect(errors, isEmpty, reason: 'Overflow in Casbox Connections popup on mobile');
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+      FlutterError.onError = oldOnError;
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    }
+  });
+
+  testWidgets('Casbox conversation view and pending request banner render on 360px and 390px without overflow', (tester) async {
+    final List<FlutterErrorDetails> errors = [];
+    final oldOnError = FlutterError.onError;
+    FlutterError.onError = (details) {
+      if (details.exceptionAsString().contains('overflowed')) {
+        errors.add(details);
+      }
+    };
+
+    try {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      tester.view.physicalSize = const Size(360, 780);
+      tester.view.devicePixelRatio = 1.0;
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appUiProvider.overrideWith((ref) => _TestAppUiNotifier(activeFolder: 'Casbox')),
+            casboxMessagesProvider.overrideWith((ref) => _TestCasboxNotifier(_testCasboxMessages)),
+            selectedCasboxThreadProvider.overrideWith((ref) => 'msg_1'),
+            activeAccountProvider.overrideWithValue(
+              const AccountModel(
+                id: 'user_1',
+                name: 'Ravi',
+                email: 'ravi@bnxmail.com',
+                avatarColor: Color(0xFF195BAC),
+                isActive: true,
+              ),
+            ),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(
+              drawer: Drawer(),
+              body: ColabScreen(),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      // Verify conversation elements exist
+      expect(find.text('Type a message...'), findsOneWidget);
+      expect(errors, isEmpty, reason: 'Overflow in Casbox active conversation view on 360px viewport');
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+
+      // Test on 390px iOS viewport with a pending request conversation (which shows request banner)
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appUiProvider.overrideWith((ref) => _TestAppUiNotifier(activeFolder: 'Casbox')),
+            casboxMessagesProvider.overrideWith((ref) => _TestCasboxNotifier(_testCasboxMessages)),
+            selectedCasboxThreadProvider.overrideWith((ref) => 'req_1'),
+            activeAccountProvider.overrideWithValue(
+              const AccountModel(
+                id: 'user_1',
+                name: 'Ravi',
+                email: 'ravi@bnxmail.com',
+                avatarColor: Color(0xFF195BAC),
+                isActive: true,
+              ),
+            ),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(
+              drawer: Drawer(),
+              body: ColabScreen(),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      // Verify request banner buttons
+      expect(find.text('Accept'), findsOneWidget);
+      expect(find.text('Reject'), findsOneWidget);
+      expect(errors, isEmpty, reason: 'Overflow in Casbox pending request conversation view on 390px viewport');
+
+      // Tap back button
+      final backBtn = find.byIcon(Icons.arrow_back_rounded);
+      if (backBtn.evaluate().isNotEmpty) {
+        await tester.tap(backBtn.first);
+        await tester.pump();
+      }
+      expect(errors, isEmpty, reason: 'Overflow after back navigation from Casbox conversation');
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+      FlutterError.onError = oldOnError;
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    }
+  });
 }
+
+class _TestAppUiNotifier extends AppUiNotifier {
+  _TestAppUiNotifier({String activeFolder = 'Casbox'}) : super() {
+    state = state.copyWith(activeFolder: activeFolder);
+  }
+}
+
+class _TestCasboxNotifier extends CasboxMessagesNotifier {
+  _TestCasboxNotifier(List<CasboxMessage> initial) : super() {
+    state = initial;
+  }
+  @override
+  Future<void> fetchMessages([List<EmailModel>? mailboxEmails]) async {}
+  @override
+  Future<void> fetchThreadMessages(dynamic otherEmailOrId) async {}
+}
+
+final _testCasboxMessages = [
+  CasboxMessage(
+    id: 'msg_1',
+    sender: 'alexandra.verylongname@bnxmail.com',
+    to: 'ravi@bnxmail.com',
+    subject: 'Project Updates and Roadmaps',
+    body: 'Hi Ravi, here are the extensive project updates and roadmaps for next quarter. Testing layout with extended sentences to verify zero horizontal RenderFlex overflows on mobile screens.',
+    timestamp: DateTime.now().subtract(const Duration(minutes: 5)),
+    status: 'DELIVERED',
+  ),
+  CasboxMessage(
+    id: 'msg_2',
+    sender: 'ravi@bnxmail.com',
+    to: 'alexandra.verylongname@bnxmail.com',
+    subject: 'Project Updates and Roadmaps',
+    body: 'Thanks Alexandra! Looking forward to reviewing the roadmap document.',
+    timestamp: DateTime.now().subtract(const Duration(minutes: 2)),
+    status: 'SEEN',
+  ),
+  CasboxMessage(
+    id: 'req_1',
+    sender: 'stranger.person@otherdomain.com',
+    to: 'ravi@bnxmail.com',
+    subject: 'Connection Request',
+    body: 'Hello! I would like to establish a Casbox messaging channel with you.',
+    timestamp: DateTime.now().subtract(const Duration(hours: 2)),
+    status: 'PENDING',
+  ),
+];
+
 
