@@ -511,6 +511,8 @@ class CasboxMessage {
   final bool isRead;
   final String status;
   final List<AttachmentModel> attachments;
+  final bool isArchived;
+  final bool isEdited;
 
   CasboxMessage({
     required this.id,
@@ -523,6 +525,8 @@ class CasboxMessage {
     this.isRead = false,
     this.status = 'PENDING',
     this.attachments = const [],
+    this.isArchived = false,
+    this.isEdited = false,
   });
 
   CasboxMessage copyWith({
@@ -536,6 +540,8 @@ class CasboxMessage {
     bool? isRead,
     String? status,
     List<AttachmentModel>? attachments,
+    bool? isArchived,
+    bool? isEdited,
   }) {
     return CasboxMessage(
       id: id ?? this.id,
@@ -548,6 +554,8 @@ class CasboxMessage {
       isRead: isRead ?? this.isRead,
       status: status ?? this.status,
       attachments: attachments ?? this.attachments,
+      isArchived: isArchived ?? this.isArchived,
+      isEdited: isEdited ?? this.isEdited,
     );
   }
 
@@ -672,6 +680,11 @@ class CasboxMessage {
       isRead: isReadMsg,
       status: rawStatus,
       attachments: attachments,
+      isArchived: (json['isArchived'] as bool? ?? false) ||
+          (json['archived'] as bool? ?? false) ||
+          (json['senderArchived'] as bool? ?? false) ||
+          (json['receiverArchived'] as bool? ?? false),
+      isEdited: json['isEdited'] as bool? ?? false,
     );
   }
 
@@ -819,7 +832,10 @@ class CasboxMessagesNotifier extends StateNotifier<List<CasboxMessage>> {
               m.status.toUpperCase() == 'SEEN' ||
               readIds.contains(m.id) ||
               _readIds.contains(m.id);
-          return m.copyWith(isRead: isRead);
+          final isArchived = _localArchivedIds.contains(m.id)
+              ? true
+              : (_localUnarchivedIds.contains(m.id) ? false : m.isArchived);
+          return m.copyWith(isRead: isRead, isArchived: isArchived);
         })
         .toList()
       ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
@@ -1074,6 +1090,81 @@ class CasboxMessagesNotifier extends StateNotifier<List<CasboxMessage>> {
     }
   }
 
+  final Set<String> _localArchivedIds = {};
+  final Set<String> _localUnarchivedIds = {};
+
+  Future<void> archiveMessage(dynamic messageId, [bool archived = true]) async {
+    final strId = messageId.toString();
+    if (archived) {
+      _localArchivedIds.add(strId);
+      _localUnarchivedIds.remove(strId);
+    } else {
+      _localUnarchivedIds.add(strId);
+      _localArchivedIds.remove(strId);
+    }
+    state = state.map((m) {
+      if (m.id == strId) {
+        return m.copyWith(isArchived: archived);
+      }
+      return m;
+    }).toList();
+    try {
+      await CasboxRepository.archiveMessage(messageId, archived);
+    } catch (e) {
+      print('[CASBOX WARNING] archiveMessage failed: $e');
+    }
+  }
+
+  Future<void> batchArchiveMessages(List<dynamic> messageIds, [bool archived = true]) async {
+    final strIds = messageIds.map((id) => id.toString()).toSet();
+    if (archived) {
+      _localArchivedIds.addAll(strIds);
+      _localUnarchivedIds.removeAll(strIds);
+    } else {
+      _localUnarchivedIds.addAll(strIds);
+      _localArchivedIds.removeAll(strIds);
+    }
+    state = state.map((m) {
+      if (strIds.contains(m.id)) {
+        return m.copyWith(isArchived: archived);
+      }
+      return m;
+    }).toList();
+    try {
+      await CasboxRepository.batchArchiveMessages(messageIds, archived);
+    } catch (e) {
+      print('[CASBOX WARNING] batchArchiveMessages failed: $e');
+    }
+  }
+
+  Future<void> deleteConversation(String contactEmail) async {
+    final clean = contactEmail.trim().toLowerCase();
+    state = state.where((m) =>
+      m.sender.trim().toLowerCase() != clean &&
+      m.to.trim().toLowerCase() != clean
+    ).toList();
+    try {
+      await CasboxRepository.deleteConversation(contactEmail);
+    } catch (e) {
+      print('[CASBOX WARNING] deleteConversation failed: $e');
+    }
+  }
+
+  Future<void> editMessage(dynamic messageId, String newBody) async {
+    final strId = messageId.toString();
+    state = state.map((m) {
+      if (m.id == strId) {
+        return m.copyWith(body: newBody);
+      }
+      return m;
+    }).toList();
+    try {
+      await CasboxRepository.editMessage(messageId, newBody);
+    } catch (e) {
+      print('[CASBOX WARNING] editMessage failed: $e');
+    }
+  }
+
   void toggleStar(String id) {
     state = state.map((m) {
       if (m.id == id) {
@@ -1099,3 +1190,176 @@ final casboxMessagesProvider =
     StateNotifierProvider<CasboxMessagesNotifier, List<CasboxMessage>>((ref) {
       return CasboxMessagesNotifier();
     });
+
+// ── Contact Safety & Blocked Contacts Provider ────────────────────────────
+
+class CasboxBlockedContactsNotifier extends StateNotifier<List<String>> {
+  CasboxBlockedContactsNotifier() : super(const []) {
+    fetchBlockedContacts();
+  }
+
+  bool isLoading = false;
+
+  Future<void> fetchBlockedContacts() async {
+    isLoading = true;
+    try {
+      final contacts = await CasboxRepository.getBlockedContacts();
+      if (mounted) {
+        state = {...state, ...contacts}.toList();
+      }
+    } catch (e) {
+      print('[BLOCKED CONTACTS] fetch error: $e');
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  Future<void> loadBlockedContacts() => fetchBlockedContacts();
+
+  Future<void> blockContact(String email, {String reason = 'Spam'}) async {
+    final clean = email.trim().toLowerCase();
+    if (!state.contains(clean)) {
+      state = [...state, clean];
+    }
+    try {
+      await CasboxRepository.blockContact(clean, reason: reason);
+    } catch (e) {
+      print('[BLOCKED CONTACTS] block error: $e');
+    }
+  }
+
+  Future<void> unblockContact(String email) async {
+    final clean = email.trim().toLowerCase();
+    state = state.where((e) => e != clean).toList();
+    try {
+      await CasboxRepository.unblockContact(clean);
+    } catch (e) {
+      print('[BLOCKED CONTACTS] unblock error: $e');
+    }
+  }
+}
+
+final casboxBlockedContactsProvider =
+    StateNotifierProvider<CasboxBlockedContactsNotifier, List<String>>((ref) {
+  return CasboxBlockedContactsNotifier();
+});
+
+// ── Connections Provider ──────────────────────────────────────────────────
+
+class CasboxConnectionsNotifier
+    extends StateNotifier<List<Map<String, dynamic>>> {
+  CasboxConnectionsNotifier() : super(const []) {
+    fetchConnections();
+  }
+
+  bool isLoading = false;
+
+  Future<void> fetchConnections() async {
+    isLoading = true;
+    try {
+      final accepted = await CasboxRepository.getAcceptedConnections();
+      final all = await CasboxRepository.getAllConnections();
+      final authorized = await CasboxRepository.getAuthorizedContacts();
+
+      final merged = <String, Map<String, dynamic>>{};
+      for (final c in all) {
+        final email =
+            c['email']?.toString() ?? c['contactEmail']?.toString() ?? '';
+        if (email.isNotEmpty) merged[email.toLowerCase()] = c;
+      }
+      for (final c in accepted) {
+        final email =
+            c['email']?.toString() ?? c['contactEmail']?.toString() ?? '';
+        if (email.isNotEmpty) {
+          merged[email.toLowerCase()] = {
+            ...(merged[email.toLowerCase()] ?? {}),
+            ...c,
+            'status': 'CONNECTED'
+          };
+        }
+      }
+      for (final authEmail in authorized) {
+        if (!merged.containsKey(authEmail.toLowerCase())) {
+          merged[authEmail.toLowerCase()] = {
+            'email': authEmail,
+            'status': 'CONNECTED',
+          };
+        }
+      }
+      if (mounted) {
+        state = merged.values.toList();
+      }
+    } catch (e) {
+      print('[CASBOX CONNECTIONS] fetch error: $e');
+    } finally {
+      if (mounted) isLoading = false;
+    }
+  }
+
+  Future<void> updateConnectionStatus(
+      dynamic connectionId, String status) async {
+    state = state.map((c) {
+      if (c['id']?.toString() == connectionId.toString() ||
+          c['email']?.toString().toLowerCase() ==
+              connectionId.toString().toLowerCase()) {
+        return {...c, 'status': status.toUpperCase()};
+      }
+      return c;
+    }).toList();
+    try {
+      await CasboxRepository.updateConnectionStatus(connectionId, status);
+    } catch (e) {
+      print('[CASBOX CONNECTIONS] update error: $e');
+    }
+  }
+}
+
+final casboxConnectionsProvider =
+    StateNotifierProvider<CasboxConnectionsNotifier, List<Map<String, dynamic>>>((ref) {
+  return CasboxConnectionsNotifier();
+});
+
+// ── Contact Aliases Provider ──────────────────────────────────────────────
+
+class CasboxAliasesNotifier extends StateNotifier<Map<String, String>> {
+  CasboxAliasesNotifier() : super(const {}) {
+    fetchAliases();
+  }
+
+  Future<void> fetchAliases() async {
+    try {
+      final aliases = await CasboxRepository.getContactAliases();
+      if (mounted) {
+        state = {...state, ...aliases};
+      }
+    } catch (e) {
+      print('[CASBOX ALIASES] fetch error: $e');
+    }
+  }
+
+  Future<void> setAlias(dynamic contactUserId, String customName) async {
+    final key = contactUserId.toString();
+    state = {...state, key: customName};
+    try {
+      await CasboxRepository.setContactAlias(contactUserId, customName);
+    } catch (e) {
+      print('[CASBOX ALIASES] set error: $e');
+    }
+  }
+
+  Future<void> deleteAlias(dynamic contactUserId) async {
+    final key = contactUserId.toString();
+    final updated = Map<String, String>.from(state)..remove(key);
+    state = updated;
+    try {
+      await CasboxRepository.deleteContactAlias(contactUserId);
+    } catch (e) {
+      print('[CASBOX ALIASES] delete error: $e');
+    }
+  }
+}
+
+final casboxAliasesProvider =
+    StateNotifierProvider<CasboxAliasesNotifier, Map<String, String>>((ref) {
+  return CasboxAliasesNotifier();
+});

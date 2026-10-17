@@ -84,7 +84,7 @@ class DashboardShell extends ConsumerWidget {
                 currentRoute == '/manage-account' ||
                 currentRoute == '/profile')
             ? false
-            : (isDesktopOS
+            : (isDesktopOS || defaultTargetPlatform == TargetPlatform.macOS
                 ? ref.watch(desktopRightRailVisibleProvider)
                 : showRightRail);
     final bool showRightPanel =
@@ -684,6 +684,63 @@ class DashboardShell extends ConsumerWidget {
               ],
             ),
           ),
+          const SizedBox(width: 8),
+
+          // 4b. Filter Option near Search (Date filter dropdown)
+          Builder(
+            builder: (btnContext) {
+              final activeDateFilter = ref.watch(emailDateFilterProvider);
+              final bool isFiltered =
+                  activeDateFilter.option != EmailDateFilterOption.allTime;
+              return Tooltip(
+                message: 'Filter emails by date',
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () => _showFilterDropdown(context, ref, isDark),
+                    borderRadius: BorderRadius.circular(17),
+                    child: Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: isFiltered
+                            ? Colors.white.withValues(alpha: 0.35)
+                            : Colors.white.withValues(alpha: 0.18),
+                        shape: BoxShape.circle,
+                        border: isFiltered
+                            ? Border.all(color: Colors.white, width: 1.2)
+                            : null,
+                      ),
+                      alignment: Alignment.center,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          const Icon(
+                            Icons.tune_rounded,
+                            color: Colors.white,
+                            size: 16,
+                          ),
+                          if (isFiltered)
+                            Positioned(
+                              top: 5,
+                              right: 5,
+                              child: Container(
+                                width: 6,
+                                height: 6,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFF60A5FA),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
           const SizedBox(width: 14),
 
           // 5. User Profile (Highlighted Account Tab)
@@ -741,30 +798,33 @@ class DashboardShell extends ConsumerWidget {
           // 6. Bit Tool Round Toggle Button with bit_tool_logo.png
           Tooltip(
             message: 'Toggle Bit Tool Rail',
-            child: InkWell(
-              onTap: () {
-                ref
-                    .read(desktopRightRailVisibleProvider.notifier)
-                    .update((v) => !v);
-              },
-              borderRadius: BorderRadius.circular(18),
-              child: Container(
-                width: 36,
-                height: 36,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                ),
-                alignment: Alignment.center,
-                child: Image.asset(
-                  'assets/bit_tool_logo.png',
-                  width: 22,
-                  height: 22,
-                  fit: BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) => const Icon(
-                    Icons.tune_rounded,
-                    color: Color(0xFF195BAC),
-                    size: 18,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () {
+                  ref
+                      .read(desktopRightRailVisibleProvider.notifier)
+                      .update((v) => !v);
+                },
+                borderRadius: BorderRadius.circular(18),
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: Image.asset(
+                    'assets/bit_tool_logo.png',
+                    width: 22,
+                    height: 22,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) => const Icon(
+                      Icons.tune_rounded,
+                      color: Color(0xFF195BAC),
+                      size: 18,
+                    ),
                   ),
                 ),
               ),
@@ -1795,14 +1855,21 @@ class DashboardShell extends ConsumerWidget {
 
     return Container(
       width: 56,
+      margin: const EdgeInsets.only(top: 8, bottom: 8, right: 6),
       decoration: BoxDecoration(
         color: isDark ? BNXColors.darkBg : Colors.white,
-        border: Border(
-          left: BorderSide(
-            color: isDark ? BNXColors.darkBorder : const Color(0xFFE2E8F0),
-            width: 1,
-          ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: isDark ? BNXColors.darkBorder : const Color(0xFFE2E8F0),
+          width: 1.2,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.06),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         children: [
@@ -2864,6 +2931,243 @@ class DashboardShell extends ConsumerWidget {
                 color: color,
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- FILTER BY DATE DROPDOWN (HEADER SEARCH OPTION) ---
+  void _showFilterDropdown(
+    BuildContext context,
+    WidgetRef ref,
+    bool isDark,
+  ) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.12),
+      builder: (ctx) {
+        return Consumer(
+          builder: (context, ref, child) {
+            final activeFilter = ref.watch(emailDateFilterProvider);
+            return Dialog(
+              alignment: Alignment.topRight,
+              insetPadding: const EdgeInsets.only(top: 52, right: 210),
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              child: Container(
+                width: 240,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                    width: 1.2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.12),
+                      blurRadius: 24,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header: Calendar icon + Filter by date
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.calendar_today_outlined,
+                            size: 15,
+                            color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Filter by date',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? Colors.white70 : const Color(0xFF475569),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Divider(
+                      height: 1,
+                      color: isDark ? Colors.white12 : const Color(0xFFF1F5F9),
+                    ),
+                    const SizedBox(height: 6),
+
+                    // Options
+                    _buildFilterDateItem(
+                      ctx: ctx,
+                      ref: ref,
+                      isDark: isDark,
+                      option: EmailDateFilterOption.allTime,
+                      title: 'All Time',
+                      isSelected: activeFilter.option == EmailDateFilterOption.allTime,
+                    ),
+                    _buildFilterDateItem(
+                      ctx: ctx,
+                      ref: ref,
+                      isDark: isDark,
+                      option: EmailDateFilterOption.last1Day,
+                      title: 'Last 1 Day',
+                      isSelected: activeFilter.option == EmailDateFilterOption.last1Day,
+                    ),
+                    _buildFilterDateItem(
+                      ctx: ctx,
+                      ref: ref,
+                      isDark: isDark,
+                      option: EmailDateFilterOption.last1Week,
+                      title: 'Last 1 Week',
+                      isSelected: activeFilter.option == EmailDateFilterOption.last1Week,
+                    ),
+                    _buildFilterDateItem(
+                      ctx: ctx,
+                      ref: ref,
+                      isDark: isDark,
+                      option: EmailDateFilterOption.last1Month,
+                      title: 'Last 1 Month',
+                      isSelected: activeFilter.option == EmailDateFilterOption.last1Month,
+                    ),
+                    _buildFilterDateItem(
+                      ctx: ctx,
+                      ref: ref,
+                      isDark: isDark,
+                      option: EmailDateFilterOption.custom,
+                      title: activeFilter.option == EmailDateFilterOption.custom &&
+                              activeFilter.customRange != null
+                          ? '${activeFilter.customRange!.start.month}/${activeFilter.customRange!.start.day} - ${activeFilter.customRange!.end.month}/${activeFilter.customRange!.end.day}'
+                          : 'Custom Date',
+                      isSelected: activeFilter.option == EmailDateFilterOption.custom,
+                      isCustomDate: true,
+                      onTapCustom: () async {
+                        final filterNotifier =
+                            ref.read(emailDateFilterProvider.notifier);
+                        Navigator.of(ctx).pop();
+                        final picked = await showDateRangePicker(
+                          context: context,
+                          firstDate: DateTime(2020),
+                          lastDate:
+                              DateTime.now().add(const Duration(days: 365)),
+                          initialDateRange: activeFilter.customRange ??
+                              DateTimeRange(
+                                start: DateTime.now()
+                                    .subtract(const Duration(days: 7)),
+                                end: DateTime.now(),
+                              ),
+                          builder: (context, child) {
+                            return Theme(
+                              data: Theme.of(context).copyWith(
+                                colorScheme: isDark
+                                    ? const ColorScheme.dark(
+                                        primary: Color(0xFF195BAC),
+                                        onPrimary: Colors.white,
+                                        surface: Color(0xFF1E293B),
+                                      )
+                                    : const ColorScheme.light(
+                                        primary: Color(0xFF195BAC),
+                                        onPrimary: Colors.white,
+                                        surface: Colors.white,
+                                      ),
+                              ),
+                              child: child!,
+                            );
+                          },
+                        );
+                        if (picked != null) {
+                          filterNotifier.state = EmailDateFilterState(
+                            option: EmailDateFilterOption.custom,
+                            customRange: picked,
+                          );
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildFilterDateItem({
+    required BuildContext ctx,
+    required WidgetRef ref,
+    required bool isDark,
+    required EmailDateFilterOption option,
+    required String title,
+    required bool isSelected,
+    bool isCustomDate = false,
+    VoidCallback? onTapCustom,
+  }) {
+    return InkWell(
+      onTap: () {
+        if (isCustomDate && onTapCustom != null) {
+          onTapCustom();
+        } else {
+          ref.read(emailDateFilterProvider.notifier).state =
+              EmailDateFilterState(option: option);
+          Navigator.of(ctx).pop();
+        }
+      },
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? (isDark
+                  ? const Color(0xFF1E3A8A).withValues(alpha: 0.35)
+                  : const Color(0xFFEFF6FF))
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.calendar_today_outlined,
+              size: 15,
+              color: isSelected
+                  ? const Color(0xFF195BAC)
+                  : (isDark ? Colors.white60 : Colors.grey.shade600),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                  color: isSelected
+                      ? const Color(0xFF195BAC)
+                      : (isDark ? Colors.white : const Color(0xFF1E293B)),
+                ),
+              ),
+            ),
+            if (isSelected)
+              const Icon(
+                Icons.check_rounded,
+                size: 16,
+                color: Color(0xFF195BAC),
+              )
+            else if (isCustomDate)
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 16,
+                color: isDark ? Colors.white38 : Colors.grey.shade400,
+              ),
           ],
         ),
       ),

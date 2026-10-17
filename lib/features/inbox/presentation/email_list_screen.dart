@@ -34,6 +34,8 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
   String? _lastTrackedLabel;
   String? _lastTrackedSearch;
   int? _lastTrackedTab;
+  EmailDateFilterOption? _lastTrackedDateFilter;
+  DateTimeRange? _lastTrackedCustomRange;
 
   bool _isCustomizeTabsOpen = false;
   final Set<String> _enabledTabs = {'All', 'Important', 'Promotions', 'Social'};
@@ -512,6 +514,43 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
       }).toList();
     }
 
+    // 2b. FILTER EMAILS BY DATE FILTER
+    final dateFilter = ref.watch(emailDateFilterProvider);
+    if (dateFilter.option != EmailDateFilterOption.allTime) {
+      final now = DateTime.now();
+      filtered = filtered.where((e) {
+        switch (dateFilter.option) {
+          case EmailDateFilterOption.last1Day:
+            return e.date.isAfter(now.subtract(const Duration(days: 1)));
+          case EmailDateFilterOption.last1Week:
+            return e.date.isAfter(now.subtract(const Duration(days: 7)));
+          case EmailDateFilterOption.last1Month:
+            return e.date.isAfter(now.subtract(const Duration(days: 30)));
+          case EmailDateFilterOption.custom:
+            if (dateFilter.customRange != null) {
+              final start = DateTime(
+                dateFilter.customRange!.start.year,
+                dateFilter.customRange!.start.month,
+                dateFilter.customRange!.start.day,
+              );
+              final end = DateTime(
+                dateFilter.customRange!.end.year,
+                dateFilter.customRange!.end.month,
+                dateFilter.customRange!.end.day,
+                23,
+                59,
+                59,
+              );
+              return e.date.isAfter(start.subtract(const Duration(seconds: 1))) &&
+                  e.date.isBefore(end.add(const Duration(seconds: 1)));
+            }
+            return true;
+          case EmailDateFilterOption.allTime:
+            return true;
+        }
+      }).toList();
+    }
+
     // 3. SORT EMAILS CHRONOLOGICALLY (Newest at top)
     filtered = List<EmailModel>.from(filtered)
       ..sort((a, b) => b.date.compareTo(a.date));
@@ -520,18 +559,24 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
     final seenIds = <String>{};
     filtered = filtered.where((e) => seenIds.add(e.id)).toList();
 
-    // Reset desktop pagination to page 1 if folder, label, search, or subtab changes
+    // Reset desktop pagination to page 1 if folder, label, search, subtab, or date filter changes
     final String currentFolder = uiState.activeFolder;
     final String? currentLabel = uiState.activeLabel;
     final String currentSearch = uiState.searchQuery;
+    final EmailDateFilterOption currentDateFilter = dateFilter.option;
+    final DateTimeRange? currentCustomRange = dateFilter.customRange;
     if (_lastTrackedFolder != currentFolder ||
         _lastTrackedLabel != currentLabel ||
         _lastTrackedSearch != currentSearch ||
-        _lastTrackedTab != currentTabIndex) {
+        _lastTrackedTab != currentTabIndex ||
+        _lastTrackedDateFilter != currentDateFilter ||
+        _lastTrackedCustomRange != currentCustomRange) {
       _lastTrackedFolder = currentFolder;
       _lastTrackedLabel = currentLabel;
       _lastTrackedSearch = currentSearch;
       _lastTrackedTab = currentTabIndex;
+      _lastTrackedDateFilter = currentDateFilter;
+      _lastTrackedCustomRange = currentCustomRange;
       _desktopCurrentPage = 1;
     }
 

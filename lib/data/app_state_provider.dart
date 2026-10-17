@@ -481,4 +481,36 @@ final customLabelsProvider =
       return CustomLabelsNotifier(ref);
     });
 
-final desktopRightRailVisibleProvider = StateProvider<bool>((ref) => true);
+final desktopRightRailVisibleProvider = StateProvider<bool>((ref) => false);
+
+enum EmailDateFilterOption {
+  allTime,
+  last1Day,
+  last1Week,
+  last1Month,
+  custom,
+}
+
+class EmailDateFilterState {
+  final EmailDateFilterOption option;
+  final DateTimeRange? customRange;
+
+  const EmailDateFilterState({
+    this.option = EmailDateFilterOption.allTime,
+    this.customRange,
+  });
+
+  EmailDateFilterState copyWith({
+    EmailDateFilterOption? option,
+    DateTimeRange? customRange,
+    bool clearCustomRange = false,
+  }) {
+    return EmailDateFilterState(
+      option: option ?? this.option,
+      customRange: clearCustomRange ? null : (customRange ?? this.customRange),
+    );
+  }
+}
+
+final emailDateFilterProvider =
+    StateProvider<EmailDateFilterState>((ref) => const EmailDateFilterState());

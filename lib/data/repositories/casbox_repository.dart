@@ -8,9 +8,24 @@ class CasboxRepository {
     if (json is List) return json;
     if (json is Map) {
       final listKeys = [
-        'emails', 'messages', 'threads', 'items', 'content', 'data',
-        'list', 'mailboxes', 'tickets', 'conversations', 'casbox',
-        'casboxMessages', 'results', 'payload'
+        'emails',
+        'messages',
+        'threads',
+        'items',
+        'content',
+        'data',
+        'list',
+        'mailboxes',
+        'tickets',
+        'conversations',
+        'casbox',
+        'casboxMessages',
+        'results',
+        'payload',
+        'connections',
+        'aliases',
+        'blockedContacts',
+        'blockedUsers'
       ];
       for (final key in listKeys) {
         if (json.containsKey(key)) {
@@ -40,7 +55,9 @@ class CasboxRepository {
     final result = <CasboxMessage>[];
     for (final item in rawList) {
       if (item is Map<String, dynamic>) {
-        final innerMessages = item['messages'] ?? item['threadMessages'] ?? item['chatMessages'];
+        final innerMessages = item['messages'] ??
+            item['threadMessages'] ??
+            item['chatMessages'];
         if (innerMessages is List && innerMessages.isNotEmpty) {
           final contactEmail = item['contactEmail']?.toString() ??
               item['sender']?.toString() ??
@@ -48,13 +65,16 @@ class CasboxRepository {
               item['senderEmail']?.toString() ??
               '';
           final status = item['status']?.toString() ?? 'SENT';
-          final threadId = item['id']?.toString() ?? item['threadId']?.toString() ?? '';
+          final threadId = item['id']?.toString() ??
+              item['threadId']?.toString() ??
+              '';
 
           for (final msg in innerMessages) {
             if (msg is Map<String, dynamic>) {
               result.add(CasboxMessage.fromJson({
                 ...msg,
-                if (!msg.containsKey('contactEmail') && contactEmail.isNotEmpty)
+                if (!msg.containsKey('contactEmail') &&
+                    contactEmail.isNotEmpty)
                   'contactEmail': contactEmail,
                 if (!msg.containsKey('status')) 'status': status,
                 if (!msg.containsKey('threadId') && threadId.isNotEmpty)
@@ -70,8 +90,10 @@ class CasboxRepository {
     return result;
   }
 
-  /// 2.3 Get All User Messages: GET /api/casbox
-  /// Retrieves all Casbox messages involving authenticated user, sorted timestamp DESC.
+  // ── 1. Core Cashbox Messaging APIs (/api/casbox) ───────────────────────────
+
+  /// API 1: Fetch All Messages: GET /api/casbox
+  /// Retrieves incoming and outgoing Cashbox messages for authenticated user.
   static Future<List<CasboxMessage>> fetchCasbox() async {
     dynamic res;
     final candidateEndpoints = [
@@ -91,14 +113,12 @@ class CasboxRepository {
     }
 
     if (res != null) {
-      final parsed = _parseMessagesFromResponse(res);
-      return parsed;
+      return _parseMessagesFromResponse(res);
     }
-
     return [];
   }
 
-  /// 2.2 Get Conversation Thread: GET /api/casbox/thread/{contactEmail}
+  /// API 2: Fetch Conversation Thread: GET /api/casbox/thread/{contactEmail}
   /// Retrieves historical messages between user and counterpart sorted timestamp ASC.
   static Future<List<CasboxMessage>> fetchThread(String contactEmail) async {
     final cleanContact = contactEmail.trim();
@@ -127,9 +147,8 @@ class CasboxRepository {
     return [];
   }
 
-  /// 2.1 Send Message: POST /api/casbox/send
-  /// Request payload (CasboxSendRequest):
-  /// { "receiverEmail": "...", "subject": "...", "body": "...", "attachmentsJson": "..." }
+  /// API 3: Send Message: POST /api/casbox/send
+  /// Body: {"receiverEmail":"...","subject":"...","body":"...","attachmentsJson":"..."}
   static Future<Map<String, dynamic>> sendCasboxMessage({
     required String contactEmail,
     required String message,
@@ -145,10 +164,10 @@ class CasboxRepository {
 
     if (attachments.isNotEmpty) {
       final attachList = attachments.map((a) => {
-        'fileName': a.fileName,
-        'fileSize': a.fileSize,
-        if (a.filePath != null && a.filePath!.isNotEmpty) 'url': a.filePath,
-      }).toList();
+            'fileName': a.fileName,
+            'fileSize': a.fileSize,
+            if (a.filePath != null && a.filePath!.isNotEmpty) 'url': a.filePath,
+          }).toList();
       body['attachmentsJson'] = jsonEncode(attachList);
     }
 
@@ -161,20 +180,54 @@ class CasboxRepository {
     }
   }
 
-  /// 2.4 Update Message Status (Receipts): PATCH /api/casbox/status
-  /// Request payload (CasboxStatusRequest):
-  /// { "messageIds": [98, 101], "status": "SEEN" | "DELIVERED" }
+  /// API 4: Batch Archive / Unarchive Messages: PATCH /api/casbox/archive
+  /// Body: {"messageIds":[1,2],"archived":true}
+  static Future<void> batchArchiveMessages(
+      List<dynamic> messageIds, bool archived) async {
+    if (messageIds.isEmpty) return;
+    final parsedIds =
+        messageIds.map((id) => int.tryParse(id.toString()) ?? id).toList();
+    final body = {
+      'messageIds': parsedIds,
+      'archived': archived,
+    };
+    try {
+      await ApiClient.patch('/api/casbox/archive', body: body);
+      print('[CASBOX REPO] batchArchiveMessages succeeded');
+    } catch (e) {
+      print('[CASBOX REPO WARNING] PATCH /api/casbox/archive failed ($e), trying POST...');
+      try {
+        await ApiClient.post('/api/casbox/archive', body: body);
+      } catch (_) {}
+    }
+  }
+
+  /// API 5: Single Message Archive / Unarchive: PATCH /api/casbox/{id}/archive?archived={bool}
+  static Future<void> archiveMessage(dynamic messageId, bool archived) async {
+    try {
+      await ApiClient.patch(
+          '/api/casbox/$messageId/archive?archived=$archived');
+      print('[CASBOX REPO] archiveMessage succeeded for id=$messageId');
+    } catch (e) {
+      print('[CASBOX REPO WARNING] PATCH /api/casbox/$messageId/archive failed: $e');
+      // Fallback to batch archive
+      await batchArchiveMessages([messageId], archived);
+    }
+  }
+
+  /// API 6: Update Delivery and Read Status: PATCH /api/casbox/status
+  /// Body: {"messageIds":[101,102],"status":"SEEN"}
   static Future<void> updateStatus(dynamic messageId, String status) async {
     final parsedInt = int.tryParse(messageId.toString());
     final idVal = parsedInt ?? messageId;
-    final targetStatus = (status.toUpperCase() == 'READ' || status.toUpperCase() == 'SEEN')
+    final targetStatus = (status.toUpperCase() == 'READ' ||
+            status.toUpperCase() == 'SEEN')
         ? 'SEEN'
         : status.toUpperCase();
 
     final body = {
       'messageIds': [idVal],
       'status': targetStatus,
-      // Compatibility keys:
       'ids': [idVal],
       'threadId': idVal,
     };
@@ -189,11 +242,14 @@ class CasboxRepository {
     }
   }
 
-  /// Batch update status for multiple message IDs
-  static Future<void> updateMessagesStatus(List<dynamic> messageIds, String status) async {
+  /// API 6 (Batch): Update multiple message status
+  static Future<void> updateMessagesStatus(
+      List<dynamic> messageIds, String status) async {
     if (messageIds.isEmpty) return;
-    final intIds = messageIds.map((id) => int.tryParse(id.toString()) ?? id).toList();
-    final targetStatus = (status.toUpperCase() == 'READ' || status.toUpperCase() == 'SEEN')
+    final intIds =
+        messageIds.map((id) => int.tryParse(id.toString()) ?? id).toList();
+    final targetStatus = (status.toUpperCase() == 'READ' ||
+            status.toUpperCase() == 'SEEN')
         ? 'SEEN'
         : status.toUpperCase();
 
@@ -212,8 +268,7 @@ class CasboxRepository {
     }
   }
 
-  /// 2.5 Mark Pending Messages as Delivered: POST /api/casbox/delivered
-  /// Marks all incoming messages in 'SENT' state destined for current user as 'DELIVERED'.
+  /// API 7: Mark Unseen Messages as Delivered: POST /api/casbox/delivered
   static Future<void> markAllDelivered() async {
     try {
       await ApiClient.post('/api/casbox/delivered');
@@ -223,8 +278,12 @@ class CasboxRepository {
     }
   }
 
-  /// Mark specific message delivered
-  static Future<void> markDelivered(dynamic messageId) async {
+  /// Mark message(s) delivered. If messageId is omitted, calls POST /api/casbox/delivered (API 7)
+  static Future<void> markDelivered([dynamic messageId]) async {
+    if (messageId == null) {
+      await markAllDelivered();
+      return;
+    }
     try {
       await updateStatus(messageId, 'DELIVERED');
     } catch (_) {
@@ -237,14 +296,275 @@ class CasboxRepository {
     }
   }
 
-  /// 4. Authorized Contacts (casboxAccepted) via GET /api/users/settings
+  /// API 8, 9, 10: Edit Sent Message: PATCH/PUT /api/casbox/{id} or PATCH /api/casbox/{id}/edit
+  /// Body: {"body":"New content"}
+  static Future<void> editMessage(dynamic messageId, String newBody) async {
+    final body = {'body': newBody};
+    try {
+      await ApiClient.patch('/api/casbox/$messageId', body: body);
+      print('[CASBOX REPO] editMessage succeeded with PATCH /api/casbox/$messageId');
+      return;
+    } catch (e) {
+      print('[CASBOX REPO] PATCH /api/casbox/$messageId failed ($e), trying PUT...');
+    }
+
+    try {
+      await ApiClient.put('/api/casbox/$messageId', body: body);
+      print('[CASBOX REPO] editMessage succeeded with PUT /api/casbox/$messageId');
+      return;
+    } catch (e) {
+      print('[CASBOX REPO] PUT /api/casbox/$messageId failed ($e), trying /edit route...');
+    }
+
+    try {
+      await ApiClient.patch('/api/casbox/$messageId/edit', body: body);
+      print('[CASBOX REPO] editMessage succeeded with PATCH /api/casbox/$messageId/edit');
+    } catch (e) {
+      print('[CASBOX REPO ERROR] editMessage failed on all routes: $e');
+      rethrow;
+    }
+  }
+
+  /// API 11: Delete Conversation: DELETE /api/casbox/conversation/{contactEmail}
+  /// Also tries aliases: /api/casbox/messages/{contactEmail}, /api/casbox/{contactEmail}
+  static Future<void> deleteConversation(String contactEmail) async {
+    final cleanContact = contactEmail.trim();
+    if (cleanContact.isEmpty) return;
+    final encoded = Uri.encodeComponent(cleanContact);
+
+    final candidateEndpoints = [
+      '/api/casbox/conversation/$encoded',
+      '/api/casbox/conversation/$cleanContact',
+      '/api/casbox/messages/$encoded',
+      '/api/casbox/$encoded',
+    ];
+
+    for (final path in candidateEndpoints) {
+      try {
+        await ApiClient.delete(path);
+        print('[CASBOX REPO] deleteConversation succeeded via DELETE "$path"');
+        return;
+      } catch (e) {
+        print('[CASBOX REPO] deleteConversation attempt "$path" error: $e');
+      }
+    }
+  }
+
+  // ── 2. Contact & Connection APIs (/api/connections) ─────────────────────────
+
+  /// API 12: Get Accepted Connections: GET /api/connections/accepted
+  /// Returns contacts with CONNECTED status; populates Cashbox "Accepted" list.
+  static Future<List<Map<String, dynamic>>> getAcceptedConnections() async {
+    try {
+      final res = await ApiClient.get('/api/connections/accepted');
+      final rawList = _extractList(res);
+      if (rawList != null) {
+        return rawList.whereType<Map<String, dynamic>>().toList();
+      }
+    } catch (e) {
+      print('[CASBOX REPO ERROR] getAcceptedConnections: $e');
+    }
+    return [];
+  }
+
+  /// API 13: Get All User Connections: GET /api/connections
+  /// Returns all connection records (CONNECTED and DISCONNECTED).
+  static Future<List<Map<String, dynamic>>> getAllConnections() async {
+    try {
+      final res = await ApiClient.get('/api/connections');
+      final rawList = _extractList(res);
+      if (rawList != null) {
+        return rawList.whereType<Map<String, dynamic>>().toList();
+      }
+    } catch (e) {
+      print('[CASBOX REPO ERROR] getAllConnections: $e');
+    }
+    return [];
+  }
+
+  /// API 14: Update Connection Status: PATCH or PUT /api/connections/{connectionId}/status
+  /// Body: {"status":"DISCONNECTED" | "CONNECTED"}
+  static Future<void> updateConnectionStatus(
+      dynamic connectionId, String status) async {
+    final body = {'status': status.toUpperCase()};
+    try {
+      await ApiClient.patch('/api/connections/$connectionId/status', body: body);
+      print('[CASBOX REPO] updateConnectionStatus succeeded via PATCH');
+      return;
+    } catch (_) {
+      try {
+        await ApiClient.put('/api/connections/$connectionId/status', body: body);
+        print('[CASBOX REPO] updateConnectionStatus succeeded via PUT');
+      } catch (e) {
+        print('[CASBOX REPO ERROR] updateConnectionStatus: $e');
+        rethrow;
+      }
+    }
+  }
+
+  // ── 3. Contact Customization / Alias APIs (/api/contact-aliases) ───────────
+
+  /// API 15: Get All Aliases: GET /api/contact-aliases
+  /// Returns custom contact names created by the user.
+  static Future<Map<String, String>> getContactAliases() async {
+    final result = <String, String>{};
+    try {
+      final res = await ApiClient.get('/api/contact-aliases');
+      final rawList = _extractList(res);
+      if (rawList != null) {
+        for (final item in rawList) {
+          if (item is Map) {
+            final id = item['contactUserId']?.toString() ??
+                item['email']?.toString() ??
+                item['userId']?.toString();
+            final name = item['customName']?.toString() ??
+                item['alias']?.toString() ??
+                item['name']?.toString();
+            if (id != null && name != null) {
+              result[id] = name;
+            }
+          }
+        }
+      } else {
+        res.forEach((k, v) {
+          result[k.toString()] = v.toString();
+        });
+      }
+    } catch (e) {
+      print('[CASBOX REPO ERROR] getContactAliases: $e');
+    }
+    return result;
+  }
+
+  /// API 16: Get Single Alias: GET /api/contact-aliases/{contactUserId}
+  static Future<String?> getContactAlias(dynamic contactUserId) async {
+    try {
+      final res = await ApiClient.get('/api/contact-aliases/$contactUserId');
+      return res['customName']?.toString() ??
+          res['alias']?.toString() ??
+          res['name']?.toString();
+    } catch (e) {
+      print('[CASBOX REPO ERROR] getContactAlias: $e');
+    }
+    return null;
+  }
+
+  /// API 17: Set/Update Alias: PUT /api/contact-aliases/{contactUserId}
+  /// Body: {"customName":"Alice (CEO Office)"}
+  static Future<void> setContactAlias(
+      dynamic contactUserId, String customName) async {
+    try {
+      await ApiClient.put(
+        '/api/contact-aliases/$contactUserId',
+        body: {'customName': customName},
+      );
+      print('[CASBOX REPO] setContactAlias succeeded for $contactUserId');
+    } catch (e) {
+      print('[CASBOX REPO ERROR] setContactAlias: $e');
+      rethrow;
+    }
+  }
+
+  /// API 18: Delete Alias: DELETE /api/contact-aliases/{contactUserId}
+  static Future<void> deleteContactAlias(dynamic contactUserId) async {
+    try {
+      await ApiClient.delete('/api/contact-aliases/$contactUserId');
+      print('[CASBOX REPO] deleteContactAlias succeeded for $contactUserId');
+    } catch (e) {
+      print('[CASBOX REPO ERROR] deleteContactAlias: $e');
+      rethrow;
+    }
+  }
+
+  // ── 4. Contact Safety & Block APIs (/api/blocked-contacts) ─────────────────
+
+  /// API 19: Get Blocked Contacts: GET /api/blocked-contacts
+  /// Lists email addresses blocked by the user.
+  static Future<List<String>> getBlockedContacts() async {
+    try {
+      final res = await ApiClient.get('/api/blocked-contacts');
+      final rawList = _extractList(res);
+      if (rawList != null) {
+        final emails = <String>[];
+        for (final item in rawList) {
+          if (item is String) {
+            emails.add(item.trim().toLowerCase());
+          } else if (item is Map) {
+            final email = item['email']?.toString() ??
+                item['contactEmail']?.toString() ??
+                item['blockedEmail']?.toString();
+            if (email != null && email.trim().isNotEmpty) {
+              emails.add(email.trim().toLowerCase());
+            }
+          }
+        }
+        return emails;
+      }
+    } catch (e) {
+      print('[CASBOX REPO ERROR] getBlockedContacts: $e');
+    }
+    return [];
+  }
+
+  /// API 20: Check Blocked Status: GET /api/blocked-contacts/check?email={email}
+  static Future<bool> isBlocked(String email) async {
+    final clean = email.trim().toLowerCase();
+    if (clean.isEmpty) return false;
+    final encoded = Uri.encodeComponent(clean);
+    try {
+      final res =
+          await ApiClient.get('/api/blocked-contacts/check?email=$encoded');
+      return res['blocked'] == true;
+    } catch (e) {
+      print('[CASBOX REPO ERROR] isBlocked: $e');
+    }
+    return false;
+  }
+
+  /// API 21: Block Contact: POST /api/blocked-contacts
+  /// Body: {"email":"spammer@bnxmail.com","reason":"Spam"}
+  static Future<void> blockContact(String email,
+      {String reason = 'Spam'}) async {
+    final clean = email.trim().toLowerCase();
+    try {
+      await ApiClient.post(
+        '/api/blocked-contacts',
+        body: {'email': clean, 'reason': reason},
+      );
+      print('[CASBOX REPO] blockContact succeeded for $clean');
+    } catch (e) {
+      print('[CASBOX REPO ERROR] blockContact: $e');
+      rethrow;
+    }
+  }
+
+  /// API 22: Unblock Contact: DELETE /api/blocked-contacts/{email}
+  static Future<void> unblockContact(String email) async {
+    final clean = email.trim().toLowerCase();
+    final encoded = Uri.encodeComponent(clean);
+    try {
+      await ApiClient.delete('/api/blocked-contacts/$encoded');
+      print('[CASBOX REPO] unblockContact succeeded for $clean');
+    } catch (e) {
+      print('[CASBOX REPO ERROR] unblockContact: $e');
+      rethrow;
+    }
+  }
+
+  // ── 5. Message Requests & Accepted Senders (/api/users/settings) ───────────
+
+  /// API 23: Get User Settings: GET /api/users/settings
+  /// Returns casboxAccepted string array of approved senders.
   static Future<List<String>> getAuthorizedContacts() async {
     try {
       final res = await ApiClient.get('/api/users/settings');
       final data = (res['data'] as Map<String, dynamic>?) ?? res;
       final accepted = data['casboxAccepted'];
       if (accepted is List) {
-        return accepted.map((e) => e.toString().trim().toLowerCase()).where((e) => e.isNotEmpty).toList();
+        return accepted
+            .map((e) => e.toString().trim().toLowerCase())
+            .where((e) => e.isNotEmpty)
+            .toList();
       }
     } catch (e) {
       print('[CASBOX REPO ERROR] getAuthorizedContacts: $e');
@@ -252,14 +572,21 @@ class CasboxRepository {
     return [];
   }
 
-  /// 4.2 Update Authorized Contacts via PATCH/PUT /api/users/settings
+  /// API 24: Update Accepted Senders: PATCH /api/users/settings
+  /// Body: {"casboxAccepted":["alice@bnxmail.com","bob@bnxmail.com"]}
   static Future<void> updateAuthorizedContacts(List<String> emails) async {
-    final cleanEmails = emails.map((e) => e.trim().toLowerCase()).where((e) => e.isNotEmpty).toSet().toList();
+    final cleanEmails = emails
+        .map((e) => e.trim().toLowerCase())
+        .where((e) => e.isNotEmpty)
+        .toSet()
+        .toList();
     try {
-      await ApiClient.patch('/api/users/settings', body: {'casboxAccepted': cleanEmails});
+      await ApiClient.patch('/api/users/settings',
+          body: {'casboxAccepted': cleanEmails});
     } catch (_) {
       try {
-        await ApiClient.put('/api/users/settings', body: {'casboxAccepted': cleanEmails});
+        await ApiClient.put('/api/users/settings',
+            body: {'casboxAccepted': cleanEmails});
       } catch (e) {
         print('[CASBOX REPO ERROR] updateAuthorizedContacts: $e');
       }
