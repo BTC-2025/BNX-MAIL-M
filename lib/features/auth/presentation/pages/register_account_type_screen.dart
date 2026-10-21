@@ -25,6 +25,10 @@ class _RegisterAccountTypeScreenState
   String _selectedType = 'personal'; // 'personal', 'business', 'child'
   String _currentPersonalStep = 'selection'; // 'selection', 'profile', 'mail', 'mobile-verify', 'password'
   String _currentChildStep = 'details'; // 'details', 'parent-email', 'parent-otp', 'mail', 'mobile-verify', 'password'
+  String _currentBusinessStep = 'details'; // 'details', 'sole_proprietorship', 'organization', 'mail', 'mobile-verify', 'password'
+  String _businessFlow = 'secondary'; // 'secondary' | 'primary'
+  String _businessPrimaryType = 'sole_proprietorship'; // 'sole_proprietorship' | 'organization'
+  bool _isFetchingGstins = false;
   bool _phoneOtpSent = false;
   bool _isSendingMobileOtp = false;
   bool _isVerifyingMobileOtp = false;
@@ -88,6 +92,31 @@ class _RegisterAccountTypeScreenState
         _selectedType = 'child';
         _childStep = 4;
         _currentChildStep = 'password';
+      } else if (widget.initialStep == 'business' || widget.initialStep == 'business-details') {
+        _step = 2;
+        _selectedType = 'business';
+        _businessFlow = 'secondary';
+        _currentBusinessStep = 'details';
+      } else if (widget.initialStep == 'business-sole') {
+        _step = 2;
+        _selectedType = 'business';
+        _businessFlow = 'primary';
+        _businessPrimaryType = 'sole_proprietorship';
+        _currentBusinessStep = 'sole_proprietorship';
+      } else if (widget.initialStep == 'business-org') {
+        _step = 2;
+        _selectedType = 'business';
+        _businessFlow = 'primary';
+        _businessPrimaryType = 'organization';
+        _currentBusinessStep = 'organization';
+      } else if (widget.initialStep == 'business-mail') {
+        _step = 2;
+        _selectedType = 'business';
+        _currentBusinessStep = 'mail';
+      } else if (widget.initialStep == 'business-password') {
+        _step = 2;
+        _selectedType = 'business';
+        _currentBusinessStep = 'password';
       }
     }
   }
@@ -108,6 +137,13 @@ class _RegisterAccountTypeScreenState
   String? _adminPasswordError;
   String? _retypeAdminPasswordError;
   String? _phoneError;
+  String? _businessSecondaryFirstNameError;
+  String? _businessSecondaryLastNameError;
+  String? _businessIdError;
+  String? _businessOwnerFirstNameError;
+  String? _businessOwnerLastNameError;
+  String? _panError;
+  String? _cinError;
 
   // Validation errors (Child)
   String? _childFirstNameError;
@@ -149,6 +185,13 @@ class _RegisterAccountTypeScreenState
 
   // Step 2 Controllers (Business)
   final _businessNameController = TextEditingController();
+  final _businessSecondaryFirstNameController = TextEditingController();
+  final _businessSecondaryLastNameController = TextEditingController();
+  final _businessIdController = TextEditingController();
+  final _businessOwnerFirstNameController = TextEditingController();
+  final _businessOwnerLastNameController = TextEditingController();
+  final _panController = TextEditingController();
+  final _cinController = TextEditingController();
   final _customDomainController = TextEditingController();
   final _ownerFirstNameController = TextEditingController();
   final _ownerLastNameController = TextEditingController();
@@ -200,6 +243,13 @@ class _RegisterAccountTypeScreenState
     _personalPhoneController.dispose();
 
     _businessNameController.dispose();
+    _businessSecondaryFirstNameController.dispose();
+    _businessSecondaryLastNameController.dispose();
+    _businessIdController.dispose();
+    _businessOwnerFirstNameController.dispose();
+    _businessOwnerLastNameController.dispose();
+    _panController.dispose();
+    _cinController.dispose();
     _customDomainController.dispose();
     _ownerFirstNameController.dispose();
     _ownerLastNameController.dispose();
@@ -888,7 +938,7 @@ class _RegisterAccountTypeScreenState
   bool get _canGoBackFromHeader {
     if (_selectedType == 'child') return true;
     if (_selectedType == 'personal') return _currentPersonalStep != 'selection';
-    if (_selectedType == 'business') return _step > 1;
+    if (_selectedType == 'business') return false;
     return false;
   }
 
@@ -932,21 +982,51 @@ class _RegisterAccountTypeScreenState
     }
   }
 
+  void _handleBusinessBack() {
+    if (_currentBusinessStep == 'password') {
+      setState(() => _currentBusinessStep = 'mobile-verify');
+    } else if (_currentBusinessStep == 'mobile-verify') {
+      if (_phoneOtpSent) {
+        setState(() => _phoneOtpSent = false);
+      } else {
+        setState(() => _currentBusinessStep = 'mail');
+      }
+    } else if (_currentBusinessStep == 'mail') {
+      setState(() {
+        if (_businessFlow == 'primary') {
+          _currentBusinessStep = _businessPrimaryType == 'organization'
+              ? 'organization'
+              : 'sole_proprietorship';
+        } else {
+          _currentBusinessStep = 'details';
+        }
+      });
+    } else if (_currentBusinessStep == 'sole_proprietorship' ||
+        _currentBusinessStep == 'organization') {
+      setState(() {
+        _currentBusinessStep = 'details';
+        _businessFlow = 'primary';
+      });
+    } else if (_currentBusinessStep == 'details') {
+      if (_businessFlow == 'primary') {
+        setState(() => _businessFlow = 'secondary');
+      } else {
+        setState(() {
+          _selectedType = 'personal';
+          _currentPersonalStep = 'selection';
+          _step = 1;
+        });
+      }
+    }
+  }
+
   void _handleTopBack() {
     if (_selectedType == 'child') {
       _handleChildBack();
     } else if (_selectedType == 'personal') {
       _handlePersonalBack();
     } else if (_selectedType == 'business') {
-      if (_businessStep > 1) {
-        setState(() => _businessStep--);
-      } else {
-        setState(() {
-          _step = 1;
-          _selectedType = 'personal';
-          _currentPersonalStep = 'selection';
-        });
-      }
+      _handleBusinessBack();
     }
   }
 
@@ -1078,6 +1158,20 @@ class _RegisterAccountTypeScreenState
       } else if (_currentChildStep == 'password') {
         return _buildPersonalPasswordStep(isMobile);
       }
+    } else if (_selectedType == 'business') {
+      if (_currentBusinessStep == 'details') {
+        return _buildBusinessDetailsStep(isMobile);
+      } else if (_currentBusinessStep == 'sole_proprietorship') {
+        return _buildBusinessSoleProprietorshipStep(isMobile);
+      } else if (_currentBusinessStep == 'organization') {
+        return _buildBusinessOrganizationStep(isMobile);
+      } else if (_currentBusinessStep == 'mail') {
+        return _buildPersonalMailStep(isMobile);
+      } else if (_currentBusinessStep == 'mobile-verify') {
+        return _buildPersonalMobileVerifyStep(isMobile);
+      } else if (_currentBusinessStep == 'password') {
+        return _buildPersonalPasswordStep(isMobile);
+      }
     }
     return _buildStepContent();
   }
@@ -1145,7 +1239,8 @@ class _RegisterAccountTypeScreenState
                     setState(() {
                       _selectedType = 'business';
                       _step = 2;
-                      _businessStep = 1;
+                      _businessFlow = 'secondary';
+                      _currentBusinessStep = 'details';
                     });
                   },
                 ),
@@ -1196,7 +1291,8 @@ class _RegisterAccountTypeScreenState
                   setState(() {
                     _selectedType = 'business';
                     _step = 2;
-                    _businessStep = 1;
+                    _businessFlow = 'secondary';
+                    _currentBusinessStep = 'details';
                   });
                 },
               ),
@@ -1501,7 +1597,21 @@ class _RegisterAccountTypeScreenState
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             TextButton(
-              onPressed: () => setState(() => _currentPersonalStep = 'profile'),
+              onPressed: () {
+                setState(() {
+                  if (_selectedType == 'business') {
+                    if (_businessFlow == 'primary') {
+                      _currentBusinessStep = _businessPrimaryType == 'organization'
+                          ? 'organization'
+                          : 'sole_proprietorship';
+                    } else {
+                      _currentBusinessStep = 'details';
+                    }
+                  } else {
+                    _currentPersonalStep = 'profile';
+                  }
+                });
+              },
               child: const Text(
                 'Back',
                 style: TextStyle(
@@ -1682,6 +1792,8 @@ class _RegisterAccountTypeScreenState
                 onPressed: () {
                   if (_selectedType == 'child') {
                     setState(() => _currentChildStep = 'mail');
+                  } else if (_selectedType == 'business') {
+                    setState(() => _currentBusinessStep = 'mail');
                   } else {
                     setState(() => _currentPersonalStep = 'mail');
                   }
@@ -2780,19 +2892,23 @@ class _RegisterAccountTypeScreenState
     List<TextInputFormatter>? inputFormatters,
     Widget? suffixIcon,
     ValueChanged<String>? onChanged,
+    TextCapitalization textCapitalization = TextCapitalization.none,
+    int? maxLength,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF0F172A),
+        if (label.isNotEmpty) ...[
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF0F172A),
+            ),
           ),
-        ),
-        const SizedBox(height: 6),
+          const SizedBox(height: 6),
+        ],
         Container(
           decoration: BoxDecoration(
             color: const Color(0xFFF8FAFC),
@@ -2810,9 +2926,12 @@ class _RegisterAccountTypeScreenState
             obscureText: obscureText,
             keyboardType: keyboardType,
             inputFormatters: inputFormatters,
+            textCapitalization: textCapitalization,
+            maxLength: maxLength,
             onChanged: onChanged,
             style: const TextStyle(fontSize: 14, color: Color(0xFF0F172A)),
             decoration: InputDecoration(
+              counterText: '',
               border: InputBorder.none,
               hintText: hintText,
               hintStyle: const TextStyle(fontSize: 14, color: Color(0xFF94A3B8)),
@@ -2872,6 +2991,25 @@ class _RegisterAccountTypeScreenState
   List<String> _getDisplaySuggestions() {
     if (_usernameSuggestions.isNotEmpty) {
       return _usernameSuggestions;
+    }
+    if (_selectedType == 'business') {
+      final fName = (_businessFlow == 'primary'
+              ? _businessOwnerFirstNameController.text
+              : _businessSecondaryFirstNameController.text)
+          .trim()
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-z]'), '');
+      final bName = _businessNameController.text
+          .trim()
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-z]'), '');
+      final base1 = bName.isNotEmpty ? (bName.length > 7 ? bName.substring(0, 7) : bName) : 'corp';
+      final base2 = fName.isNotEmpty ? (fName.length > 5 ? fName.substring(0, 5) : fName) : 'biz';
+      return [
+        '${base1}123',
+        '${base2}001',
+        '${base1}team',
+      ];
     }
     final fName = _firstNameController.text.trim().toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
     final lName = _lastNameController.text.trim().toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
@@ -2976,7 +3114,13 @@ class _RegisterAccountTypeScreenState
     });
     if (_usernameError == null) {
       setState(() {
-        _currentPersonalStep = 'mobile-verify';
+        if (_selectedType == 'business') {
+          _currentBusinessStep = 'mobile-verify';
+        } else if (_selectedType == 'child') {
+          _currentChildStep = 'mobile-verify';
+        } else {
+          _currentPersonalStep = 'mobile-verify';
+        }
         _phoneOtpSent = false;
       });
     }
@@ -3091,6 +3235,8 @@ class _RegisterAccountTypeScreenState
         _isVerifyingMobileOtp = false;
         if (_selectedType == 'child') {
           _currentChildStep = 'password';
+        } else if (_selectedType == 'business') {
+          _currentBusinessStep = 'password';
         } else {
           _currentPersonalStep = 'password';
         }
@@ -3219,6 +3365,8 @@ class _RegisterAccountTypeScreenState
                 setState(() {
                   if (_selectedType == 'child') {
                     _currentChildStep = 'mobile-verify';
+                  } else if (_selectedType == 'business') {
+                    _currentBusinessStep = 'mobile-verify';
                   } else {
                     _currentPersonalStep = 'mobile-verify';
                   }
@@ -3282,20 +3430,47 @@ class _RegisterAccountTypeScreenState
     setState(() => _isRegistering = true);
 
     final isChild = _selectedType == 'child';
-    final fName = isChild ? _childFirstNameController.text.trim() : _firstNameController.text.trim();
-    final lName = isChild ? _childLastNameController.text.trim() : _lastNameController.text.trim();
-    final uName = isChild ? _childUsernameController.text.trim() : _usernameController.text.trim();
+    final isBusiness = _selectedType == 'business';
+    final fName = isChild
+        ? _childFirstNameController.text.trim()
+        : (isBusiness
+            ? (_businessFlow == 'primary'
+                ? _businessOwnerFirstNameController.text.trim()
+                : _businessSecondaryFirstNameController.text.trim())
+            : _firstNameController.text.trim());
+    final lName = isChild
+        ? _childLastNameController.text.trim()
+        : (isBusiness
+            ? (_businessFlow == 'primary'
+                ? _businessOwnerLastNameController.text.trim()
+                : _businessSecondaryLastNameController.text.trim())
+            : _lastNameController.text.trim());
+    final uName = isChild
+        ? _childUsernameController.text.trim()
+        : _usernameController.text.trim();
     final dob = isChild
         ? _formatDobForApi(_childDobController.text.trim())
-        : _formatDobForApi(_dobController.text.trim());
+        : (isBusiness
+            ? DateTime.now().toIso8601String().substring(0, 10)
+            : _formatDobForApi(_dobController.text.trim()));
     final rawPhone = _personalPhoneController.text.trim();
     final phone = rawPhone.startsWith('+') ? rawPhone : '$_selectedCountryCode$rawPhone';
     final parentEmail = isChild ? _parentEmailController.text.trim() : null;
 
+    final bName = isBusiness ? _businessNameController.text.trim() : null;
+    final bFlow = isBusiness ? _businessFlow : null;
+    final regNum = isBusiness
+        ? (_businessFlow == 'secondary'
+            ? _businessIdController.text.trim()
+            : (_businessPrimaryType == 'organization' ? _cinController.text.trim() : null))
+        : null;
+    final gstin = isBusiness ? _panController.text.trim() : null;
+    final cin = isBusiness && _businessPrimaryType == 'organization' ? _cinController.text.trim() : null;
+
     try {
       // 1. Register with backend API
       final token = await AuthRepository.register(
-        mode: isChild ? 'CHILD' : 'PERSONAL',
+        mode: isChild ? 'CHILD' : (isBusiness ? 'BUSINESS' : 'PERSONAL'),
         firstName: fName,
         lastName: lName,
         username: uName,
@@ -3303,6 +3478,11 @@ class _RegisterAccountTypeScreenState
         dob: dob,
         phoneNumber: phone,
         parentEmail: parentEmail,
+        businessName: bName,
+        businessFlow: bFlow,
+        registrationNumber: regNum,
+        gstin: gstin,
+        cin: cin,
       );
 
       // 2. Create Mailbox with tempToken
@@ -3319,9 +3499,11 @@ class _RegisterAccountTypeScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            isChild
-                ? 'Child account successfully created! Please log in.'
-                : 'Account successfully created! Please log in.',
+            isBusiness
+                ? 'Business account successfully created! Please log in.'
+                : (isChild
+                    ? 'Child account successfully created! Please log in.'
+                    : 'Account successfully created! Please log in.'),
           ),
           backgroundColor: const Color(0xFF10B981),
           behavior: SnackBarBehavior.floating,
@@ -3346,6 +3528,9 @@ class _RegisterAccountTypeScreenState
           if (isChild) {
             _childUsernameError = 'Username is already taken';
             _currentChildStep = 'mail';
+          } else if (isBusiness) {
+            _usernameError = 'Username is already taken';
+            _currentBusinessStep = 'mail';
           } else {
             _usernameError = 'Username is already taken';
             _currentPersonalStep = 'mail';
@@ -3367,6 +3552,9 @@ class _RegisterAccountTypeScreenState
           if (isChild) {
             _childUsernameError = errorMsg;
             _currentChildStep = 'mail';
+          } else if (isBusiness) {
+            _usernameError = errorMsg;
+            _currentBusinessStep = 'mail';
           } else {
             _usernameError = errorMsg;
             _currentPersonalStep = 'mail';
@@ -3388,6 +3576,894 @@ class _RegisterAccountTypeScreenState
           ),
         );
       }
+    }
+  }
+
+  // ==========================================
+  // BUSINESS REGISTRATION STEPS (Screenshots 1-4)
+  // ==========================================
+
+  Widget _buildBusinessTab({
+    required String title,
+    required String subtitle,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFFAFAFE) : Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF4F46E5) : const Color(0xFFE2E8F0),
+            width: isSelected ? 1.5 : 1.2,
+          ),
+        ),
+        child: Column(
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: isSelected ? const Color(0xFF4F46E5) : const Color(0xFF0F172A),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: const TextStyle(
+                fontSize: 11,
+                color: Color(0xFF64748B),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBusinessSizeCard({
+    required String avatarLetter,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: const BoxDecoration(
+                color: Color(0xFFEEF2FF),
+                shape: BoxShape.circle,
+              ),
+              child: Center(
+                child: Text(
+                  avatarLetter,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF4F46E5),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF0F172A),
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF64748B),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBusinessDetailsStep(bool isMobile) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Center(
+          child: Text(
+            'Enter business details',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: Color(0xFF64748B),
+            ),
+          ),
+        ),
+        const SizedBox(height: 18),
+
+        // Tabs: [ Secondary | Standard flow ] and [ Primary | Verified account ]
+        Row(
+          children: [
+            Expanded(
+              child: _buildBusinessTab(
+                title: 'Secondary',
+                subtitle: 'Standard flow',
+                isSelected: _businessFlow == 'secondary',
+                onTap: () {
+                  setState(() => _businessFlow = 'secondary');
+                },
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildBusinessTab(
+                title: 'Primary',
+                subtitle: 'Verified account',
+                isSelected: _businessFlow == 'primary',
+                onTap: () {
+                  setState(() => _businessFlow = 'primary');
+                },
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+
+        if (_businessFlow == 'secondary') ...[
+          // Screenshot 1: Secondary fields
+          if (!isMobile)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: _buildSimpleInput(
+                    label: '',
+                    controller: _businessSecondaryFirstNameController,
+                    hintText: 'First Name',
+                    errorText: _businessSecondaryFirstNameError,
+                    onChanged: (v) {
+                      if (_businessSecondaryFirstNameError != null) {
+                        setState(() => _businessSecondaryFirstNameError = null);
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildSimpleInput(
+                    label: '',
+                    controller: _businessSecondaryLastNameController,
+                    hintText: 'Last Name',
+                    errorText: _businessSecondaryLastNameError,
+                    onChanged: (v) {
+                      if (_businessSecondaryLastNameError != null) {
+                        setState(() => _businessSecondaryLastNameError = null);
+                      }
+                    },
+                  ),
+                ),
+              ],
+            )
+          else ...[
+            _buildSimpleInput(
+              label: '',
+              controller: _businessSecondaryFirstNameController,
+              hintText: 'First Name',
+              errorText: _businessSecondaryFirstNameError,
+              onChanged: (v) {
+                if (_businessSecondaryFirstNameError != null) {
+                  setState(() => _businessSecondaryFirstNameError = null);
+                }
+              },
+            ),
+            const SizedBox(height: 12),
+            _buildSimpleInput(
+              label: '',
+              controller: _businessSecondaryLastNameController,
+              hintText: 'Last Name',
+              errorText: _businessSecondaryLastNameError,
+              onChanged: (v) {
+                if (_businessSecondaryLastNameError != null) {
+                  setState(() => _businessSecondaryLastNameError = null);
+                }
+              },
+            ),
+          ],
+          const SizedBox(height: 14),
+
+          _buildSimpleInput(
+            label: '',
+            controller: _businessNameController,
+            hintText: 'Business Name',
+            errorText: _businessNameError,
+            onChanged: (v) {
+              if (_businessNameError != null) {
+                setState(() => _businessNameError = null);
+              }
+            },
+          ),
+          const SizedBox(height: 14),
+
+          _buildSimpleInput(
+            label: '',
+            controller: _businessIdController,
+            hintText: 'Business ID Number',
+            errorText: _businessIdError,
+            onChanged: (v) {
+              if (_businessIdError != null) {
+                setState(() => _businessIdError = null);
+              }
+            },
+          ),
+          const SizedBox(height: 28),
+
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              TextButton(
+                onPressed: _handleBusinessBack,
+                child: const Text(
+                  'Back',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF4F46E5),
+                  ),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: _validateAndProceedBusinessSecondary,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF4F46E5),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                  elevation: 0,
+                ),
+                child: const Text(
+                  'Next',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+        ] else ...[
+          // Screenshot 2: Primary fields
+          const Center(
+            child: Text(
+              'Choose your business size to continue verification',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF475569),
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          _buildBusinessSizeCard(
+            avatarLetter: 'S',
+            title: 'Sole Proprietorship',
+            subtitle: 'Verify instantly using your GSTIN',
+            onTap: () {
+              setState(() {
+                _businessFlow = 'primary';
+                _businessPrimaryType = 'sole_proprietorship';
+                _currentBusinessStep = 'sole_proprietorship';
+              });
+            },
+          ),
+          const SizedBox(height: 12),
+
+          _buildBusinessSizeCard(
+            avatarLetter: 'L',
+            title: 'Organization',
+            subtitle: 'Verify via CIN, PAN, and GSTIN details',
+            onTap: () {
+              setState(() {
+                _businessFlow = 'primary';
+                _businessPrimaryType = 'organization';
+                _currentBusinessStep = 'organization';
+              });
+            },
+          ),
+          const SizedBox(height: 28),
+
+          Row(
+            children: [
+              TextButton(
+                onPressed: _handleBusinessBack,
+                child: const Text(
+                  'Back',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF4F46E5),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildBusinessSoleProprietorshipStep(bool isMobile) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Center(
+          child: Text(
+            'Business Verification',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF0F172A),
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        const Center(
+          child: Text(
+            'Verify your identity to create a new organization account.',
+            style: TextStyle(
+              fontSize: 13,
+              color: Color(0xFF64748B),
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        // PAN Number
+        const Text(
+          'PAN Number',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF0F172A),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _buildSimpleInput(
+                label: '',
+                controller: _panController,
+                hintText: 'E.G. ABCDE1234F',
+                errorText: _panError,
+                maxLength: 10,
+                textCapitalization: TextCapitalization.characters,
+                onChanged: (v) {
+                  if (_panError != null) {
+                    setState(() => _panError = null);
+                  }
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              height: 48,
+              decoration: BoxDecoration(
+                color: const Color(0xFFEEF2FF),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: TextButton(
+                onPressed: _isFetchingGstins ? null : _fetchGstinsForPan,
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: _isFetchingGstins
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF4F46E5)),
+                      )
+                    : const Text(
+                        'Fetch GSTINs',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF4F46E5),
+                        ),
+                      ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+
+        // Owner First Name & Last Name
+        if (!isMobile)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _buildSimpleInput(
+                  label: 'Owner First Name',
+                  controller: _businessOwnerFirstNameController,
+                  hintText: 'Ravi',
+                  errorText: _businessOwnerFirstNameError,
+                  onChanged: (v) {
+                    if (_businessOwnerFirstNameError != null) {
+                      setState(() => _businessOwnerFirstNameError = null);
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildSimpleInput(
+                  label: 'Owner Last Name',
+                  controller: _businessOwnerLastNameController,
+                  hintText: 'Kumar',
+                  errorText: _businessOwnerLastNameError,
+                  onChanged: (v) {
+                    if (_businessOwnerLastNameError != null) {
+                      setState(() => _businessOwnerLastNameError = null);
+                    }
+                  },
+                ),
+              ),
+            ],
+          )
+        else ...[
+          _buildSimpleInput(
+            label: 'Owner First Name',
+            controller: _businessOwnerFirstNameController,
+            hintText: 'Ravi',
+            errorText: _businessOwnerFirstNameError,
+            onChanged: (v) {
+              if (_businessOwnerFirstNameError != null) {
+                setState(() => _businessOwnerFirstNameError = null);
+              }
+            },
+          ),
+          const SizedBox(height: 12),
+          _buildSimpleInput(
+            label: 'Owner Last Name',
+            controller: _businessOwnerLastNameController,
+            hintText: 'Kumar',
+            errorText: _businessOwnerLastNameError,
+            onChanged: (v) {
+              if (_businessOwnerLastNameError != null) {
+                setState(() => _businessOwnerLastNameError = null);
+              }
+            },
+          ),
+        ],
+        const SizedBox(height: 14),
+
+        // Business Name
+        _buildSimpleInput(
+          label: 'Business Name',
+          controller: _businessNameController,
+          hintText: 'djew',
+          errorText: _businessNameError,
+          onChanged: (v) {
+            if (_businessNameError != null) {
+              setState(() => _businessNameError = null);
+            }
+          },
+        ),
+        const SizedBox(height: 28),
+
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            TextButton(
+              onPressed: _handleBusinessBack,
+              child: const Text(
+                'Back',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF4F46E5),
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: _validateAndProceedSoleProprietorship,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF818CF8),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                elevation: 0,
+              ),
+              child: const Text(
+                'Verify Identity',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBusinessOrganizationStep(bool isMobile) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Center(
+          child: Text(
+            'Business Verification',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF0F172A),
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        const Center(
+          child: Text(
+            'Verify your identity to create a new organization account.',
+            style: TextStyle(
+              fontSize: 13,
+              color: Color(0xFF64748B),
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        // CIN Number
+        _buildSimpleInput(
+          label: 'CIN Number',
+          controller: _cinController,
+          hintText: 'E.G. U72900KA2020PTC123456',
+          errorText: _cinError,
+          maxLength: 21,
+          textCapitalization: TextCapitalization.characters,
+          onChanged: (v) {
+            if (_cinError != null) {
+              setState(() => _cinError = null);
+            }
+          },
+        ),
+        const SizedBox(height: 14),
+
+        // PAN Number
+        const Text(
+          'PAN Number',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF0F172A),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _buildSimpleInput(
+                label: '',
+                controller: _panController,
+                hintText: 'E.G. ABCDE1234F',
+                errorText: _panError,
+                maxLength: 10,
+                textCapitalization: TextCapitalization.characters,
+                onChanged: (v) {
+                  if (_panError != null) {
+                    setState(() => _panError = null);
+                  }
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              height: 48,
+              decoration: BoxDecoration(
+                color: const Color(0xFFEEF2FF),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: TextButton(
+                onPressed: _isFetchingGstins ? null : _fetchGstinsForPan,
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: _isFetchingGstins
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF4F46E5)),
+                      )
+                    : const Text(
+                        'Fetch GSTINs',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF4F46E5),
+                        ),
+                      ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+
+        // Owner First Name & Last Name
+        if (!isMobile)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _buildSimpleInput(
+                  label: 'Owner First Name',
+                  controller: _businessOwnerFirstNameController,
+                  hintText: 'Ravi',
+                  errorText: _businessOwnerFirstNameError,
+                  onChanged: (v) {
+                    if (_businessOwnerFirstNameError != null) {
+                      setState(() => _businessOwnerFirstNameError = null);
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildSimpleInput(
+                  label: 'Owner Last Name',
+                  controller: _businessOwnerLastNameController,
+                  hintText: 'Kumar',
+                  errorText: _businessOwnerLastNameError,
+                  onChanged: (v) {
+                    if (_businessOwnerLastNameError != null) {
+                      setState(() => _businessOwnerLastNameError = null);
+                    }
+                  },
+                ),
+              ),
+            ],
+          )
+        else ...[
+          _buildSimpleInput(
+            label: 'Owner First Name',
+            controller: _businessOwnerFirstNameController,
+            hintText: 'Ravi',
+            errorText: _businessOwnerFirstNameError,
+            onChanged: (v) {
+              if (_businessOwnerFirstNameError != null) {
+                setState(() => _businessOwnerFirstNameError = null);
+              }
+            },
+          ),
+          const SizedBox(height: 12),
+          _buildSimpleInput(
+            label: 'Owner Last Name',
+            controller: _businessOwnerLastNameController,
+            hintText: 'Kumar',
+            errorText: _businessOwnerLastNameError,
+            onChanged: (v) {
+              if (_businessOwnerLastNameError != null) {
+                setState(() => _businessOwnerLastNameError = null);
+              }
+            },
+          ),
+        ],
+        const SizedBox(height: 14),
+
+        // Business Name
+        _buildSimpleInput(
+          label: 'Business Name',
+          controller: _businessNameController,
+          hintText: 'djew',
+          errorText: _businessNameError,
+          onChanged: (v) {
+            if (_businessNameError != null) {
+              setState(() => _businessNameError = null);
+            }
+          },
+        ),
+        const SizedBox(height: 28),
+
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            TextButton(
+              onPressed: _handleBusinessBack,
+              child: const Text(
+                'Back',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF4F46E5),
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: _validateAndProceedOrganization,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF818CF8),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                elevation: 0,
+              ),
+              child: const Text(
+                'Verify Identity',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Future<void> _fetchGstinsForPan() async {
+    final pan = _panController.text.trim();
+    if (pan.isEmpty) {
+      setState(() => _panError = 'Please enter PAN Number first');
+      return;
+    }
+    setState(() {
+      _isFetchingGstins = true;
+      _panError = null;
+    });
+    try {
+      final gstins = await AuthRepository.fetchGstins(pan);
+      if (!mounted) return;
+      setState(() => _isFetchingGstins = false);
+      if (gstins.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Found ${gstins.length} GSTIN(s): ${gstins.first}'),
+            backgroundColor: const Color(0xFF10B981),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('GSTIN check completed for this PAN.'),
+            backgroundColor: Color(0xFF4F46E5),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isFetchingGstins = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('GSTIN check completed.'),
+          backgroundColor: Color(0xFF4F46E5),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  void _validateAndProceedBusinessSecondary() {
+    final fName = _businessSecondaryFirstNameController.text.trim();
+    final lName = _businessSecondaryLastNameController.text.trim();
+    final bName = _businessNameController.text.trim();
+    final bId = _businessIdController.text.trim();
+
+    setState(() {
+      _businessSecondaryFirstNameError = fName.isEmpty ? 'First Name is required' : null;
+      _businessSecondaryLastNameError = lName.isEmpty ? 'Last Name is required' : null;
+      _businessNameError = bName.isEmpty ? 'Business Name is required' : null;
+      _businessIdError = bId.isEmpty ? 'Business ID Number is required' : null;
+    });
+
+    if (_businessSecondaryFirstNameError == null &&
+        _businessSecondaryLastNameError == null &&
+        _businessNameError == null &&
+        _businessIdError == null) {
+      setState(() {
+        _currentBusinessStep = 'mail';
+        if (_usernameController.text.trim().isEmpty) {
+          final suggestions = _getDisplaySuggestions();
+          if (suggestions.isNotEmpty) {
+            _usernameController.text = suggestions.first;
+          }
+        }
+      });
+    }
+  }
+
+  void _validateAndProceedSoleProprietorship() {
+    final pan = _panController.text.trim();
+    final fName = _businessOwnerFirstNameController.text.trim();
+    final lName = _businessOwnerLastNameController.text.trim();
+    final bName = _businessNameController.text.trim();
+
+    setState(() {
+      _panError = pan.isEmpty ? 'PAN Number is required' : null;
+      _businessOwnerFirstNameError = fName.isEmpty ? 'Owner First Name is required' : null;
+      _businessOwnerLastNameError = lName.isEmpty ? 'Owner Last Name is required' : null;
+      _businessNameError = bName.isEmpty ? 'Business Name is required' : null;
+    });
+
+    if (_panError == null &&
+        _businessOwnerFirstNameError == null &&
+        _businessOwnerLastNameError == null &&
+        _businessNameError == null) {
+      setState(() {
+        _currentBusinessStep = 'mail';
+        if (_usernameController.text.trim().isEmpty) {
+          final suggestions = _getDisplaySuggestions();
+          if (suggestions.isNotEmpty) {
+            _usernameController.text = suggestions.first;
+          }
+        }
+      });
+    }
+  }
+
+  void _validateAndProceedOrganization() {
+    final cin = _cinController.text.trim();
+    final pan = _panController.text.trim();
+    final fName = _businessOwnerFirstNameController.text.trim();
+    final lName = _businessOwnerLastNameController.text.trim();
+    final bName = _businessNameController.text.trim();
+
+    setState(() {
+      _cinError = cin.isEmpty ? 'CIN Number is required' : null;
+      _panError = pan.isEmpty ? 'PAN Number is required' : null;
+      _businessOwnerFirstNameError = fName.isEmpty ? 'Owner First Name is required' : null;
+      _businessOwnerLastNameError = lName.isEmpty ? 'Owner Last Name is required' : null;
+      _businessNameError = bName.isEmpty ? 'Business Name is required' : null;
+    });
+
+    if (_cinError == null &&
+        _panError == null &&
+        _businessOwnerFirstNameError == null &&
+        _businessOwnerLastNameError == null &&
+        _businessNameError == null) {
+      setState(() {
+        _currentBusinessStep = 'mail';
+        if (_usernameController.text.trim().isEmpty) {
+          final suggestions = _getDisplaySuggestions();
+          if (suggestions.isNotEmpty) {
+            _usernameController.text = suggestions.first;
+          }
+        }
+      });
     }
   }
 

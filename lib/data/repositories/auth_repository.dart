@@ -131,6 +131,11 @@ class AuthRepository {
     String? parentEmail,
     String? securityQuestion,
     String? securityAnswer,
+    String? businessFlow,
+    String? registrationNumber,
+    String? gstin,
+    String? cin,
+    String? businessType,
   }) async {
     final isChildMode = mode.toUpperCase() == 'CHILD';
     final initialMode = isChildMode ? 'PERSONAL' : mode;
@@ -155,6 +160,21 @@ class AuthRepository {
 
     if (businessName != null && businessName.isNotEmpty) {
       body['businessName'] = businessName;
+    }
+    if (businessFlow != null && businessFlow.isNotEmpty) {
+      body['businessFlow'] = businessFlow;
+    }
+    if (registrationNumber != null && registrationNumber.isNotEmpty) {
+      body['registrationNumber'] = registrationNumber;
+    }
+    if (gstin != null && gstin.isNotEmpty) {
+      body['gstin'] = gstin;
+    }
+    if (cin != null && cin.isNotEmpty) {
+      body['cin'] = cin;
+    }
+    if (businessType != null && businessType.isNotEmpty) {
+      body['businessType'] = businessType;
     }
     if (customDomain != null && customDomain.isNotEmpty) {
       body['customDomain'] = customDomain;
@@ -289,6 +309,24 @@ class AuthRepository {
       );
       final data = res['data'];
       if (data is List) return data.map((s) => s.toString()).toList();
+    } catch (_) {}
+    return [];
+  }
+
+  // ── Business Verification ─────────────────────────────────────────────────
+
+  static Future<List<String>> fetchGstins(String pan) async {
+    try {
+      final res = await ApiClient.get(
+        '/api/auth/fetch-gstins',
+        queryParams: {'pan': pan},
+        auth: false,
+      );
+      final data = res['data'];
+      if (data is List) return data.map((s) => s.toString()).toList();
+      if (data is Map && data['gstins'] is List) {
+        return (data['gstins'] as List).map((s) => s.toString()).toList();
+      }
     } catch (_) {}
     return [];
   }

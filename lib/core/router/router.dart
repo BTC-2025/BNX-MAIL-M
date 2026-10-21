@@ -82,6 +82,30 @@ final goRouter = GoRouter(
       builder: (context, state) => const RegisterAccountTypeScreen(initialStep: 'child-password'),
     ),
     GoRoute(
+      path: '/signup/business',
+      builder: (context, state) => const RegisterAccountTypeScreen(initialStep: 'business'),
+    ),
+    GoRoute(
+      path: '/signup/business-details',
+      builder: (context, state) => const RegisterAccountTypeScreen(initialStep: 'business-details'),
+    ),
+    GoRoute(
+      path: '/signup/business-sole',
+      builder: (context, state) => const RegisterAccountTypeScreen(initialStep: 'business-sole'),
+    ),
+    GoRoute(
+      path: '/signup/business-org',
+      builder: (context, state) => const RegisterAccountTypeScreen(initialStep: 'business-org'),
+    ),
+    GoRoute(
+      path: '/signup/business-mail',
+      builder: (context, state) => const RegisterAccountTypeScreen(initialStep: 'business-mail'),
+    ),
+    GoRoute(
+      path: '/signup/business-password',
+      builder: (context, state) => const RegisterAccountTypeScreen(initialStep: 'business-password'),
+    ),
+    GoRoute(
       path: '/manage-account',
       pageBuilder: (context, state) {
         if (defaultTargetPlatform == TargetPlatform.macOS) {
