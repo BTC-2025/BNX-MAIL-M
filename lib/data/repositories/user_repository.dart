@@ -31,6 +31,15 @@ class UserRepository {
       if (cleanEmail.isNotEmpty) {
         final existing = await TokenService.getUserSettings(cleanEmail) ?? {};
         await TokenService.saveUserSettings(cleanEmail, {...existing, ...data});
+        if (data['businessOnboarded'] == true ||
+            data['businessOnboardingCompleted'] == true ||
+            data['business_onboarded'] == true ||
+            (data['businessType'] != null && data['businessType'].toString().isNotEmpty) ||
+            (data['companySize'] != null && data['companySize'].toString().isNotEmpty) ||
+            (data['industry'] != null && data['industry'].toString().isNotEmpty) ||
+            (data['businessAddress'] != null && data['businessAddress'].toString().isNotEmpty)) {
+          await TokenService.setBusinessOnboardingCompleted(cleanEmail, completed: true);
+        }
       }
       final savedAvatar = await TokenService.getUserAvatar(user.email);
       final loggedInEmail = (await TokenService.getUserEmail() ?? '').trim().toLowerCase();
@@ -105,6 +114,54 @@ class UserRepository {
         return localSettings.isNotEmpty ? localSettings : null;
       }
     }
+  }
+
+  /// Checks whether a business account has already completed onboarding either locally or remotely.
+  static Future<bool> isBusinessAccountOnboarded(String email) async {
+    final cleanEmail = email.trim().toLowerCase();
+    if (cleanEmail.isEmpty) return false;
+
+    // 1. Check local persistent store
+    if (await TokenService.isBusinessOnboardingCompleted(cleanEmail)) {
+      return true;
+    }
+
+    final altEmail = cleanEmail.contains('@')
+        ? cleanEmail.split('@').first
+        : '$cleanEmail@bnxmail.com';
+
+    if (await TokenService.isBusinessOnboardingCompleted(altEmail)) {
+      await TokenService.setBusinessOnboardingCompleted(cleanEmail, completed: true);
+      return true;
+    }
+
+    // 2. Check remote/local merged profile data
+    try {
+      final profile = await getProfileData(email: cleanEmail);
+      if (profile != null) {
+        if (profile['businessOnboarded'] == true ||
+            profile['businessOnboardingCompleted'] == true ||
+            profile['business_onboarded'] == true) {
+          await TokenService.setBusinessOnboardingCompleted(cleanEmail, completed: true);
+          await TokenService.setBusinessOnboardingCompleted(altEmail, completed: true);
+          return true;
+        }
+        final bType = profile['businessType']?.toString();
+        final ind = profile['industry']?.toString();
+        final cSize = profile['companySize']?.toString();
+        final bAddr = profile['businessAddress']?.toString() ?? profile['workAddress']?.toString();
+        if ((bType != null && bType.isNotEmpty) ||
+            (ind != null && ind.isNotEmpty) ||
+            (cSize != null && cSize.isNotEmpty) ||
+            (bAddr != null && bAddr.isNotEmpty)) {
+          await TokenService.setBusinessOnboardingCompleted(cleanEmail, completed: true);
+          await TokenService.setBusinessOnboardingCompleted(altEmail, completed: true);
+          return true;
+        }
+      }
+    } catch (_) {}
+
+    return false;
   }
 
   static Future<void> updateProfile(

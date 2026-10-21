@@ -39,6 +39,17 @@ class AuthRepository {
         : UserModel(name: email.split('@').first, email: email);
 
     await TokenService.saveUserInfo(email: user.email, name: user.name);
+    if (userJson.isNotEmpty) {
+      final existingSettings = await TokenService.getUserSettings(user.email) ?? {};
+      await TokenService.saveUserSettings(user.email, {...existingSettings, ...userJson});
+      if (userJson['businessOnboarded'] == true ||
+          userJson['businessOnboardingCompleted'] == true ||
+          (userJson['businessType'] != null && userJson['businessType'].toString().isNotEmpty) ||
+          (userJson['companySize'] != null && userJson['companySize'].toString().isNotEmpty) ||
+          (userJson['industry'] != null && userJson['industry'].toString().isNotEmpty)) {
+        await TokenService.setBusinessOnboardingCompleted(user.email, completed: true);
+      }
+    }
     final avatarFromResponse = userJson['avatarUrl']?.toString() ?? userJson['avatar']?.toString();
     if (avatarFromResponse != null && avatarFromResponse.isNotEmpty) {
       await TokenService.saveUserAvatar(user.email, avatarFromResponse);

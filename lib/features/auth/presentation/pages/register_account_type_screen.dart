@@ -3496,14 +3496,33 @@ class _RegisterAccountTypeScreenState
       if (!mounted) return;
       setState(() => _isRegistering = false);
 
+      if (isBusiness) {
+        final businessEmail = '$uName@bnxmail.com';
+        try {
+          await AuthRepository.login(businessEmail, pass);
+          ref.read(authProvider.notifier).login();
+        } catch (_) {}
+
+        if (!mounted) return;
+        context.go('/signup/business-onboarding', extra: {
+          'email': businessEmail,
+          'businessName': bName,
+          'businessType': _businessPrimaryType == 'organization'
+              ? 'Private Limited Company'
+              : 'Sole Proprietorship',
+          'companySize': '1-10',
+          'industry': 'Retail & Trade',
+          'tempToken': token,
+        });
+        return;
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            isBusiness
-                ? 'Business account successfully created! Please log in.'
-                : (isChild
-                    ? 'Child account successfully created! Please log in.'
-                    : 'Account successfully created! Please log in.'),
+            isChild
+                ? 'Child account successfully created! Please log in.'
+                : 'Account successfully created! Please log in.',
           ),
           backgroundColor: const Color(0xFF10B981),
           behavior: SnackBarBehavior.floating,

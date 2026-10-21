@@ -143,14 +143,28 @@ class TokenService {
 
   static Future<void> _safeDeleteAll() async {
     _ensureFallbackLoaded();
+    // Preserve account onboarding states, user settings, avatars, and account registry
+    final preserved = <String, String>{};
+    _memoryFallback.forEach((k, v) {
+      if (k.startsWith('bnx_biz_onboarded_') ||
+          k.startsWith('bnx_user_settings_') ||
+          k.startsWith('bnx_user_avatar_') ||
+          k == _kSavedAccountsRegistry) {
+        preserved[k] = v;
+      }
+    });
     _memoryFallback.clear();
+    _memoryFallback.addAll(preserved);
     _persistFallback();
 
     if (!_useFallbackDirectly) {
       try {
-        await _storage.deleteAll();
+        await _safeDelete(key: _kAccess);
+        await _safeDelete(key: _kRefresh);
+        await _safeDelete(key: _kEmail);
+        await _safeDelete(key: _kName);
       } catch (e) {
-        print('[TOKEN SERVICE] Secure storage deleteAll warning ($e).');
+        print('[TOKEN SERVICE] Secure storage clear error ($e).');
       }
     }
   }
@@ -652,6 +666,95 @@ class TokenService {
     return await _safeRead(key: 'bnx_local_colab_groups');
   }
 
+  // ── Business Onboarding Persistence ──────────────────────────────────────
+
+  static String _kBusinessOnboarded(String email) =>
+      'bnx_biz_onboarded_${email.trim().toLowerCase()}';
+
+  /// Returns true if the business onboarding form has been completed for this specific business account.
+  static Future<bool> isBusinessOnboardingCompleted(String email) async {
+    final cleanEmail = email.trim().toLowerCase();
+    if (cleanEmail.isEmpty) return false;
+
+    // 1. Direct explicit key
+    final val = await _safeRead(key: _kBusinessOnboarded(cleanEmail));
+    if (val == 'true') return true;
+
+    // 2. Check username/full email variants
+    final String altEmail;
+    if (cleanEmail.contains('@')) {
+      altEmail = cleanEmail.split('@').first;
+    } else {
+      altEmail = '$cleanEmail@bnxmail.com';
+    }
+    final valAlt = await _safeRead(key: _kBusinessOnboarded(altEmail));
+    if (valAlt == 'true') return true;
+
+    // 3. Check persistent cached user settings for this account across all identifiers
+    for (final target in [cleanEmail, altEmail]) {
+      final settings = await getUserSettings(target);
+      if (settings != null) {
+        if (settings['businessOnboarded'] == true ||
+            settings['businessOnboardingCompleted'] == true ||
+            settings['business_onboarded'] == true) {
+          await _safeWrite(key: _kBusinessOnboarded(cleanEmail), value: 'true');
+          await _safeWrite(key: _kBusinessOnboarded(altEmail), value: 'true');
+          return true;
+        }
+        // If business details (businessType, industry, companySize, etc.) already exist
+        final bType = settings['businessType']?.toString();
+        final ind = settings['industry']?.toString();
+        final cSize = settings['companySize']?.toString();
+        final bAddr = settings['businessAddress']?.toString() ??
+            settings['workAddress']?.toString();
+        if ((bType != null && bType.isNotEmpty) ||
+            (ind != null && ind.isNotEmpty) ||
+            (cSize != null && cSize.isNotEmpty) ||
+            (bAddr != null && bAddr.isNotEmpty)) {
+          await _safeWrite(key: _kBusinessOnboarded(cleanEmail), value: 'true');
+          await _safeWrite(key: _kBusinessOnboarded(altEmail), value: 'true');
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  /// Marks the business onboarding form as completed for this specific business account.
+  static Future<void> setBusinessOnboardingCompleted(
+    String email, {
+    bool completed = true,
+  }) async {
+    final cleanEmail = email.trim().toLowerCase();
+    if (cleanEmail.isEmpty) return;
+    final val = completed ? 'true' : 'false';
+
+    await _safeWrite(
+      key: _kBusinessOnboarded(cleanEmail),
+      value: val,
+    );
+    final String altEmail;
+    if (cleanEmail.contains('@')) {
+      altEmail = cleanEmail.split('@').first;
+    } else {
+      altEmail = '$cleanEmail@bnxmail.com';
+    }
+    await _safeWrite(
+      key: _kBusinessOnboarded(altEmail),
+      value: val,
+    );
+    // Also record into user settings for persistent redundancy
+    for (final target in [cleanEmail, altEmail]) {
+      final currentSettings = await getUserSettings(target) ?? {};
+      await saveUserSettings(target, {
+        ...currentSettings,
+        'businessOnboarded': completed,
+        'businessOnboardingCompleted': completed,
+      });
+    }
+  }
+
   // ── Delete ───────────────────────────────────────────────────────────────
 
   /// Clears active session tokens AND wipes the saved accounts registry completely
@@ -664,3 +767,4 @@ class TokenService {
     }
   }
 }
+

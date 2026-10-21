@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../auth/presentation/notifiers/auth_notifier.dart';
 
 import '../../../../core/network/token_service.dart';
+import '../../../../data/repositories/user_repository.dart';
 import '../../../../data/email_provider.dart';
 import '../../../../data/account_provider.dart';
 import '../../../../data/colab_provider.dart';
@@ -51,6 +52,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     if (!mounted) return;
 
     if (isLoggedIn) {
+      final email = await TokenService.getUserEmail() ?? '';
       ref.read(authProvider.notifier).login();
       // Start backend fetches asynchronously without blocking the UI thread
       ref.read(accountsProvider.notifier).loadMailboxes();
@@ -59,10 +61,34 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       // Pre-fetch all emails from backend to populate inbox, sent, draft folders
       ref.read(emailProvider.notifier).initialLoad();
       
-      context.go('/home');
+      if (email.isNotEmpty) {
+        final profile = await UserRepository.getProfile(email: email);
+        final effectiveEmail = (profile?.email.isNotEmpty == true)
+            ? profile!.email.trim().toLowerCase()
+            : email.trim().toLowerCase();
+        final isBiz =
+            (profile?.accountType?.toUpperCase() == 'BUSINESS');
+
+        if (isBiz) {
+          final alreadyOnboarded =
+              await UserRepository.isBusinessAccountOnboarded(effectiveEmail) ||
+              await UserRepository.isBusinessAccountOnboarded(email);
+
+          if (!alreadyOnboarded && mounted) {
+            context.go('/signup/business-onboarding', extra: {'email': effectiveEmail});
+            return;
+          }
+        }
+      }
+
+      if (mounted) {
+        context.go('/home');
+      }
     } else {
       ref.read(authProvider.notifier).logout();
-      context.go('/login');
+      if (mounted) {
+        context.go('/login');
+      }
     }
   }
 

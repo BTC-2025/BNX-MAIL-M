@@ -13,6 +13,7 @@ import '../../features/inbox/presentation/compose_screen.dart';
 import '../../features/inbox/presentation/draft_detail_screen.dart';
 import '../../features/auth/presentation/pages/login_screen.dart';
 import '../../features/auth/presentation/pages/register_account_type_screen.dart';
+import '../../features/auth/presentation/pages/business_onboarding_screen.dart';
 import '../widgets/email_body.dart';
 import '../../features/dashboard/presentation/connect_settings_screen.dart';
 import '../../features/profile/presentation/manage_account_screen.dart';
@@ -104,6 +105,16 @@ final goRouter = GoRouter(
     GoRoute(
       path: '/signup/business-password',
       builder: (context, state) => const RegisterAccountTypeScreen(initialStep: 'business-password'),
+    ),
+    GoRoute(
+      path: '/signup/business-onboarding',
+      builder: (context, state) => BusinessOnboardingScreen(
+        initialData: state.extra as Map<String, dynamic>?,
+      ),
+    ),
+    GoRoute(
+      path: '/business-onboarding',
+      redirect: (context, state) => '/signup/business-onboarding',
     ),
     GoRoute(
       path: '/manage-account',

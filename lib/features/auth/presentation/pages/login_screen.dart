@@ -12,6 +12,7 @@ import '../../../../data/email_provider.dart';
 import '../../../../data/account_provider.dart';
 import '../../../../data/colab_provider.dart';
 import '../../../../data/app_state_provider.dart';
+import '../../../../data/repositories/user_repository.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -83,9 +84,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
     if (success && mounted) {
       final newEmail = _emailController.text.trim().toLowerCase();
-      // Instantly set logged in state and navigate to /home
+      // Instantly set logged in state
       ref.read(authProvider.notifier).login();
-      context.go('/home');
 
       // Update provider contexts to the new account to prevent old data flashing
       ref.read(emailProvider.notifier).switchAccountContext(newEmail);
@@ -96,6 +96,33 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
       // Load mailboxes in parallel
       ref.read(accountsProvider.notifier).loadMailboxes();
+
+      // CRITICAL: Onboarding applies ONLY to BUSINESS accounts, and ONLY ONCE!
+      // Once details have been entered for this specific business account, never enter again!
+      final profile = await UserRepository.getProfile(email: newEmail);
+      final effectiveEmail = (profile?.email.isNotEmpty == true)
+          ? profile!.email.trim().toLowerCase()
+          : newEmail;
+      final isBusiness =
+          (profile?.accountType?.toUpperCase() == 'BUSINESS');
+
+      if (isBusiness) {
+        final alreadyOnboarded =
+            await UserRepository.isBusinessAccountOnboarded(effectiveEmail) ||
+            await UserRepository.isBusinessAccountOnboarded(newEmail);
+
+        if (!alreadyOnboarded && mounted) {
+          context.go(
+            '/signup/business-onboarding',
+            extra: {'email': effectiveEmail},
+          );
+          return;
+        }
+      }
+
+      if (mounted) {
+        context.go('/home');
+      }
     } else if (mounted && _loginNotifier.value.generalError != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

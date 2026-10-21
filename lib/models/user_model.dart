@@ -10,6 +10,7 @@ class UserModel {
   final String? phone;
   final String? recoveryEmail;
   final String? backupPhone;
+  final String? accountType;
 
   const UserModel({
     required this.name,
@@ -23,6 +24,7 @@ class UserModel {
     this.phone,
     this.recoveryEmail,
     this.backupPhone,
+    this.accountType,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -66,6 +68,7 @@ class UserModel {
       phone: json['phone']?.toString() ?? json['phoneNumber']?.toString() ?? json['contact']?.toString(),
       recoveryEmail: json['recoveryEmail']?.toString() ?? json['backupEmail']?.toString(),
       backupPhone: json['backupPhone']?.toString() ?? json['recoveryPhone']?.toString(),
+      accountType: json['accountType']?.toString() ?? json['mode']?.toString() ?? json['type']?.toString(),
     );
   }
 
@@ -81,6 +84,7 @@ class UserModel {
     if (phone != null) 'phone': phone,
     if (recoveryEmail != null) 'recoveryEmail': recoveryEmail,
     if (backupPhone != null) 'backupPhone': backupPhone,
+    if (accountType != null) 'accountType': accountType,
   };
 
   UserModel copyWith({
@@ -95,6 +99,7 @@ class UserModel {
     String? phone,
     String? recoveryEmail,
     String? backupPhone,
+    String? accountType,
   }) {
     return UserModel(
       name: name ?? this.name,
@@ -108,6 +113,7 @@ class UserModel {
       phone: phone ?? this.phone,
       recoveryEmail: recoveryEmail ?? this.recoveryEmail,
       backupPhone: backupPhone ?? this.backupPhone,
+      accountType: accountType ?? this.accountType,
     );
   }
 }
