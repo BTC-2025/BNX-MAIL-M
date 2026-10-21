@@ -100,7 +100,7 @@ class NotificationEvent {
     if (senderEmail != null && senderEmail!.trim().isNotEmpty) {
       return senderEmail!.trim();
     }
-    return 'BNX Mail';
+    return 'Bnx mail';
   }
 
   /// Helper to format subject or fallback.

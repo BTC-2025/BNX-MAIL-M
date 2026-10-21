@@ -511,7 +511,7 @@ class DashboardShell extends ConsumerWidget {
           ),
           const SizedBox(width: 10),
           const Text(
-            'BNXmail',
+            'Bnx mail',
             style: TextStyle(
               color: Colors.white,
               fontSize: 19,
@@ -1057,7 +1057,7 @@ class DashboardShell extends ConsumerWidget {
               isDark: isDark,
             ),
             _buildBetaAppItem(
-              name: 'BNXmail',
+              name: 'Bnx mail',
               imageAsset: 'assets/bnx_mail_logo.png',
               fallbackIcon: Icons.mark_email_read_rounded,
               color: const Color(0xFF195BAC),
@@ -1141,7 +1141,7 @@ class DashboardShell extends ConsumerWidget {
               showCard: true,
             ),
             _buildBetaAppItem(
-              name: 'BNXmail',
+              name: 'Bnx mail',
               imageAsset: 'assets/bnx_mail_logo.png',
               fallbackIcon: Icons.mark_email_read_rounded,
               color: const Color(0xFF195BAC),

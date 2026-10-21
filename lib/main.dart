@@ -41,7 +41,7 @@ class _MainAppState extends ConsumerState<MainApp> {
     final uiState = ref.watch(appUiProvider);
 
     return MaterialApp.router(
-      title: 'BNX mail',
+      title: 'Bnx mail',
       debugShowCheckedModeBanner: false,
       themeMode: uiState.isDarkMode ? ThemeMode.dark : ThemeMode.light,
       theme: BNXTheme.lightTheme,

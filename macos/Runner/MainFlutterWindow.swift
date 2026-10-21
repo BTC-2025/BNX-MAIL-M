@@ -10,6 +10,8 @@ class MainFlutterWindow: NSWindow {
 
     RegisterGeneratedPlugins(registry: flutterViewController)
 
+    self.title = "Bnx mail"
+
     super.awakeFromNib()
   }
 }

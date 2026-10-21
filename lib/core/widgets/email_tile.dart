@@ -104,9 +104,9 @@ class _EmailTileState extends ConsumerState<EmailTile> {
                 : 'Draft')
             : isSentItem
                 ? (email.recipient.isNotEmpty ? 'To: ${email.recipient}' : email.senderName)
-                : (email.senderName.isNotEmpty && email.senderName != 'BNX Mail'
+                : (email.senderName.isNotEmpty && email.senderName != 'Bnx mail'
                     ? email.senderName
-                    : (email.senderEmail.isNotEmpty ? email.senderEmail : 'BNX Mail'));
+                    : (email.senderEmail.isNotEmpty ? email.senderEmail : 'Bnx mail'));
 
     final String avatarName = isScheduledItem
         ? (email.recipient.trim().isNotEmpty ? email.recipient.trim() : 'Scheduled')
@@ -114,9 +114,9 @@ class _EmailTileState extends ConsumerState<EmailTile> {
             ? (email.recipient.trim().isNotEmpty ? email.recipient.trim() : 'Draft')
             : isSentItem
                 ? (email.recipient.isNotEmpty ? email.recipient : email.senderName)
-                : (email.senderName.isNotEmpty && email.senderName != 'BNX Mail'
+                : (email.senderName.isNotEmpty && email.senderName != 'Bnx mail'
                     ? email.senderName
-                    : (email.senderEmail.isNotEmpty ? email.senderEmail : 'BNX Mail'));
+                    : (email.senderEmail.isNotEmpty ? email.senderEmail : 'Bnx mail'));
 
     if (isMobile) {
       return MouseRegion(

@@ -213,7 +213,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
                   // Subtitle
                   Text(
-                    'Securely access your BNX Mail account.',
+                    'Securely access your Bnx mail account.',
                     style: GoogleFonts.inter(
                       fontSize: 13,
                       fontWeight: FontWeight.w400,
@@ -604,7 +604,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                               ),
                               const SizedBox(height: 24),
                               const Text(
-                                'BNXmail',
+                                'Bnx mail',
                                 style: TextStyle(
                                   fontSize: 32,
                                   fontWeight: FontWeight.bold,

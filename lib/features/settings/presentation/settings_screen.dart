@@ -997,7 +997,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           ),
                           const SizedBox(height: 3),
                           Text(
-                            'BNX Mail Account',
+                            'Bnx mail Account',
                             style: TextStyle(
                               fontSize: 12.5,
                               color: isDark
@@ -2602,7 +2602,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               : const Color(0xFFF1F5F9),
                         ),
                         Text(
-                          'Add your BNX Mail account to an authenticator app (such as Google Authenticator, Authy, or 1Password) using the secret key below:',
+                          'Add your Bnx mail account to an authenticator app (such as Google Authenticator, Authy, or 1Password) using the secret key below:',
                           style: TextStyle(
                             fontSize: 13.5,
                             color: isDark
@@ -2931,7 +2931,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            'BNXmail display language preference.',
+            'Bnx mail display language preference.',
             style: TextStyle(
               fontSize: 12.5,
               color: isDark ? Colors.white38 : const Color(0xFF94A3B8),

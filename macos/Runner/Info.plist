@@ -17,6 +17,9 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 
+	<key>CFBundleDisplayName</key>
+	<string>Bnx mail</string>
+
 	<key>CFBundleName</key>
 	<string>$(PRODUCT_NAME)</string>
 

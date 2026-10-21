@@ -521,7 +521,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
                         ),
                         const Divider(height: 24),
                         Text(
-                          'Add your BNX Mail account to an authenticator app (such as Google Authenticator or Authy) using the secret key below:',
+                          'Add your Bnx mail account to an authenticator app (such as Google Authenticator or Authy) using the secret key below:',
                           style: TextStyle(
                             fontSize: 13,
                             color: isDark ? Colors.white70 : const Color(0xFF5F6368),
@@ -1960,7 +1960,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
       icon: Icons.inventory_2_outlined,
       title: 'Account storage',
       subtitle:
-          'Your account storage is shared across BNX services, like BNX Mail and Drive',
+          'Your account storage is shared across BNX services, like Bnx mail and Drive',
       middleWidget: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2568,7 +2568,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'To add a new email address, you can create a mailbox alias above or register it through BNX Mail.',
+                        'To add a new email address, you can create a mailbox alias above or register it through Bnx mail.',
                         style: TextStyle(
                           fontSize: 13.5,
                           color: isDark
@@ -4631,7 +4631,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
             _SettingRow(
               isDark: isDark,
               icon: Icons.mail_outline_rounded,
-              label: 'BNX MAIL',
+              label: 'Bnx mail',
               value: mailValue,
             ),
             _SettingRow(
