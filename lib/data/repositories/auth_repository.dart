@@ -125,6 +125,7 @@ class AuthRepository {
     required String username,
     required String password,
     required String dob,
+    String? phoneNumber,
     String? businessName,
     String? customDomain,
     String? parentEmail,
@@ -142,6 +143,10 @@ class AuthRepository {
       'password': password,
       'dob': dob,
     };
+
+    if (phoneNumber != null && phoneNumber.isNotEmpty) {
+      body['phoneNumber'] = phoneNumber;
+    }
 
     if (isChildMode || (parentEmail != null && parentEmail.isNotEmpty)) {
       body['isChild'] = true;
@@ -231,6 +236,24 @@ class AuthRepository {
 
     // Otherwise build a placeholder — caller will login separately
     return UserModel(name: emailName, email: '$emailName@bnxmail.com');
+  }
+
+  // ── Mobile OTP Verification ───────────────────────────────────────────────
+
+  static Future<void> sendMobileOtp(String mobile) async {
+    await ApiClient.post(
+      '/api/auth/send-mobile-otp',
+      body: {'mobile': mobile},
+      auth: false,
+    );
+  }
+
+  static Future<void> verifyMobileOtp(String mobile, String otp) async {
+    await ApiClient.post(
+      '/api/auth/verify-mobile-otp',
+      body: {'mobile': mobile, 'otp': otp},
+      auth: false,
+    );
   }
 
   // ── Child Registration — Parent OTP ───────────────────────────────────────

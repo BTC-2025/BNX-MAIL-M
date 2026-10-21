@@ -8,7 +8,8 @@ import '../../../../data/account_provider.dart';
 import '../../../../data/email_provider.dart';
 
 class RegisterAccountTypeScreen extends ConsumerStatefulWidget {
-  const RegisterAccountTypeScreen({super.key});
+  final String? initialStep;
+  const RegisterAccountTypeScreen({super.key, this.initialStep});
 
   @override
   ConsumerState<RegisterAccountTypeScreen> createState() =>
@@ -22,6 +23,74 @@ class _RegisterAccountTypeScreenState
   int _childStep = 1; // 1 to 4 (for child multi-step flow)
   int _businessStep = 1; // 1 or 2 (for business split flow)
   String _selectedType = 'personal'; // 'personal', 'business', 'child'
+  String _currentPersonalStep = 'selection'; // 'selection', 'profile', 'mail', 'mobile-verify', 'password'
+  String _currentChildStep = 'details'; // 'details', 'parent-email', 'parent-otp', 'mail', 'mobile-verify', 'password'
+  bool _phoneOtpSent = false;
+  bool _isSendingMobileOtp = false;
+  bool _isVerifyingMobileOtp = false;
+  bool _showPassword = false;
+  late CountryOption _selectedCountry;
+  String get _selectedCountryCode => _selectedCountry.code;
+  final _otpController = TextEditingController();
+  String? _otpError;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedCountry = _countryOptions.first;
+    if (widget.initialStep != null) {
+      if (widget.initialStep == 'selection') {
+        _step = 1;
+        _selectedType = 'personal';
+        _currentPersonalStep = 'selection';
+      } else if (widget.initialStep == 'profile') {
+        _step = 2;
+        _selectedType = 'personal';
+        _personalStep = 1;
+        _currentPersonalStep = 'profile';
+      } else if (widget.initialStep == 'mail') {
+        _step = 2;
+        _selectedType = 'personal';
+        _personalStep = 2;
+        _currentPersonalStep = 'mail';
+      } else if (widget.initialStep == 'mobile-verify') {
+        _step = 2;
+        _selectedType = 'personal';
+        _personalStep = 3;
+        _currentPersonalStep = 'mobile-verify';
+      } else if (widget.initialStep == 'password') {
+        _step = 2;
+        _selectedType = 'personal';
+        _personalStep = 3;
+        _currentPersonalStep = 'password';
+      } else if (widget.initialStep == 'child' || widget.initialStep == 'child-details') {
+        _step = 2;
+        _selectedType = 'child';
+        _childStep = 1;
+        _currentChildStep = 'details';
+      } else if (widget.initialStep == 'child-parent-email') {
+        _step = 2;
+        _selectedType = 'child';
+        _childStep = 2;
+        _currentChildStep = 'parent-email';
+      } else if (widget.initialStep == 'child-parent-otp') {
+        _step = 2;
+        _selectedType = 'child';
+        _childStep = 2;
+        _currentChildStep = 'parent-otp';
+      } else if (widget.initialStep == 'child-mail') {
+        _step = 2;
+        _selectedType = 'child';
+        _childStep = 3;
+        _currentChildStep = 'mail';
+      } else if (widget.initialStep == 'child-password') {
+        _step = 2;
+        _selectedType = 'child';
+        _childStep = 4;
+        _currentChildStep = 'password';
+      }
+    }
+  }
 
   // Validation errors (Personal)
   String? _firstNameError;
@@ -50,6 +119,7 @@ class _RegisterAccountTypeScreenState
   String? _parentEmailError;
 
   bool _isRegistering = false;
+  bool _isLoadingSuggestions = false;
 
   // Validation errors (Step 3)
   String? _emailHandleError;
@@ -147,8 +217,8 @@ class _RegisterAccountTypeScreenState
     _parentEmailController.dispose();
     _parentOtpController.dispose();
     _securityAnswerController.dispose();
-
     _emailHandleController.dispose();
+    _otpController.dispose();
     super.dispose();
   }
 
@@ -471,52 +541,72 @@ class _RegisterAccountTypeScreenState
     );
   }
 
-  int calculateAge(String dobStr) {
-    try {
-      final birthDate = DateTime.parse(dobStr);
-      final today = DateTime.now();
-      int age = today.year - birthDate.year;
-      if (today.month < birthDate.month ||
-          (today.month == birthDate.month && today.day < birthDate.day)) {
-        age--;
+  DateTime? _parseDob(String s) {
+    s = s.trim();
+    if (s.contains('/')) {
+      final parts = s.split('/');
+      if (parts.length == 3) {
+        final d = int.tryParse(parts[0]);
+        final m = int.tryParse(parts[1]);
+        final y = int.tryParse(parts[2]);
+        if (d != null && m != null && y != null && m >= 1 && m <= 12 && d >= 1 && d <= 31 && y >= 1900) {
+          try {
+            return DateTime(y, m, d);
+          } catch (_) {}
+        }
       }
-      return age;
-    } catch (e) {
-      return -1;
+    } else if (s.contains('-')) {
+      final parts = s.split('-');
+      if (parts.length == 3) {
+        final y = int.tryParse(parts[0]);
+        final m = int.tryParse(parts[1]);
+        final d = int.tryParse(parts[2]);
+        if (d != null && m != null && y != null && m >= 1 && m <= 12 && d >= 1 && d <= 31 && y >= 1900) {
+          try {
+            return DateTime(y, m, d);
+          } catch (_) {}
+        }
+      }
     }
+    return null;
+  }
+
+  int calculateAge(String dobStr) {
+    final birthDate = _parseDob(dobStr);
+    if (birthDate == null) return -1;
+    final today = DateTime.now();
+    int age = today.year - birthDate.year;
+    if (today.month < birthDate.month ||
+        (today.month == birthDate.month && today.day < birthDate.day)) {
+      age--;
+    }
+    return age;
   }
 
   String? validateDob(String dobStr) {
     if (dobStr.isEmpty) {
       return 'Date of Birth is required';
     }
-    final parts = dobStr.split('-');
-    if (parts.length != 3 || dobStr.length != 10) {
-      return 'Please enter date in YYYY-MM-DD format';
+    final dt = _parseDob(dobStr);
+    if (dt == null) {
+      return 'Please enter date in dd/mm/yyyy format';
     }
-    final year = int.tryParse(parts[0]);
-    final month = int.tryParse(parts[1]);
-    final day = int.tryParse(parts[2]);
     final currentYear = DateTime.now().year;
-
-    if (year == null || year < 1925 || year > currentYear) {
-      return 'Invalid year (must be between 1925 and $currentYear)';
+    if (dt.year < 1920 || dt.year > currentYear) {
+      return 'Invalid year (must be between 1920 and $currentYear)';
     }
-    if (month == null || month < 1 || month > 12) {
-      return 'Invalid month (must be 01-12)';
-    }
-    if (day == null || day < 1 || day > 31) {
-      return 'Invalid day (must be 01-31)';
-    }
-    try {
-      final parsed = DateTime.parse(dobStr);
-      if (parsed.isAfter(DateTime.now())) {
-        return 'Date of Birth cannot be in the future';
-      }
-    } catch (e) {
-      return 'Invalid date';
+    if (dt.isAfter(DateTime.now())) {
+      return 'Date of Birth cannot be in the future';
     }
     return null;
+  }
+
+  String _formatDobForApi(String s) {
+    final dt = _parseDob(s);
+    if (dt != null) {
+      return "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}";
+    }
+    return s;
   }
 
   // Password standard validator: at least 8 chars, 1 letter, 1 number
@@ -795,134 +885,2510 @@ class _RegisterAccountTypeScreenState
     );
   }
 
+  bool get _canGoBackFromHeader {
+    if (_selectedType == 'child') return true;
+    if (_selectedType == 'personal') return _currentPersonalStep != 'selection';
+    if (_selectedType == 'business') return _step > 1;
+    return false;
+  }
+
+  void _handleChildBack() {
+    if (_currentChildStep == 'password') {
+      setState(() => _currentChildStep = 'mobile-verify');
+    } else if (_currentChildStep == 'mobile-verify') {
+      if (_phoneOtpSent) {
+        setState(() => _phoneOtpSent = false);
+      } else {
+        setState(() => _currentChildStep = 'mail');
+      }
+    } else if (_currentChildStep == 'mail') {
+      setState(() => _currentChildStep = 'parent-otp');
+    } else if (_currentChildStep == 'parent-otp') {
+      setState(() => _currentChildStep = 'parent-email');
+    } else if (_currentChildStep == 'parent-email') {
+      setState(() => _currentChildStep = 'details');
+    } else {
+      setState(() {
+        _selectedType = 'personal';
+        _currentPersonalStep = 'selection';
+        _step = 1;
+      });
+    }
+  }
+
+  void _handlePersonalBack() {
+    if (_currentPersonalStep == 'password') {
+      setState(() => _currentPersonalStep = 'mobile-verify');
+    } else if (_currentPersonalStep == 'mobile-verify') {
+      if (_phoneOtpSent) {
+        setState(() => _phoneOtpSent = false);
+      } else {
+        setState(() => _currentPersonalStep = 'mail');
+      }
+    } else if (_currentPersonalStep == 'mail') {
+      setState(() => _currentPersonalStep = 'profile');
+    } else if (_currentPersonalStep == 'profile') {
+      setState(() => _currentPersonalStep = 'selection');
+    }
+  }
+
+  void _handleTopBack() {
+    if (_selectedType == 'child') {
+      _handleChildBack();
+    } else if (_selectedType == 'personal') {
+      _handlePersonalBack();
+    } else if (_selectedType == 'business') {
+      if (_businessStep > 1) {
+        setState(() => _businessStep--);
+      } else {
+        setState(() {
+          _step = 1;
+          _selectedType = 'personal';
+          _currentPersonalStep = 'selection';
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFE9F4FF),
+      backgroundColor: const Color(0xFFF1F5F9),
       body: SafeArea(
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-          child: Column(
-            children: [
-              // Top Bar with Back Navigation Arrow and Logo
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _step > 1
-                      ? IconButton(
-                          icon: const Icon(
-                            Icons.arrow_back_ios_rounded,
-                            color: Color(0xFF0F172A),
-                            size: 20,
-                          ),
-                          onPressed: () {
-                            if (_selectedType == 'personal' && _step == 2) {
-                              if (_personalStep > 1) {
-                                setState(() {
-                                  _personalStep--;
-                                });
-                              } else {
-                                setState(() {
-                                  _step = 1;
-                                });
-                              }
-                            } else if (_selectedType == 'business' &&
-                                _step == 2) {
-                              if (_businessStep > 1) {
-                                setState(() {
-                                  _businessStep--;
-                                });
-                              } else {
-                                setState(() {
-                                  _step = 1;
-                                });
-                              }
-                            } else if (_selectedType == 'child' && _step == 2) {
-                              if (_childStep > 1) {
-                                setState(() {
-                                  _childStep--;
-                                });
-                              } else {
-                                setState(() {
-                                  _step = 1;
-                                });
-                              }
-                            } else {
-                              setState(() {
-                                _step--;
-                              });
-                            }
-                          },
-                        )
-                      : IconButton(
-                          icon: const Icon(
-                            Icons.arrow_back_ios_rounded,
-                            color: Color(0xFF0F172A),
-                            size: 20,
-                          ),
-                          onPressed: () => context.go('/login'),
-                        ),
-                  Image.asset(
-                    'assets/bnx_mail_logo.png',
-                    height: 40,
-                    errorBuilder: (context, error, stackTrace) => const Icon(
-                      Icons.mail_outline,
-                      size: 40,
-                      color: Color(0xFF195BAC),
-                    ),
+        child: Center(
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            padding: EdgeInsets.symmetric(
+              horizontal: isMobile ? 16.0 : 24.0,
+              vertical: isMobile ? 20.0 : 40.0,
+            ),
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 540),
+              width: double.infinity,
+              padding: EdgeInsets.symmetric(
+                horizontal: isMobile ? 20.0 : 36.0,
+                vertical: isMobile ? 28.0 : 36.0,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8),
                   ),
-                  const SizedBox(width: 48), // Keep layout balanced
                 ],
               ),
-              const SizedBox(height: 8),
-              // Step Headings
-              const Text(
-                'Create Account',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF0F172A),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                _selectedType == 'child' && _step == 2
-                    ? 'Step $_childStep of 5'
-                    : (_selectedType == 'personal' && _step == 2
-                          ? 'Step $_personalStep of 3'
-                          : 'Step $_step of 3'),
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.grey.shade600,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // Card Container Box
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20.0),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(32),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.04),
-                      blurRadius: 20,
-                      offset: const Offset(0, 10),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Dove Logo carrying envelope
+                  Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      if (_canGoBackFromHeader)
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: IconButton(
+                            icon: const Icon(
+                              Icons.arrow_back_ios_rounded,
+                              color: Color(0xFF0F172A),
+                              size: 18,
+                            ),
+                            onPressed: _handleTopBack,
+                          ),
+                        ),
+                      Center(
+                        child: Image.asset(
+                          'assets/bnx_mail_logo.png',
+                          height: 48,
+                          errorBuilder: (context, error, stackTrace) => const Icon(
+                            Icons.mark_email_read_rounded,
+                            size: 48,
+                            color: Color(0xFF195BAC),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  // Title
+                  const Text(
+                    'Create Account',
+                    style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF0F172A),
+                      letterSpacing: -0.5,
                     ),
-                  ],
-                ),
-                child: _buildStepContent(),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 4),
+                  // Subtitle
+                  const Text(
+                    'Secure. Private. Professional.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF64748B),
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 28),
+
+                  // Step Content
+                  _buildCurrentStepContent(isMobile),
+                ],
               ),
-              const SizedBox(height: 24),
-            ],
+            ),
           ),
         ),
       ),
     );
+  }
+
+  Widget _buildCurrentStepContent(bool isMobile) {
+    if (_selectedType == 'personal') {
+      if (_currentPersonalStep == 'selection') {
+        return _buildPersonalSelectionStep(isMobile);
+      } else if (_currentPersonalStep == 'profile') {
+        return _buildPersonalProfileStep(isMobile);
+      } else if (_currentPersonalStep == 'mail') {
+        return _buildPersonalMailStep(isMobile);
+      } else if (_currentPersonalStep == 'mobile-verify') {
+        return _buildPersonalMobileVerifyStep(isMobile);
+      } else if (_currentPersonalStep == 'password') {
+        return _buildPersonalPasswordStep(isMobile);
+      }
+    } else if (_selectedType == 'child') {
+      if (_currentChildStep == 'details') {
+        return _buildChildDetailsStep(isMobile);
+      } else if (_currentChildStep == 'parent-email') {
+        return _buildChildParentEmailStep(isMobile);
+      } else if (_currentChildStep == 'parent-otp') {
+        return _buildChildParentOtpStep(isMobile);
+      } else if (_currentChildStep == 'mail') {
+        return _buildChildMailStep(isMobile);
+      } else if (_currentChildStep == 'mobile-verify') {
+        return _buildPersonalMobileVerifyStep(isMobile);
+      } else if (_currentChildStep == 'password') {
+        return _buildPersonalPasswordStep(isMobile);
+      }
+    }
+    return _buildStepContent();
+  }
+
+  Widget _buildPersonalSelectionStep(bool isMobile) {
+    return Column(
+      children: [
+        const Text(
+          'Who is this account for?',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF0F172A),
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 20),
+        if (!isMobile)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _ChoiceCard(
+                  icon: const Icon(
+                    Icons.person,
+                    color: Color(0xFF2563EB),
+                    size: 28,
+                  ),
+                  title: 'For myself',
+                  subtitle: 'Personal email account for your everyday needs.',
+                  isMobile: false,
+                  onTap: () {
+                    setState(() {
+                      _selectedType = 'personal';
+                      _currentPersonalStep = 'profile';
+                    });
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _ChoiceCard(
+                  icon: const Text('👶', style: TextStyle(fontSize: 24)),
+                  title: 'For my child',
+                  subtitle: 'Create a managed account for users under 18.',
+                  isMobile: false,
+                  onTap: () {
+                    setState(() {
+                      _selectedType = 'child';
+                      _step = 2;
+                      _childStep = 1;
+                      _currentChildStep = 'details';
+                    });
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _ChoiceCard(
+                  icon: const Text('🏢', style: TextStyle(fontSize: 24)),
+                  title: 'For business',
+                  subtitle: 'Professional accounts linked to your organization.',
+                  isMobile: false,
+                  onTap: () {
+                    setState(() {
+                      _selectedType = 'business';
+                      _step = 2;
+                      _businessStep = 1;
+                    });
+                  },
+                ),
+              ),
+            ],
+          )
+        else
+          Column(
+            children: [
+              _ChoiceCard(
+                icon: const Icon(
+                  Icons.person,
+                  color: Color(0xFF2563EB),
+                  size: 28,
+                ),
+                title: 'For myself',
+                subtitle: 'Personal email account for your everyday needs.',
+                isMobile: true,
+                onTap: () {
+                  setState(() {
+                    _selectedType = 'personal';
+                    _currentPersonalStep = 'profile';
+                  });
+                },
+              ),
+              const SizedBox(height: 12),
+              _ChoiceCard(
+                icon: const Text('👶', style: TextStyle(fontSize: 24)),
+                title: 'For my child',
+                subtitle: 'Create a managed account for users under 18.',
+                isMobile: true,
+                onTap: () {
+                  setState(() {
+                    _selectedType = 'child';
+                    _step = 2;
+                    _childStep = 1;
+                    _currentChildStep = 'details';
+                  });
+                },
+              ),
+              const SizedBox(height: 12),
+              _ChoiceCard(
+                icon: const Text('🏢', style: TextStyle(fontSize: 24)),
+                title: 'For business',
+                subtitle: 'Professional accounts linked to your organization.',
+                isMobile: true,
+                onTap: () {
+                  setState(() {
+                    _selectedType = 'business';
+                    _step = 2;
+                    _businessStep = 1;
+                  });
+                },
+              ),
+            ],
+          ),
+        const SizedBox(height: 28),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text(
+              'Already have an account? ',
+              style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+            ),
+            InkWell(
+              onTap: () => context.go('/login'),
+              child: const Text(
+                'Sign in here',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF4F46E5),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPersonalProfileStep(bool isMobile) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Center(
+          child: Text(
+            'Personal Details',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF0F172A),
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+        if (!isMobile)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _buildSimpleInput(
+                  label: 'First Name',
+                  controller: _firstNameController,
+                  errorText: _firstNameError,
+                  onChanged: (v) {
+                    if (_firstNameError != null) {
+                      setState(() => _firstNameError = null);
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildSimpleInput(
+                  label: 'Last Name',
+                  controller: _lastNameController,
+                  errorText: _lastNameError,
+                  onChanged: (v) {
+                    if (_lastNameError != null) {
+                      setState(() => _lastNameError = null);
+                    }
+                  },
+                ),
+              ),
+            ],
+          )
+        else
+          Column(
+            children: [
+              _buildSimpleInput(
+                label: 'First Name',
+                controller: _firstNameController,
+                errorText: _firstNameError,
+                onChanged: (v) {
+                  if (_firstNameError != null) {
+                    setState(() => _firstNameError = null);
+                  }
+                },
+              ),
+              const SizedBox(height: 14),
+              _buildSimpleInput(
+                label: 'Last Name',
+                controller: _lastNameController,
+                errorText: _lastNameError,
+                onChanged: (v) {
+                  if (_lastNameError != null) {
+                    setState(() => _lastNameError = null);
+                  }
+                },
+              ),
+            ],
+          ),
+        const SizedBox(height: 16),
+        _buildSimpleInput(
+          label: 'Date of Birth',
+          controller: _dobController,
+          hintText: 'dd/mm/yyyy',
+          errorText: _dobError,
+          keyboardType: TextInputType.datetime,
+          inputFormatters: [DobSlashInputFormatter()],
+          suffixIcon: IconButton(
+            icon: const Icon(
+              Icons.calendar_today_outlined,
+              size: 18,
+              color: Color(0xFF334155),
+            ),
+            onPressed: _pickDob,
+          ),
+          onChanged: (v) {
+            if (_dobError != null) {
+              setState(() => _dobError = null);
+            }
+          },
+        ),
+        const SizedBox(height: 32),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            TextButton(
+              onPressed: () => setState(() => _currentPersonalStep = 'selection'),
+              child: const Text(
+                'Back',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: _isLoadingSuggestions ? null : _validateAndProceedProfile,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF4F46E5),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                elevation: 0,
+              ),
+              child: _isLoadingSuggestions
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text(
+                      'Next Step',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                    ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPersonalMailStep(bool isMobile) {
+    final suggestions = _getDisplaySuggestions();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Center(
+          child: Text(
+            'Choose your email address',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF0F172A),
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        const Center(
+          child: Text(
+            'Pick a suggested handle or create your own.',
+            style: TextStyle(
+              fontSize: 13,
+              color: Color(0xFF64748B),
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        Center(
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.center,
+            children: suggestions.map((s) {
+              final isSelected = _usernameController.text.trim() == s;
+              return InkWell(
+                onTap: () {
+                  setState(() {
+                    _usernameController.text = s;
+                    _usernameError = null;
+                  });
+                },
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: isSelected ? const Color(0xFFE0E7FF) : const Color(0xFFEEF2FF),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: isSelected ? const Color(0xFF4F46E5) : const Color(0xFFE0E7FF),
+                    ),
+                  ),
+                  child: Text(
+                    s,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: isSelected ? const Color(0xFF4338CA) : const Color(0xFF4F46E5),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 24),
+        const Text(
+          'Create a custom handle',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF0F172A),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: _usernameError != null
+                  ? const Color(0xFFEF4444)
+                  : const Color(0xFFE2E8F0),
+              width: 1.2,
+            ),
+          ),
+          padding: const EdgeInsets.only(left: 14, right: 6, top: 4, bottom: 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _usernameController,
+                  onChanged: (v) {
+                    if (_usernameError != null) {
+                      setState(() => _usernameError = null);
+                    }
+                  },
+                  style: const TextStyle(fontSize: 14, color: Color(0xFF0F172A)),
+                  decoration: const InputDecoration(
+                    border: InputBorder.none,
+                    hintText: 'e.g. johndoe123',
+                    hintStyle: TextStyle(fontSize: 14, color: Color(0xFF94A3B8)),
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(vertical: 10),
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  '@bnxmail.com',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF475569),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (_usernameError != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4, left: 4),
+            child: Text(
+              _usernameError!,
+              style: const TextStyle(fontSize: 12, color: Color(0xFFEF4444)),
+            ),
+          ),
+        const SizedBox(height: 32),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            TextButton(
+              onPressed: () => setState(() => _currentPersonalStep = 'profile'),
+              child: const Text(
+                'Back',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: _validateAndProceedMail,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF4F46E5),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                elevation: 0,
+              ),
+              child: const Text(
+                'Next Step',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPersonalMobileVerifyStep(bool isMobile) {
+    if (!_phoneOtpSent) {
+      // Step 4A: Phone Number entry
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Center(
+            child: Text(
+              'Mobile Verification',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF0F172A),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Center(
+            child: Text(
+              'Verify your mobile number to secure your account.',
+              style: TextStyle(
+                fontSize: 13,
+                color: Color(0xFF64748B),
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            'Mobile Number',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF0F172A),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: _personalPhoneError != null
+                    ? const Color(0xFFEF4444)
+                    : const Color(0xFFE2E8F0),
+                width: 1.2,
+              ),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+            child: Row(
+              children: [
+                PopupMenuButton<CountryOption>(
+                  tooltip: 'Select Country',
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: const BorderSide(color: Color(0xFFE2E8F0)),
+                  ),
+                  color: Colors.white,
+                  elevation: 6,
+                  offset: const Offset(0, 40),
+                  onSelected: (val) {
+                    setState(() => _selectedCountry = val);
+                  },
+                  itemBuilder: (context) {
+                    return _countryOptions.map((c) {
+                      final isSelected = c.name == _selectedCountry.name;
+                      return PopupMenuItem<CountryOption>(
+                        value: c,
+                        height: 40,
+                        child: Row(
+                          children: [
+                            Text(c.flag, style: const TextStyle(fontSize: 16)),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                '${c.name} (${c.code})',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                  color: isSelected ? const Color(0xFF4F46E5) : const Color(0xFF0F172A),
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (isSelected)
+                              const Icon(Icons.check, size: 16, color: Color(0xFF4F46E5)),
+                          ],
+                        ),
+                      );
+                    }).toList();
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(_selectedCountry.flag, style: const TextStyle(fontSize: 16)),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.arrow_drop_down, color: Color(0xFF64748B), size: 18),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  _selectedCountryCode,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF0F172A),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _personalPhoneController,
+                    keyboardType: TextInputType.phone,
+                    onChanged: (v) {
+                      if (_personalPhoneError != null) {
+                        setState(() => _personalPhoneError = null);
+                      }
+                    },
+                    style: const TextStyle(fontSize: 14, color: Color(0xFF0F172A)),
+                    decoration: const InputDecoration(
+                      border: InputBorder.none,
+                      hintText: '',
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_personalPhoneError != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4, left: 4),
+              child: Text(
+                _personalPhoneError!,
+                style: const TextStyle(fontSize: 12, color: Color(0xFFEF4444)),
+              ),
+            ),
+          const SizedBox(height: 32),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              TextButton(
+                onPressed: () {
+                  if (_selectedType == 'child') {
+                    setState(() => _currentChildStep = 'mail');
+                  } else {
+                    setState(() => _currentPersonalStep = 'mail');
+                  }
+                },
+                child: const Text(
+                  'Back',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF0F172A),
+                  ),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: _isSendingMobileOtp ? null : _sendMobileOtp,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF4F46E5),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                  elevation: 0,
+                ),
+                child: _isSendingMobileOtp
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Text(
+                        'Send OTP',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                      ),
+              ),
+            ],
+          ),
+        ],
+      );
+    } else {
+      // Step 4B: Enter OTP
+      final fullPhone = '$_selectedCountryCode${_personalPhoneController.text.trim()}';
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Center(
+            child: Text(
+              'Mobile Verification',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF0F172A),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Center(
+            child: Text(
+              'Verify your mobile number to secure your account.',
+              style: TextStyle(
+                fontSize: 13,
+                color: Color(0xFF64748B),
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            'Enter the 6-digit OTP',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF0F172A),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: _otpError != null
+                    ? const Color(0xFFEF4444)
+                    : const Color(0xFFE2E8F0),
+                width: 1.2,
+              ),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+            child: TextField(
+              controller: _otpController,
+              keyboardType: TextInputType.number,
+              textAlign: TextAlign.center,
+              maxLength: 6,
+              onChanged: (v) {
+                if (_otpError != null) {
+                  setState(() => _otpError = null);
+                }
+              },
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 6,
+                color: Color(0xFF0F172A),
+              ),
+              decoration: const InputDecoration(
+                counterText: '',
+                border: InputBorder.none,
+                hintText: '123456',
+                hintStyle: TextStyle(
+                  fontSize: 16,
+                  letterSpacing: 4,
+                  color: Color(0xFF94A3B8),
+                ),
+                isDense: true,
+                contentPadding: EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+          if (_otpError != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Center(
+                child: Text(
+                  _otpError!,
+                  style: const TextStyle(fontSize: 12, color: Color(0xFFEF4444)),
+                ),
+              ),
+            ),
+          const SizedBox(height: 10),
+          if (isMobile)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text.rich(
+                  TextSpan(
+                    style: const TextStyle(fontSize: 12, color: Color(0xFF334155)),
+                    children: [
+                      const TextSpan(text: 'Code sent to '),
+                      TextSpan(
+                        text: fullPhone,
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                      ),
+                      const TextSpan(text: '.'),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    InkWell(
+                      onTap: _resendMobileOtp,
+                      child: const Text(
+                        'Resend OTP',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF4F46E5),
+                        ),
+                      ),
+                    ),
+                    const Text('  ·  ', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                    InkWell(
+                      onTap: () => setState(() => _phoneOtpSent = false),
+                      child: const Text(
+                        'Change number',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF4F46E5),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            )
+          else
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text.rich(
+                    TextSpan(
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF334155)),
+                      children: [
+                        const TextSpan(text: 'Code sent to '),
+                        TextSpan(
+                          text: fullPhone,
+                          style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                        ),
+                        const TextSpan(text: '.'),
+                      ],
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    InkWell(
+                      onTap: _resendMobileOtp,
+                      child: const Text(
+                        'Resend OTP',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF4F46E5),
+                        ),
+                      ),
+                    ),
+                    const Text('  ·  ', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                    InkWell(
+                      onTap: () => setState(() => _phoneOtpSent = false),
+                      child: const Text(
+                        'Change number',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF4F46E5),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          const SizedBox(height: 32),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              TextButton(
+                onPressed: () => setState(() => _phoneOtpSent = false),
+                child: const Text(
+                  'Back',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF0F172A),
+                  ),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: _isVerifyingMobileOtp ? null : _verifyMobileOtp,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF4F46E5),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                  elevation: 0,
+                ),
+                child: _isVerifyingMobileOtp
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Text(
+                        'Verify OTP',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                      ),
+              ),
+            ],
+          ),
+        ],
+      );
+    }
+  }
+
+  // ==========================================
+  // CHILD REGISTRATION STEPS (Screenshots 3-5)
+  // ==========================================
+
+  Widget _buildChildDetailsStep(bool isMobile) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Center(
+          child: Text(
+            'Child Details',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF0F172A),
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+        if (!isMobile)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _buildSimpleInput(
+                  label: "Child's First Name",
+                  controller: _childFirstNameController,
+                  errorText: _childFirstNameError,
+                  onChanged: (v) {
+                    if (_childFirstNameError != null) {
+                      setState(() => _childFirstNameError = null);
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildSimpleInput(
+                  label: "Child's Last Name",
+                  controller: _childLastNameController,
+                  errorText: _childLastNameError,
+                  onChanged: (v) {
+                    if (_childLastNameError != null) {
+                      setState(() => _childLastNameError = null);
+                    }
+                  },
+                ),
+              ),
+            ],
+          )
+        else
+          Column(
+            children: [
+              _buildSimpleInput(
+                label: "Child's First Name",
+                controller: _childFirstNameController,
+                errorText: _childFirstNameError,
+                onChanged: (v) {
+                  if (_childFirstNameError != null) {
+                    setState(() => _childFirstNameError = null);
+                  }
+                },
+              ),
+              const SizedBox(height: 14),
+              _buildSimpleInput(
+                label: "Child's Last Name",
+                controller: _childLastNameController,
+                errorText: _childLastNameError,
+                onChanged: (v) {
+                  if (_childLastNameError != null) {
+                    setState(() => _childLastNameError = null);
+                  }
+                },
+              ),
+            ],
+          ),
+        const SizedBox(height: 16),
+        _buildSimpleInput(
+          label: "Child's Date of Birth",
+          controller: _childDobController,
+          hintText: 'dd/mm/yyyy',
+          errorText: _childDobError,
+          keyboardType: TextInputType.datetime,
+          inputFormatters: [DobSlashInputFormatter()],
+          suffixIcon: IconButton(
+            icon: const Icon(
+              Icons.calendar_today_outlined,
+              size: 18,
+              color: Color(0xFF334155),
+            ),
+            onPressed: _pickChildDob,
+          ),
+          onChanged: (v) {
+            if (_childDobError != null) {
+              setState(() => _childDobError = null);
+            }
+          },
+        ),
+        const SizedBox(height: 32),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            TextButton(
+              onPressed: _handleChildBack,
+              child: const Text(
+                'Back',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: _validateAndProceedChildDetails,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF4F46E5),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                elevation: 0,
+              ),
+              child: const Text(
+                'Next Step',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildChildParentEmailStep(bool isMobile) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Center(
+          child: Text(
+            'Parent Verification',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF0F172A),
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        const Center(
+          child: Text(
+            "Since the account is for a child, we need a parent's consent.",
+            style: TextStyle(
+              fontSize: 13,
+              color: Color(0xFF64748B),
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+        const SizedBox(height: 24),
+        _buildSimpleInput(
+          label: "Parent's Email Address",
+          controller: _parentEmailController,
+          hintText: 'parent@example.com',
+          errorText: _parentEmailError,
+          keyboardType: TextInputType.emailAddress,
+          onChanged: (v) {
+            if (_parentEmailError != null) {
+              setState(() => _parentEmailError = null);
+            }
+          },
+        ),
+        const SizedBox(height: 32),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            TextButton(
+              onPressed: _handleChildBack,
+              child: const Text(
+                'Back',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: _isSendingParentOtp ? null : _sendChildParentOtp,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF4F46E5),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                elevation: 0,
+              ),
+              child: _isSendingParentOtp
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text(
+                      'Send OTP',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                    ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildChildParentOtpStep(bool isMobile) {
+    final parentEmail = _parentEmailController.text.trim();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Center(
+          child: Text(
+            'Parent Verification',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF0F172A),
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        const Center(
+          child: Text(
+            "Since the account is for a child, we need a parent's consent.",
+            style: TextStyle(
+              fontSize: 13,
+              color: Color(0xFF64748B),
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+        const SizedBox(height: 24),
+        const Text(
+          'Enter the Consent Code',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF0F172A),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: _parentOtpError != null
+                  ? const Color(0xFFEF4444)
+                  : const Color(0xFF818CF8),
+              width: 1.5,
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+          child: TextField(
+            controller: _parentOtpController,
+            keyboardType: TextInputType.number,
+            textAlign: TextAlign.center,
+            maxLength: 6,
+            onChanged: (v) {
+              if (_parentOtpError != null) {
+                setState(() => _parentOtpError = null);
+              }
+            },
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 8,
+              color: Color(0xFF0F172A),
+            ),
+            decoration: const InputDecoration(
+              counterText: '',
+              border: InputBorder.none,
+              hintText: '1 2 3 4 5 6',
+              hintStyle: TextStyle(
+                fontSize: 16,
+                letterSpacing: 6,
+                color: Color(0xFF94A3B8),
+              ),
+              isDense: true,
+              contentPadding: EdgeInsets.symmetric(vertical: 12),
+            ),
+          ),
+        ),
+        if (_parentOtpError != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Center(
+              child: Text(
+                _parentOtpError!,
+                style: const TextStyle(fontSize: 12, color: Color(0xFFEF4444)),
+              ),
+            ),
+          ),
+        const SizedBox(height: 10),
+        if (isMobile)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text.rich(
+                TextSpan(
+                  style: const TextStyle(fontSize: 12, color: Color(0xFF334155)),
+                  children: [
+                    const TextSpan(text: 'Code sent to '),
+                    TextSpan(
+                      text: parentEmail,
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                    ),
+                    const TextSpan(text: '.'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  InkWell(
+                    onTap: _isSendingParentOtp ? null : _resendChildParentOtp,
+                    child: const Text(
+                      'Resend Code',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF4F46E5),
+                      ),
+                    ),
+                  ),
+                  const Text('  ·  ', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                  InkWell(
+                    onTap: () => setState(() => _currentChildStep = 'parent-email'),
+                    child: const Text(
+                      'Change email',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF4F46E5),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          )
+        else
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text.rich(
+                  TextSpan(
+                    style: const TextStyle(fontSize: 12, color: Color(0xFF334155)),
+                    children: [
+                      const TextSpan(text: 'Code sent to '),
+                      TextSpan(
+                        text: parentEmail,
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                      ),
+                      const TextSpan(text: '.'),
+                    ],
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  InkWell(
+                    onTap: _isSendingParentOtp ? null : _resendChildParentOtp,
+                    child: const Text(
+                      'Resend Code',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF4F46E5),
+                      ),
+                    ),
+                  ),
+                  const Text('  ·  ', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                  InkWell(
+                    onTap: () => setState(() => _currentChildStep = 'parent-email'),
+                    child: const Text(
+                      'Change email',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF4F46E5),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        const SizedBox(height: 32),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            TextButton(
+              onPressed: _handleChildBack,
+              child: const Text(
+                'Back',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: _isVerifyingParentOtp ? null : _verifyChildParentOtp,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF6366F1),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                elevation: 0,
+              ),
+              child: _isVerifyingParentOtp
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text(
+                      'Verify OTP',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                    ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Future<void> _pickChildDob() async {
+    DateTime initial = DateTime(2015, 1, 1);
+    final cur = _childDobController.text.trim();
+    if (cur.isNotEmpty) {
+      final p = _parseDob(cur);
+      if (p != null) initial = p;
+    }
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(1925),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF4F46E5),
+              onPrimary: Colors.white,
+              onSurface: Color(0xFF0F172A),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      final formatted =
+          "${picked.day.toString().padLeft(2, '0')}/${picked.month.toString().padLeft(2, '0')}/${picked.year}";
+      setState(() {
+        _childDobController.text = formatted;
+        _childDobError = null;
+      });
+    }
+  }
+
+  void _validateAndProceedChildDetails() {
+    final fName = _childFirstNameController.text.trim();
+    final lName = _childLastNameController.text.trim();
+    final dob = _childDobController.text.trim();
+
+    setState(() {
+      _childFirstNameError = fName.isEmpty ? 'First Name is required' : null;
+      _childLastNameError = lName.isEmpty ? 'Last Name is required' : null;
+
+      if (dob.isEmpty) {
+        _childDobError = 'Date of Birth is required';
+      } else {
+        final dobErr = validateDob(dob);
+        if (dobErr != null) {
+          _childDobError = dobErr;
+        } else if (calculateAge(dob) >= 18) {
+          _childDobError = 'Child account is only for users under 18';
+        } else {
+          _childDobError = null;
+        }
+      }
+    });
+
+    if (_childFirstNameError == null &&
+        _childLastNameError == null &&
+        _childDobError == null) {
+      setState(() {
+        _currentChildStep = 'parent-email';
+        _childStep = 2;
+      });
+    }
+  }
+
+  Future<void> _sendChildParentOtp() async {
+    final email = _parentEmailController.text.trim();
+    if (email.isEmpty || !email.contains('@') || !email.contains('.')) {
+      setState(() => _parentEmailError = 'Please enter a valid Parent Email address');
+      return;
+    }
+    setState(() {
+      _isSendingParentOtp = true;
+      _parentEmailError = null;
+      _parentOtpError = null;
+    });
+    try {
+      await AuthRepository.sendParentOtp(email);
+      if (!mounted) return;
+      setState(() {
+        _isSendingParentOtp = false;
+        _currentChildStep = 'parent-otp';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isSendingParentOtp = false;
+        _parentEmailError = e
+            .toString()
+            .replaceAll('Exception: ', '')
+            .replaceAll('ApiException(400): ', '');
+      });
+    }
+  }
+
+  Future<void> _resendChildParentOtp() async {
+    final email = _parentEmailController.text.trim();
+    if (email.isEmpty) return;
+    setState(() {
+      _isSendingParentOtp = true;
+      _parentOtpError = null;
+    });
+    try {
+      await AuthRepository.sendParentOtp(email);
+      if (!mounted) return;
+      setState(() {
+        _isSendingParentOtp = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Consent code resent to $email'),
+          backgroundColor: const Color(0xFF10B981),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isSendingParentOtp = false;
+        _parentOtpError = e.toString().replaceAll('Exception: ', '');
+      });
+    }
+  }
+
+  Future<void> _verifyChildParentOtp() async {
+    final email = _parentEmailController.text.trim();
+    final otp = _parentOtpController.text.trim();
+    if (otp.isEmpty || otp.length < 6) {
+      setState(() => _parentOtpError = 'Please enter the 6-digit consent code');
+      return;
+    }
+    setState(() {
+      _isVerifyingParentOtp = true;
+      _parentOtpError = null;
+    });
+    try {
+      await AuthRepository.verifyParentOtp(email, otp);
+      if (!mounted) return;
+      setState(() {
+        _isVerifyingParentOtp = false;
+        _parentOtpVerified = true;
+        _currentChildStep = 'mail';
+        _childStep = 3;
+      });
+      _fetchSuggestions(
+        _childFirstNameController.text.trim(),
+        _childLastNameController.text.trim(),
+        _formatDobForApi(_childDobController.text.trim()),
+        false,
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Parent Consent verified successfully!'),
+          backgroundColor: Color(0xFF10B981),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isVerifyingParentOtp = false;
+        _parentOtpError = e.toString().replaceAll('Exception: ', '').replaceAll('ApiException(400): ', '');
+      });
+    }
+  }
+
+  List<String> _getChildDisplaySuggestions() {
+    if (_usernameSuggestions.isNotEmpty) {
+      return _usernameSuggestions;
+    }
+    final fName = _childFirstNameController.text.trim().toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
+    final lName = _childLastNameController.text.trim().toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
+    final baseFirst = fName.isNotEmpty ? fName : 'ejhdc';
+    final baseLast = lName.isNotEmpty ? lName : 'bee';
+
+    final p1 = baseFirst.length >= 4 ? baseFirst.substring(0, 4) : baseFirst;
+    final p2 = baseLast.length >= 3 ? baseLast.substring(0, 3) : baseLast;
+
+    final s1 = '$p1${p2}202';
+    final s2 = '$p1${p2}202';
+    final s3 = 'ekjhc${p1}202';
+
+    return [s1, s2, s3];
+  }
+
+  Widget _buildChildMailStep(bool isMobile) {
+    final suggestions = _getChildDisplaySuggestions();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Center(
+          child: Text(
+            'Choose your email address',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF0F172A),
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        const Center(
+          child: Text(
+            'Pick a suggested handle or create your own.',
+            style: TextStyle(
+              fontSize: 13,
+              color: Color(0xFF64748B),
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        Center(
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.center,
+            children: suggestions.map((s) {
+              final isSelected = _childUsernameController.text.trim() == s;
+              return InkWell(
+                onTap: () {
+                  setState(() {
+                    _childUsernameController.text = s;
+                    _childUsernameError = null;
+                  });
+                },
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: isSelected ? const Color(0xFFE0E7FF) : const Color(0xFFEEF2FF),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: isSelected ? const Color(0xFF4F46E5) : const Color(0xFFE0E7FF),
+                    ),
+                  ),
+                  child: Text(
+                    s,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: isSelected ? const Color(0xFF4338CA) : const Color(0xFF4F46E5),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 24),
+        const Text(
+          'Create a custom handle',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF0F172A),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: _childUsernameError != null
+                  ? const Color(0xFFEF4444)
+                  : const Color(0xFFE2E8F0),
+              width: 1.2,
+            ),
+          ),
+          padding: const EdgeInsets.only(left: 14, right: 6, top: 4, bottom: 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _childUsernameController,
+                  onChanged: (v) {
+                    if (_childUsernameError != null) {
+                      setState(() => _childUsernameError = null);
+                    }
+                  },
+                  style: const TextStyle(fontSize: 14, color: Color(0xFF0F172A)),
+                  decoration: const InputDecoration(
+                    border: InputBorder.none,
+                    hintText: 'e.g. johndoe123',
+                    hintStyle: TextStyle(fontSize: 14, color: Color(0xFF94A3B8)),
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(vertical: 10),
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  '@bnxmail.com',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF475569),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (_childUsernameError != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4, left: 4),
+            child: Text(
+              _childUsernameError!,
+              style: const TextStyle(fontSize: 12, color: Color(0xFFEF4444)),
+            ),
+          ),
+        const SizedBox(height: 32),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            TextButton(
+              onPressed: _handleChildBack,
+              child: const Text(
+                'Back',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: _validateAndProceedChildMail,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF4F46E5),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                elevation: 0,
+              ),
+              child: const Text(
+                'Next Step',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  void _validateAndProceedChildMail() {
+    final uName = _childUsernameController.text.trim();
+    setState(() {
+      _childUsernameError = uName.isEmpty ? 'Username is required' : null;
+    });
+    if (_childUsernameError == null) {
+      _usernameController.text = uName;
+      _firstNameController.text = _childFirstNameController.text.trim();
+      _lastNameController.text = _childLastNameController.text.trim();
+      _dobController.text = _childDobController.text.trim();
+      setState(() {
+        _currentChildStep = 'mobile-verify';
+        _phoneOtpSent = false;
+      });
+    }
+  }
+
+  Widget _buildSimpleInput({
+    required String label,
+    required TextEditingController controller,
+    String? hintText,
+    String? errorText,
+    bool obscureText = false,
+    TextInputType? keyboardType,
+    List<TextInputFormatter>? inputFormatters,
+    Widget? suffixIcon,
+    ValueChanged<String>? onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF0F172A),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: errorText != null
+                  ? const Color(0xFFEF4444)
+                  : const Color(0xFFE2E8F0),
+              width: 1.2,
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+          child: TextField(
+            controller: controller,
+            obscureText: obscureText,
+            keyboardType: keyboardType,
+            inputFormatters: inputFormatters,
+            onChanged: onChanged,
+            style: const TextStyle(fontSize: 14, color: Color(0xFF0F172A)),
+            decoration: InputDecoration(
+              border: InputBorder.none,
+              hintText: hintText,
+              hintStyle: const TextStyle(fontSize: 14, color: Color(0xFF94A3B8)),
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(vertical: 12),
+              suffixIcon: suffixIcon,
+            ),
+          ),
+        ),
+        if (errorText != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4, left: 4),
+            child: Text(
+              errorText,
+              style: const TextStyle(fontSize: 12, color: Color(0xFFEF4444)),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _pickDob() async {
+    DateTime initial = DateTime(2000, 1, 1);
+    final cur = _dobController.text.trim();
+    if (cur.isNotEmpty) {
+      final p = _parseDob(cur);
+      if (p != null) initial = p;
+    }
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(1920),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF4F46E5),
+              onPrimary: Colors.white,
+              onSurface: Color(0xFF0F172A),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      final formatted =
+          "${picked.day.toString().padLeft(2, '0')}/${picked.month.toString().padLeft(2, '0')}/${picked.year}";
+      setState(() {
+        _dobController.text = formatted;
+        _dobError = null;
+      });
+    }
+  }
+
+  List<String> _getDisplaySuggestions() {
+    if (_usernameSuggestions.isNotEmpty) {
+      return _usernameSuggestions;
+    }
+    final fName = _firstNameController.text.trim().toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
+    final lName = _lastNameController.text.trim().toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
+    final baseFirst = fName.isNotEmpty ? fName : 'ravi';
+    final baseLast = lName.isNotEmpty ? lName : 'rave';
+
+    final p1 = baseFirst.length >= 4 ? baseFirst.substring(0, 4) : baseFirst.padRight(4, 'a');
+    final p2 = baseLast.length >= 3 ? baseLast.substring(0, 3) : baseLast.padRight(3, 'b');
+
+    // Exactly 7 letters + 3 digits = 10 chars (per BNX Handle Rule)
+    final s1 = '$p1${p2}001';
+    final s2 = '$p1${p2}002';
+    final s3 = '$p1${p2}123';
+
+    return [s1, s2, s3];
+  }
+
+  void _validateAndProceedProfile() async {
+    final fName = _firstNameController.text.trim();
+    final lName = _lastNameController.text.trim();
+    final dob = _dobController.text.trim();
+
+    setState(() {
+      _firstNameError = fName.isEmpty ? 'First Name is required' : null;
+      _lastNameError = lName.isEmpty ? 'Last Name is required' : null;
+      _dobError = validateDob(dob);
+    });
+
+    if (_firstNameError == null && _lastNameError == null && _dobError == null) {
+      final age = calculateAge(dob);
+      if (age >= 0 && age < 18) {
+        final switchToChild = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Text('Under 18 Account', style: TextStyle(fontWeight: FontWeight.bold)),
+            content: const Text(
+              'Personal accounts are designed for users 18 and older. Would you like to create a managed Child account instead?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Stay here'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF4F46E5),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Create Child Account'),
+              ),
+            ],
+          ),
+        );
+
+        if (switchToChild == true && mounted) {
+          setState(() {
+            _selectedType = 'child';
+            _step = 2;
+            _childStep = 1;
+            _currentChildStep = 'details';
+            _childFirstNameController.text = fName;
+            _childLastNameController.text = lName;
+            _childDobController.text = dob;
+          });
+          return;
+        }
+      }
+
+      setState(() => _isLoadingSuggestions = true);
+      await _fetchSuggestions(fName, lName, _formatDobForApi(dob), false);
+      if (mounted) {
+        setState(() {
+          _isLoadingSuggestions = false;
+          if (_usernameController.text.trim().isEmpty) {
+            final available = _getDisplaySuggestions();
+            if (available.isNotEmpty) {
+              _usernameController.text = available.first;
+            }
+          }
+          _currentPersonalStep = 'mail';
+        });
+      }
+    }
+  }
+
+  void _validateAndProceedMail() {
+    final uName = _usernameController.text.trim().toLowerCase();
+    _usernameController.text = uName;
+    setState(() {
+      if (uName.isEmpty) {
+        _usernameError = 'Username is required';
+      } else if (uName.length < 6) {
+        _usernameError = 'Username must be at least 6 characters';
+      } else if (!RegExp(r'^[a-z0-9]+$').hasMatch(uName)) {
+        _usernameError = 'Only lowercase letters and numbers are allowed';
+      } else {
+        _usernameError = null;
+      }
+    });
+    if (_usernameError == null) {
+      setState(() {
+        _currentPersonalStep = 'mobile-verify';
+        _phoneOtpSent = false;
+      });
+    }
+  }
+
+  Future<void> _sendMobileOtp() async {
+    final phone = _personalPhoneController.text.trim();
+    if (phone.isEmpty) {
+      setState(() => _personalPhoneError = 'Mobile number is required');
+      return;
+    }
+    final digitsOnly = phone.replaceAll(RegExp(r'\D'), '');
+    if (digitsOnly.length < 6 || digitsOnly.length > 15) {
+      setState(() => _personalPhoneError = 'Please enter a valid mobile number');
+      return;
+    }
+    final fullPhone = phone.startsWith('+') ? phone : '$_selectedCountryCode$phone';
+
+    setState(() {
+      _personalPhoneError = null;
+      _isSendingMobileOtp = true;
+    });
+
+    try {
+      await AuthRepository.sendMobileOtp(fullPhone);
+      if (!mounted) return;
+      setState(() {
+        _isSendingMobileOtp = false;
+        _phoneOtpSent = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('OTP sent to $fullPhone'),
+          backgroundColor: const Color(0xFF4F46E5),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      final errMsg = e
+          .toString()
+          .replaceAll('Exception: ', '')
+          .replaceAll('ApiException(400): ', '')
+          .replaceAll('ApiException(500): ', '');
+      setState(() {
+        _isSendingMobileOtp = false;
+        _personalPhoneError = errMsg;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(errMsg),
+          backgroundColor: const Color(0xFFEF4444),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _resendMobileOtp() async {
+    final phone = _personalPhoneController.text.trim();
+    final fullPhone = phone.startsWith('+') ? phone : '$_selectedCountryCode$phone';
+    setState(() => _isSendingMobileOtp = true);
+
+    try {
+      await AuthRepository.sendMobileOtp(fullPhone);
+      if (!mounted) return;
+      setState(() => _isSendingMobileOtp = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('OTP resent to $fullPhone'),
+          backgroundColor: const Color(0xFF4F46E5),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      final errMsg = e
+          .toString()
+          .replaceAll('Exception: ', '')
+          .replaceAll('ApiException(400): ', '')
+          .replaceAll('ApiException(500): ', '');
+      setState(() => _isSendingMobileOtp = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(errMsg),
+          backgroundColor: const Color(0xFFEF4444),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _verifyMobileOtp() async {
+    final otp = _otpController.text.trim();
+    if (otp.length != 6) {
+      setState(() => _otpError = 'Please enter a valid 6-digit OTP');
+      return;
+    }
+    final phone = _personalPhoneController.text.trim();
+    final fullPhone = phone.startsWith('+') ? phone : '$_selectedCountryCode$phone';
+
+    setState(() {
+      _otpError = null;
+      _isVerifyingMobileOtp = true;
+    });
+
+    try {
+      await AuthRepository.verifyMobileOtp(fullPhone, otp);
+      if (!mounted) return;
+
+      setState(() {
+        _isVerifyingMobileOtp = false;
+        if (_selectedType == 'child') {
+          _currentChildStep = 'password';
+        } else {
+          _currentPersonalStep = 'password';
+        }
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Mobile number verified successfully!'),
+          backgroundColor: Color(0xFF10B981),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      final errMsg = e
+          .toString()
+          .replaceAll('Exception: ', '')
+          .replaceAll('ApiException(400): ', '')
+          .replaceAll('ApiException(500): ', '');
+      setState(() {
+        _isVerifyingMobileOtp = false;
+        _otpError = errMsg;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(errMsg),
+          backgroundColor: const Color(0xFFEF4444),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Widget _buildPersonalPasswordStep(bool isMobile) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Center(
+          child: Text(
+            'Create Password',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF0F172A),
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        const Center(
+          child: Text(
+            'Create a strong password to protect your account.',
+            style: TextStyle(
+              fontSize: 13,
+              color: Color(0xFF64748B),
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        _buildSimpleInput(
+          label: 'Password',
+          controller: _passwordController,
+          hintText: 'Enter at least 8 characters',
+          errorText: _passwordError,
+          obscureText: !_showPassword,
+          onChanged: (v) {
+            if (_passwordError != null) {
+              setState(() => _passwordError = null);
+            }
+          },
+        ),
+        const SizedBox(height: 16),
+
+        _buildSimpleInput(
+          label: 'Retype Password',
+          controller: _retypePasswordController,
+          hintText: 'Confirm your password',
+          errorText: _retypePasswordError,
+          obscureText: !_showPassword,
+          onChanged: (v) {
+            if (_retypePasswordError != null) {
+              setState(() => _retypePasswordError = null);
+            }
+          },
+        ),
+        const SizedBox(height: 10),
+
+        Row(
+          children: [
+            SizedBox(
+              width: 24,
+              height: 24,
+              child: Checkbox(
+                value: _showPassword,
+                activeColor: const Color(0xFF4F46E5),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                onChanged: (val) {
+                  setState(() => _showPassword = val ?? false);
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: () {
+                setState(() => _showPassword = !_showPassword);
+              },
+              child: const Text(
+                'Show password',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF334155),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 32),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            TextButton(
+              onPressed: () {
+                setState(() {
+                  if (_selectedType == 'child') {
+                    _currentChildStep = 'mobile-verify';
+                  } else {
+                    _currentPersonalStep = 'mobile-verify';
+                  }
+                });
+              },
+              child: const Text(
+                'Back',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: _isRegistering ? null : _registerAndCreateAccount,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF4F46E5),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                elevation: 0,
+              ),
+              child: _isRegistering
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text(
+                      'Next Step',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                    ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Future<void> _registerAndCreateAccount() async {
+    final pass = _passwordController.text;
+    final rePass = _retypePasswordController.text;
+
+    setState(() {
+      _passwordError = validatePasswordStrength(pass);
+
+      if (rePass.isEmpty) {
+        _retypePasswordError = 'Please retype your password';
+      } else if (rePass != pass) {
+        _retypePasswordError = 'Passwords do not match';
+      } else {
+        _retypePasswordError = null;
+      }
+    });
+
+    if (_passwordError != null || _retypePasswordError != null) return;
+
+    setState(() => _isRegistering = true);
+
+    final isChild = _selectedType == 'child';
+    final fName = isChild ? _childFirstNameController.text.trim() : _firstNameController.text.trim();
+    final lName = isChild ? _childLastNameController.text.trim() : _lastNameController.text.trim();
+    final uName = isChild ? _childUsernameController.text.trim() : _usernameController.text.trim();
+    final dob = isChild
+        ? _formatDobForApi(_childDobController.text.trim())
+        : _formatDobForApi(_dobController.text.trim());
+    final rawPhone = _personalPhoneController.text.trim();
+    final phone = rawPhone.startsWith('+') ? rawPhone : '$_selectedCountryCode$rawPhone';
+    final parentEmail = isChild ? _parentEmailController.text.trim() : null;
+
+    try {
+      // 1. Register with backend API
+      final token = await AuthRepository.register(
+        mode: isChild ? 'CHILD' : 'PERSONAL',
+        firstName: fName,
+        lastName: lName,
+        username: uName,
+        password: pass,
+        dob: dob,
+        phoneNumber: phone,
+        parentEmail: parentEmail,
+      );
+
+      // 2. Create Mailbox with tempToken
+      await AuthRepository.createMailbox(
+        tempToken: token,
+        emailName: uName,
+        password: pass,
+        isPrimary: true,
+      );
+
+      if (!mounted) return;
+      setState(() => _isRegistering = false);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isChild
+                ? 'Child account successfully created! Please log in.'
+                : 'Account successfully created! Please log in.',
+          ),
+          backgroundColor: const Color(0xFF10B981),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+      context.go('/login');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isRegistering = false);
+      final errorMsg = e
+          .toString()
+          .replaceAll('Exception: ', '')
+          .replaceAll('ApiException(400): ', '')
+          .replaceAll('ApiException(409): ', '')
+          .replaceAll('ApiException(500): ', '');
+
+      if (errorMsg.toLowerCase().contains('taken') ||
+          errorMsg.toLowerCase().contains('already exist') ||
+          errorMsg.toLowerCase().contains('already in use')) {
+        setState(() {
+          if (isChild) {
+            _childUsernameError = 'Username is already taken';
+            _currentChildStep = 'mail';
+          } else {
+            _usernameError = 'Username is already taken';
+            _currentPersonalStep = 'mail';
+          }
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Username is already taken, please pick another.'),
+            backgroundColor: Color(0xFFEF4444),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else if (errorMsg.toLowerCase().contains('handle') ||
+          errorMsg.toLowerCase().contains('character') ||
+          errorMsg.toLowerCase().contains('letter') ||
+          errorMsg.toLowerCase().contains('number') ||
+          errorMsg.toLowerCase().contains('username')) {
+        setState(() {
+          if (isChild) {
+            _childUsernameError = errorMsg;
+            _currentChildStep = 'mail';
+          } else {
+            _usernameError = errorMsg;
+            _currentPersonalStep = 'mail';
+          }
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMsg),
+            backgroundColor: const Color(0xFFEF4444),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Registration failed: $errorMsg'),
+            backgroundColor: const Color(0xFFEF4444),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildStepContent() {
@@ -2922,6 +5388,131 @@ class DateInputFormatter extends TextInputFormatter {
     return TextEditingValue(
       text: formatted,
       selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+}
+
+class DobSlashInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final digitsOnly = newValue.text.replaceAll(RegExp(r'[^\d]'), '');
+    final buffer = StringBuffer();
+
+    for (int i = 0; i < digitsOnly.length && i < 8; i++) {
+      if (i == 2 || i == 4) {
+        buffer.write('/');
+      }
+      buffer.write(digitsOnly[i]);
+    }
+
+    final formatted = buffer.toString();
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+}
+
+class CountryOption {
+  final String flag;
+  final String code;
+  final String name;
+  const CountryOption({required this.flag, required this.code, required this.name});
+}
+
+const List<CountryOption> _countryOptions = [
+  CountryOption(flag: '🇺🇸', code: '+1', name: 'United States'),
+  CountryOption(flag: '🇮🇳', code: '+91', name: 'India'),
+  CountryOption(flag: '🇬🇧', code: '+44', name: 'United Kingdom'),
+  CountryOption(flag: '🇨🇦', code: '+1', name: 'Canada'),
+  CountryOption(flag: '🇦🇺', code: '+61', name: 'Australia'),
+  CountryOption(flag: '🇩🇪', code: '+49', name: 'Germany'),
+  CountryOption(flag: '🇫🇷', code: '+33', name: 'France'),
+  CountryOption(flag: '🇸🇬', code: '+65', name: 'Singapore'),
+  CountryOption(flag: '🇦🇪', code: '+971', name: 'United Arab Emirates'),
+];
+
+class _ChoiceCard extends StatefulWidget {
+  final Widget icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  final bool isMobile;
+
+  const _ChoiceCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    required this.isMobile,
+  });
+
+  @override
+  State<_ChoiceCard> createState() => _ChoiceCardState();
+}
+
+class _ChoiceCardState extends State<_ChoiceCard> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          height: widget.isMobile ? null : 160,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: _isHovered ? const Color(0xFFF8FAFC) : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: _isHovered ? const Color(0xFF4F46E5) : const Color(0xFFE2E8F0),
+              width: _isHovered ? 1.5 : 1.2,
+            ),
+            boxShadow: _isHovered
+                ? [
+                    BoxShadow(
+                      color: const Color(0xFF4F46E5).withValues(alpha: 0.08),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ]
+                : [],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              widget.icon,
+              const SizedBox(height: 12),
+              Text(
+                widget.title,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                widget.subtitle,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF64748B),
+                  height: 1.35,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

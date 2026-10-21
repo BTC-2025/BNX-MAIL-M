@@ -34,6 +34,54 @@ final goRouter = GoRouter(
       builder: (context, state) => const RegisterAccountTypeScreen(),
     ),
     GoRoute(
+      path: '/signup',
+      redirect: (context, state) => '/signup/selection',
+    ),
+    GoRoute(
+      path: '/signup/selection',
+      builder: (context, state) => const RegisterAccountTypeScreen(initialStep: 'selection'),
+    ),
+    GoRoute(
+      path: '/signup/profile',
+      builder: (context, state) => const RegisterAccountTypeScreen(initialStep: 'profile'),
+    ),
+    GoRoute(
+      path: '/signup/mail',
+      builder: (context, state) => const RegisterAccountTypeScreen(initialStep: 'mail'),
+    ),
+    GoRoute(
+      path: '/signup/mobile-verify',
+      builder: (context, state) => const RegisterAccountTypeScreen(initialStep: 'mobile-verify'),
+    ),
+    GoRoute(
+      path: '/signup/password',
+      builder: (context, state) => const RegisterAccountTypeScreen(initialStep: 'password'),
+    ),
+    GoRoute(
+      path: '/signup/child',
+      builder: (context, state) => const RegisterAccountTypeScreen(initialStep: 'child'),
+    ),
+    GoRoute(
+      path: '/signup/child-details',
+      builder: (context, state) => const RegisterAccountTypeScreen(initialStep: 'child-details'),
+    ),
+    GoRoute(
+      path: '/signup/child-parent-email',
+      builder: (context, state) => const RegisterAccountTypeScreen(initialStep: 'child-parent-email'),
+    ),
+    GoRoute(
+      path: '/signup/child-parent-otp',
+      builder: (context, state) => const RegisterAccountTypeScreen(initialStep: 'child-parent-otp'),
+    ),
+    GoRoute(
+      path: '/signup/child-mail',
+      builder: (context, state) => const RegisterAccountTypeScreen(initialStep: 'child-mail'),
+    ),
+    GoRoute(
+      path: '/signup/child-password',
+      builder: (context, state) => const RegisterAccountTypeScreen(initialStep: 'child-password'),
+    ),
+    GoRoute(
       path: '/manage-account',
       pageBuilder: (context, state) {
         if (defaultTargetPlatform == TargetPlatform.macOS) {
