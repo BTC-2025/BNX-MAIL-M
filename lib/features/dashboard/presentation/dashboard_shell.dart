@@ -185,11 +185,11 @@ class DashboardShell extends ConsumerWidget {
                             },
                             isDark: isDark,
                           ),
-                          // Chat Tab
+                          // Casbox Tab
                           _buildCustomBottomTab(
                             isSelected: selectedIndex == 1,
                             icon: Icons.chat_bubble_rounded,
-                            label: 'Chat',
+                            label: 'Casbox',
                             onTap: () {
                               context.go('/colab');
                               ref
@@ -615,7 +615,7 @@ class DashboardShell extends ConsumerWidget {
                     ),
                   ),
                 ),
-                // Chat tab
+                // Casbox tab
                 InkWell(
                   onTap: () {
                     if (!isColab) {
@@ -634,7 +634,7 @@ class DashboardShell extends ConsumerWidget {
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Text(
-                      'Chat',
+                      'Casbox',
                       style: TextStyle(
                         color: isColab ? const Color(0xFF195BAC) : Colors.white,
                         fontWeight: isColab ? FontWeight.bold : FontWeight.w500,

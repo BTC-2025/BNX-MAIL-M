@@ -237,7 +237,7 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        'Chat',
+                                        'Casbox',
                                         style: TextStyle(
                                           fontSize: 20,
                                           fontWeight: FontWeight.bold,
