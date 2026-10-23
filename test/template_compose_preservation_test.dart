@@ -68,6 +68,23 @@ void main() {
       expect(state.composeBody, 'Please see the attached document for review.');
     });
 
+    test('BNXTemplate copyWith updates fields correctly', () {
+      final original = BNXTemplate.defaultTemplates.first;
+      final modified = original.copyWith(
+        title: 'Updated Meeting',
+        subject: 'Updated Subject',
+        body: 'Updated Body',
+        category: 'Personal',
+      );
+
+      expect(modified.id, original.id);
+      expect(modified.title, 'Updated Meeting');
+      expect(modified.subject, 'Updated Subject');
+      expect(modified.body, 'Updated Body');
+      expect(modified.category, 'Personal');
+      expect(modified.type, original.type);
+    });
+
     testWidgets('Template selection callback returns template details without modifying recipient', (tester) async {
       BNXTemplate? selected;
       final templateToApply = BNXTemplate.defaultTemplates.first;
