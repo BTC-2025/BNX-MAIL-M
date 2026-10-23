@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../data/account_provider.dart';
 import '../../data/app_state_provider.dart';
-import '../../data/email_provider.dart';
 import '../../data/colab_provider.dart';
+import '../../data/email_provider.dart';
+import '../../data/repositories/template_repository.dart';
+import '../../features/inbox/presentation/templates_view.dart';
 import '../../models/attachment_model.dart';
 import '../theme/colors.dart';
 import 'package:file_picker/file_picker.dart';
@@ -317,13 +320,16 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
     super.dispose();
   }
 
-  void _save() => ref
-      .read(appUiProvider.notifier)
-      .updateComposeDraft(
-        to: _toCtrl.text,
-        subject: _subCtrl.text,
-        body: _bodyCtrl.text,
-      );
+  void _save() {
+    final isCasbox = _tab.index == 1;
+    ref.read(appUiProvider.notifier).updateComposeDraft(
+          to: isCasbox
+              ? (_cbToCtrl.text.isNotEmpty ? _cbToCtrl.text : null)
+              : (_toCtrl.text.isNotEmpty ? _toCtrl.text : null),
+          subject: isCasbox ? _cbSubCtrl.text : _subCtrl.text,
+          body: isCasbox ? _cbBodyCtrl.text : _bodyCtrl.text,
+        );
+  }
 
   void _dismiss({String? msg}) {
     _emailFiles.clear();
@@ -437,7 +443,12 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
           _subCtrl.text = ui.composeSubject;
         }
         if (_bodyCtrl.text != ui.composeBody) _bodyCtrl.text = ui.composeBody;
-        if (_toCtrl.text != ui.composeTo) _toCtrl.text = ui.composeTo;
+        if (ui.composeTo.isNotEmpty && _toCtrl.text != ui.composeTo) {
+          _toCtrl.text = ui.composeTo;
+        }
+        if (ui.composeTo.isNotEmpty && _cbToCtrl.text != ui.composeTo) {
+          _cbToCtrl.text = ui.composeTo;
+        }
       }
     });
 
@@ -744,6 +755,8 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
           ctrl: _cbToCtrl,
           hint: 'Casbox Contact Email',
           isDark: isDark,
+          onChanged: (v) =>
+              ref.read(appUiProvider.notifier).updateComposeDraft(to: v),
         ),
         Divider(height: 1, color: div),
         _subjectRowFor(_cbSubCtrl, isDark),
@@ -1214,6 +1227,8 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
             isDark: isDark,
           ),
           const SizedBox(width: 4),
+          _labeledMoreMenu(isDark),
+          const SizedBox(width: 4),
           _labeledIconBtn(
             icon: Icons.delete_outline_rounded,
             label: 'Discard',
@@ -1442,15 +1457,7 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       onSelected: (v) {
         if (v == 'signature') _showSigDialog();
-        if (v == 'templates') {
-          ref.read(appUiProvider.notifier).selectFolder('Templates');
-          _save();
-          ref
-              .read(appUiProvider.notifier)
-              .setComposeStatus(ComposeStatus.minimized);
-          final r = GoRouterState.of(context).uri.toString();
-          if (r != '/home') GoRouter.of(context).go('/home');
-        }
+        if (v == 'templates') _showTemplatesDialog(isDark);
       },
       itemBuilder: (_) => const [
         PopupMenuItem(
@@ -1671,6 +1678,51 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
             child: const Text('Insert'),
           ),
         ],
+      ),
+    );
+  }
+
+  void _applyTemplate(BNXTemplate template) {
+    final bool isCasbox = _tab.index == 1;
+    if (isCasbox) {
+      _cbSubCtrl.text = template.subject;
+      _cbBodyCtrl.text = template.body;
+      ref.read(appUiProvider.notifier).updateComposeDraft(
+            to: _cbToCtrl.text.isNotEmpty ? _cbToCtrl.text : null,
+            subject: template.subject,
+            body: template.body,
+          );
+    } else {
+      _subCtrl.text = template.subject;
+      _bodyCtrl.formats.clear();
+      _bodyCtrl.text = template.body;
+      ref.read(appUiProvider.notifier).updateComposeDraft(
+            to: _toCtrl.text.isNotEmpty ? _toCtrl.text : null,
+            subject: template.subject,
+            body: template.body,
+          );
+    }
+    _snack('Applied "${template.title}" template.');
+  }
+
+  void _openTemplatesFolder() {
+    _save();
+    ref.read(appUiProvider.notifier).selectFolder('Templates');
+    ref
+        .read(appUiProvider.notifier)
+        .setComposeStatus(ComposeStatus.minimized);
+    final r = GoRouterState.of(context).uri.toString();
+    if (r != '/home') GoRouter.of(context).go('/home');
+    _snack('Compose minimized. Opening Templates folder.');
+  }
+
+  void _showTemplatesDialog(bool isDark) {
+    showDialog(
+      context: context,
+      builder: (_) => _TemplatesPickerDialog(
+        isDark: isDark,
+        onSelectTemplate: _applyTemplate,
+        onManageTemplates: _openTemplatesFolder,
       ),
     );
   }
@@ -2155,6 +2207,469 @@ class _ScheduleSendDialogState extends State<_ScheduleSendDialog> {
                 fontSize: 12,
                 color: isDark ? Colors.white38 : Colors.grey.shade500,
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TemplatesPickerDialog extends ConsumerStatefulWidget {
+  final bool isDark;
+  final ValueChanged<BNXTemplate> onSelectTemplate;
+  final VoidCallback onManageTemplates;
+
+  const _TemplatesPickerDialog({
+    required this.isDark,
+    required this.onSelectTemplate,
+    required this.onManageTemplates,
+  });
+
+  @override
+  ConsumerState<_TemplatesPickerDialog> createState() =>
+      _TemplatesPickerDialogState();
+}
+
+class _TemplatesPickerDialogState extends ConsumerState<_TemplatesPickerDialog> {
+  String _selectedCategory = 'All';
+  String _searchQuery = '';
+  List<BNXTemplate> _customTemplates = [];
+  final _searchCtrl = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchCustomTemplates();
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _fetchCustomTemplates() async {
+    try {
+      final email = ref.read(activeAccountProvider).email;
+      final fetched = await TemplateRepository.getTemplates(email);
+      if (mounted) {
+        setState(() {
+          _customTemplates = fetched
+              .map(
+                (t) => BNXTemplate(
+                  id: t.id,
+                  title: t.title,
+                  category: t.category,
+                  type: 'CUSTOM',
+                  subject: t.subject,
+                  body: t.body,
+                ),
+              )
+              .toList();
+        });
+      }
+    } catch (e) {
+      debugPrint('Templates load error: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = widget.isDark;
+    final allTemplates = [
+      ...BNXTemplate.defaultTemplates,
+      ..._customTemplates,
+    ];
+
+    final categories = <String>['All', 'Business', 'Out of Office', 'Personal', 'General'];
+    for (final t in allTemplates) {
+      if (!categories.contains(t.category) && t.category.isNotEmpty) {
+        categories.add(t.category);
+      }
+    }
+
+    final query = _searchQuery.trim().toLowerCase();
+    final filtered = allTemplates.where((t) {
+      final matchesCategory = _selectedCategory == 'All' ||
+          t.category.toLowerCase() == _selectedCategory.toLowerCase();
+      final matchesQuery = query.isEmpty ||
+          t.title.toLowerCase().contains(query) ||
+          t.subject.toLowerCase().contains(query) ||
+          t.body.toLowerCase().contains(query) ||
+          t.category.toLowerCase().contains(query);
+      return matchesCategory && matchesQuery;
+    }).toList();
+
+    final size = MediaQuery.of(context).size;
+    final isMobile = size.width < 600;
+    final bg = isDark ? const Color(0xFF131D31) : Colors.white;
+    final borderClr = isDark ? Colors.white12 : Colors.grey.shade200;
+
+    return Dialog(
+      backgroundColor: bg,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 12 : 32,
+        vertical: isMobile ? 24 : 32,
+      ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 620,
+          maxHeight: isMobile ? size.height * 0.88 : 680,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // ── Top header bar ──
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 12, 12),
+              child: Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF195BAC).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.content_paste_rounded,
+                      color: Color(0xFF195BAC),
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Email Templates',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.white : const Color(0xFF0F172A),
+                          ),
+                        ),
+                        Text(
+                          'Insert pre-written subject and message into your draft',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark ? Colors.white54 : Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      widget.onManageTemplates();
+                    },
+                    icon: const Icon(Icons.open_in_new_rounded, size: 14),
+                    label: const Text('Manage', style: TextStyle(fontSize: 12)),
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF195BAC),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: Icon(
+                      Icons.close_rounded,
+                      size: 20,
+                      color: isDark ? Colors.white60 : Colors.grey.shade600,
+                    ),
+                    tooltip: 'Close',
+                  ),
+                ],
+              ),
+            ),
+            Divider(height: 1, color: borderClr),
+
+            // ── Search field ──
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+              child: TextField(
+                controller: _searchCtrl,
+                onChanged: (v) => setState(() => _searchQuery = v),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Search templates by title, subject or content...',
+                  hintStyle: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? Colors.white38 : Colors.grey.shade500,
+                  ),
+                  prefixIcon: Icon(
+                    Icons.search_rounded,
+                    size: 18,
+                    color: isDark ? Colors.white54 : Colors.grey.shade500,
+                  ),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear_rounded, size: 16),
+                          onPressed: () {
+                            _searchCtrl.clear();
+                            setState(() => _searchQuery = '');
+                          },
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: isDark ? const Color(0xFF1B273F) : const Color(0xFFF1F5F9),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+            ),
+
+            // ── Category chips ──
+            SizedBox(
+              height: 36,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                itemCount: categories.length,
+                separatorBuilder: (context, index) => const SizedBox(width: 8),
+                itemBuilder: (context, idx) {
+                  final cat = categories[idx];
+                  final isSelected = _selectedCategory == cat;
+                  return ChoiceChip(
+                    label: Text(
+                      cat,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        color: isSelected
+                            ? Colors.white
+                            : (isDark ? Colors.white70 : Colors.black87),
+                      ),
+                    ),
+                    selected: isSelected,
+                    onSelected: (_) => setState(() => _selectedCategory = cat),
+                    selectedColor: const Color(0xFF195BAC),
+                    backgroundColor: isDark
+                        ? const Color(0xFF1E293B)
+                        : const Color(0xFFF1F5F9),
+                    side: BorderSide(
+                      color: isSelected
+                          ? const Color(0xFF195BAC)
+                          : (isDark ? Colors.white10 : Colors.grey.shade300),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 8),
+            Divider(height: 1, color: borderClr),
+
+            // ── Template list / Empty state ──
+            Expanded(
+              child: filtered.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.search_off_rounded,
+                            size: 40,
+                            color: isDark ? Colors.white24 : Colors.grey.shade400,
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            'No templates found',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? Colors.white70 : Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Try a different search or category filter',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark ? Colors.white38 : Colors.grey.shade500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.separated(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: filtered.length,
+                      separatorBuilder: (context, index) => const SizedBox(height: 12),
+                      itemBuilder: (context, idx) {
+                        final t = filtered[idx];
+                        final isDefault = t.type == 'DEFAULT';
+                        return Material(
+                          color: isDark
+                              ? const Color(0xFF1A2436)
+                              : const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(12),
+                          child: InkWell(
+                            onTap: () {
+                              Navigator.pop(context);
+                              widget.onSelectTemplate(t);
+                            },
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: isDark
+                                      ? Colors.white.withValues(alpha: 0.08)
+                                      : Colors.grey.shade200,
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: isDefault
+                                              ? (isDark
+                                                  ? Colors.blue.withValues(alpha: 0.2)
+                                                  : Colors.blue.shade50)
+                                              : (isDark
+                                                  ? Colors.purple.withValues(alpha: 0.2)
+                                                  : Colors.purple.shade50),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          isDefault ? 'SYSTEM' : 'CUSTOM',
+                                          style: TextStyle(
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.bold,
+                                            color: isDefault
+                                                ? Colors.blue.shade400
+                                                : Colors.purple.shade300,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: isDark
+                                              ? Colors.white10
+                                              : Colors.grey.shade200,
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          t.category,
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w500,
+                                            color: isDark
+                                                ? Colors.white70
+                                                : Colors.grey.shade800,
+                                          ),
+                                        ),
+                                      ),
+                                      const Spacer(),
+                                      FilledButton.tonalIcon(
+                                        style: FilledButton.styleFrom(
+                                          visualDensity: VisualDensity.compact,
+                                          backgroundColor: const Color(0xFF195BAC)
+                                              .withValues(alpha: isDark ? 0.25 : 0.1),
+                                          foregroundColor: const Color(0xFF195BAC),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 4,
+                                          ),
+                                        ),
+                                        onPressed: () {
+                                          Navigator.pop(context);
+                                          widget.onSelectTemplate(t);
+                                        },
+                                        icon: const Icon(Icons.check_rounded, size: 14),
+                                        label: const Text(
+                                          'Use',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    t.title,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                    ),
+                                  ),
+                                  if (t.subject.isNotEmpty) ...[
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          Icons.subject_rounded,
+                                          size: 14,
+                                          color: isDark
+                                              ? Colors.white54
+                                              : Colors.grey.shade600,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Expanded(
+                                          child: Text(
+                                            t.subject,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                              color: isDark
+                                                  ? Colors.white70
+                                                  : Colors.grey.shade800,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    t.body,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: isDark
+                                          ? Colors.white54
+                                          : Colors.grey.shade600,
+                                      height: 1.3,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
             ),
           ],
         ),

@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -23,22 +25,8 @@ class BNXTemplate {
     required this.subject,
     required this.body,
   });
-}
 
-class TemplatesView extends ConsumerStatefulWidget {
-  const TemplatesView({super.key});
-
-  @override
-  ConsumerState<TemplatesView> createState() => _TemplatesViewState();
-}
-
-class _TemplatesViewState extends ConsumerState<TemplatesView> {
-  String _activeTab = 'All'; // 'All', 'Default', 'Custom'
-  String _searchQuery = '';
-  bool _isLoading = false;
-  final List<BNXTemplate> _customTemplates = [];
-
-  final List<BNXTemplate> _defaultTemplates = const [
+  static const List<BNXTemplate> defaultTemplates = [
     BNXTemplate(
       id: 'def_1',
       title: 'Meeting Request',
@@ -85,6 +73,22 @@ class _TemplatesViewState extends ConsumerState<TemplatesView> {
           'Hi [Name],\n\nCould you please take a look at the draft of the project and share your feedback by [Date]? I want to ensure we align before final submission.\n\nThanks,\n[Your Name]',
     ),
   ];
+}
+
+class TemplatesView extends ConsumerStatefulWidget {
+  const TemplatesView({super.key});
+
+  @override
+  ConsumerState<TemplatesView> createState() => _TemplatesViewState();
+}
+
+class _TemplatesViewState extends ConsumerState<TemplatesView> {
+  String _activeTab = 'All'; // 'All', 'Default', 'Custom'
+  String _searchQuery = '';
+  bool _isLoading = false;
+  final List<BNXTemplate> _customTemplates = [];
+
+  final List<BNXTemplate> _defaultTemplates = BNXTemplate.defaultTemplates;
 
   @override
   void initState() {
@@ -493,21 +497,35 @@ class _TemplatesViewState extends ConsumerState<TemplatesView> {
           // Bottom button
           NeumorphicButton(
             onPressed: () {
-              ref.read(appUiProvider.notifier).clearComposeDraft();
+              final currentDraft = ref.read(appUiProvider);
+              final existingTo = currentDraft.composeTo;
               ref
                   .read(appUiProvider.notifier)
                   .updateComposeDraft(
+                    to: existingTo.isNotEmpty ? existingTo : null,
                     subject: template.subject,
                     body: template.body,
                   );
 
-              // Navigate directly to full page compose screen
-              context.push('/compose');
+              ref
+                  .read(appUiProvider.notifier)
+                  .setComposeStatus(ComposeStatus.normal);
+
+              if (ref.read(appUiProvider).activeFolder == 'Templates') {
+                ref.read(appUiProvider.notifier).selectFolder('All');
+              }
+
+              if (kIsWeb || !Platform.isMacOS) {
+                context.push('/compose');
+              } else {
+                final r = GoRouterState.of(context).uri.toString();
+                if (r != '/home') GoRouter.of(context).go('/home');
+              }
 
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(
-                    'Starting new mail with "${template.title}" template.',
+                    'Applied "${template.title}" template.',
                   ),
                 ),
               );
