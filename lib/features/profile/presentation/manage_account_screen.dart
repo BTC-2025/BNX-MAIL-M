@@ -902,9 +902,21 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
                     const SizedBox(height: 20),
                     TextField(
                       controller: nameCtrl,
+                      maxLength: 15,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9]')),
+                        LengthLimitingTextInputFormatter(15),
+                        TextInputFormatter.withFunction(
+                          (oldValue, newValue) => newValue.copyWith(
+                            text: newValue.text.toLowerCase(),
+                            selection: newValue.selection,
+                          ),
+                        ),
+                      ],
                       decoration: InputDecoration(
                         labelText: 'Mailbox Name / Prefix',
-                        hintText: 'e.g. support or ashwin_work',
+                        hintText: '6-15 characters (e.g. support)',
+                        helperText: '6–15 characters (letters & numbers only)',
                         suffixText: '@bnxmail.com',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
@@ -944,12 +956,30 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
                           onPressed: isSubmitting
                               ? null
                               : () async {
-                                  final name = nameCtrl.text.trim();
+                                  final name = nameCtrl.text.trim().toLowerCase();
                                   final pass = passCtrl.text.trim();
                                   if (name.isEmpty || pass.isEmpty) {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       const SnackBar(
                                         content: Text('Please fill all fields'),
+                                        behavior: SnackBarBehavior.floating,
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  if (name.length < 6 || name.length > 15) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Mailbox name must be 6 to 15 characters'),
+                                        behavior: SnackBarBehavior.floating,
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  if (!RegExp(r'^[a-z][a-z0-9]*$').hasMatch(name)) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Mailbox name must start with a letter and contain only letters and numbers'),
                                         behavior: SnackBarBehavior.floating,
                                       ),
                                     );
@@ -978,10 +1008,16 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
                                   } catch (e) {
                                     setDialogState(() => isSubmitting = false);
                                     if (mounted) {
+                                      final raw = e.toString().replaceAll('Exception: ', '');
+                                      final clean = raw.toLowerCase().contains('truncation') || raw.toLowerCase().contains('too long')
+                                          ? 'Mailbox name cannot exceed 15 characters'
+                                          : (raw.toLowerCase().contains('statement') || raw.toLowerCase().contains('sql')
+                                              ? 'Invalid mailbox name. Please choose another prefix.'
+                                              : raw);
                                       messenger.showSnackBar(
                                         SnackBar(
                                           content:
-                                              Text('Failed to create mailbox: $e'),
+                                              Text('Failed to create mailbox: $clean'),
                                           backgroundColor: Colors.redAccent,
                                           behavior: SnackBarBehavior.floating,
                                         ),
@@ -5814,11 +5850,18 @@ class _CreateSubIdDialogState extends State<_CreateSubIdDialog> {
                     height: 42,
                     child: TextField(
                       controller: _firstNameController,
+                      maxLength: 30,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z\s\.\'\-]")),
+                        LengthLimitingTextInputFormatter(30),
+                      ],
+                      textCapitalization: TextCapitalization.words,
                       style: TextStyle(
                         fontSize: 13,
                         color: isDark ? Colors.white : const Color(0xFF1E2124),
                       ),
                       decoration: InputDecoration(
+                        counterText: '',
                         filled: true,
                         fillColor: isDark ? const Color(0xFF1B1E22) : Colors.white,
                         isDense: true,
@@ -5852,11 +5895,18 @@ class _CreateSubIdDialogState extends State<_CreateSubIdDialog> {
                     height: 42,
                     child: TextField(
                       controller: _lastNameController,
+                      maxLength: 30,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r"[a-zA-Z\s\.\'\-]")),
+                        LengthLimitingTextInputFormatter(30),
+                      ],
+                      textCapitalization: TextCapitalization.words,
                       style: TextStyle(
                         fontSize: 13,
                         color: isDark ? Colors.white : const Color(0xFF1E2124),
                       ),
                       decoration: InputDecoration(
+                        counterText: '',
                         filled: true,
                         fillColor: isDark ? const Color(0xFF1B1E22) : Colors.white,
                         isDense: true,
