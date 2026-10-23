@@ -1699,14 +1699,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        '$usedStr used of $limitStr ($pctStr)',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: isDark ? Colors.white : const Color(0xFF1E293B),
+                      Expanded(
+                        child: Text(
+                          '$usedStr used of $limitStr ($pctStr)',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: isDark ? Colors.white : const Color(0xFF1E293B),
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                      const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
@@ -1782,13 +1786,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     required Widget child,
     required bool isDark,
   }) {
+    final isMobile = defaultTargetPlatform != TargetPlatform.macOS &&
+        (MediaQuery.of(context).size.width < 600 ||
+            defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS);
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(22),
+      margin: EdgeInsets.only(bottom: isMobile ? 12 : 16),
+      padding: EdgeInsets.all(isMobile ? 14 : 22),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E293B) : Colors.white,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(isMobile ? 16 : 22),
         border: Border.all(
           color: isDark ? Colors.white10 : const Color(0xFFE5E7EB),
           width: 1,
@@ -1803,6 +1811,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ),
       child: child,
     );
+  }
+
+  String _formatActivityTimestamp(String timestamp) {
+    if (timestamp.isEmpty) return '';
+    try {
+      final dt = DateTime.tryParse(timestamp);
+      if (dt == null) return timestamp;
+      final local = dt.toLocal();
+      const months = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ];
+      final month = months[local.month - 1];
+      final day = local.day;
+      final year = local.year;
+      final hour = local.hour.toString().padLeft(2, '0');
+      final minute = local.minute.toString().padLeft(2, '0');
+      return '$month $day, $year $hour:$minute';
+    } catch (_) {
+      return timestamp;
+    }
   }
 
   // ── Account Info Metric Tile Helper ───────────────────────────────────────
@@ -5718,16 +5747,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
+              LayoutBuilder(
+                builder: (context, headerConstraints) {
+                  final isMobile = defaultTargetPlatform != TargetPlatform.macOS &&
+                      (headerConstraints.maxWidth < 550 ||
+                          defaultTargetPlatform == TargetPlatform.android ||
+                          defaultTargetPlatform == TargetPlatform.iOS);
+                  final textBlock = Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         'Custom Labels',
                         style: TextStyle(
-                          fontSize: 20,
+                          fontSize: isMobile ? 18 : 20,
                           fontWeight: FontWeight.w800,
                           color: isDark ? Colors.white : const Color(0xFF1E293B),
                           letterSpacing: -0.3,
@@ -5742,8 +5774,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         ),
                       ),
                     ],
-                  ),
-                  ElevatedButton.icon(
+                  );
+
+                  final newLabelBtn = ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF155EEF),
                       foregroundColor: Colors.white,
@@ -5764,8 +5797,28 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     onPressed: () {
                       CreateLabelDialog.show(context);
                     },
-                  ),
-                ],
+                  );
+
+                  if (isMobile) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        textBlock,
+                        const SizedBox(height: 12),
+                        newLabelBtn,
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(child: textBlock),
+                      const SizedBox(width: 16),
+                      newLabelBtn,
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 12),
               Divider(
@@ -6007,21 +6060,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
               ),
               const SizedBox(height: 14),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Review and manage currently authenticated sessions and devices.',
-                      style: TextStyle(
-                        fontSize: 13.5,
-                        color: isDark ? Colors.white60 : const Color(0xFF64748B),
-                      ),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final isMobile = defaultTargetPlatform != TargetPlatform.macOS &&
+                      (constraints.maxWidth < 550 ||
+                          defaultTargetPlatform == TargetPlatform.android ||
+                          defaultTargetPlatform == TargetPlatform.iOS);
+                  final descText = Text(
+                    'Review and manage currently authenticated sessions and devices.',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      color: isDark ? Colors.white60 : const Color(0xFF64748B),
                     ),
-                  ),
-                  if (_activeDeviceSessions.any((s) => s['currentSession'] != 'true'))
-                    TextButton.icon(
+                  );
+
+                  Widget? signOutBtn;
+                  if (_activeDeviceSessions.any((s) => s['currentSession'] != 'true')) {
+                    signOutBtn = TextButton.icon(
                       style: TextButton.styleFrom(
                         foregroundColor: const Color(0xFFEF4444),
                         padding: const EdgeInsets.symmetric(
@@ -6054,8 +6109,31 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         }
                         _showSnackBar('Signed out of all other sessions.');
                       },
-                    ),
-                ],
+                    );
+                  }
+
+                  if (isMobile) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        descText,
+                        if (signOutBtn != null) ...[
+                          const SizedBox(height: 8),
+                          signOutBtn,
+                        ],
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(child: descText),
+                      ?signOutBtn,
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 22),
 
@@ -6145,10 +6223,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           width: isCurrent ? 1.5 : 1.2,
                         ),
                       ),
-                      child: Row(
-                        children: [
-                          // Device Icon Container
-                          Container(
+                      child: LayoutBuilder(
+                        builder: (context, cardConstraints) {
+                          final isMobile = defaultTargetPlatform != TargetPlatform.macOS &&
+                              (cardConstraints.maxWidth < 480 ||
+                                  defaultTargetPlatform == TargetPlatform.android ||
+                                  defaultTargetPlatform == TargetPlatform.iOS);
+
+                          final iconWidget = Container(
                             width: 46,
                             height: 46,
                             decoration: BoxDecoration(
@@ -6167,156 +6249,178 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                   ? const Color(0xFF10B981)
                                   : const Color(0xFF155EEF),
                             ),
-                          ),
-                          const SizedBox(width: 16),
+                          );
 
-                          // Info Column
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Flexible(
-                                      child: Text(
-                                        title,
+                          final infoWidget = Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Wrap(
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                spacing: 8,
+                                runSpacing: 4,
+                                children: [
+                                  Text(
+                                    title,
+                                    style: TextStyle(
+                                      fontSize: 14.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: isDark
+                                          ? Colors.white
+                                          : const Color(0xFF1E293B),
+                                    ),
+                                  ),
+                                  if (isCurrent)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF10B981)
+                                            .withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: const Text(
+                                        'This Device',
                                         style: TextStyle(
-                                          fontSize: 14.5,
+                                          fontSize: 11,
                                           fontWeight: FontWeight.w700,
-                                          color: isDark
-                                              ? Colors.white
-                                              : const Color(0xFF1E293B),
+                                          color: Color(0xFF10B981),
                                         ),
-                                        overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
-                                    if (isCurrent) ...[
-                                      const SizedBox(width: 8),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                sess['ip'] ?? 'Web Browser',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: isDark
+                                      ? Colors.white70
+                                      : const Color(0xFF64748B),
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                sess['lastActive'] ?? '',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isDark
+                                      ? Colors.white38
+                                      : const Color(0xFF94A3B8),
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          );
+
+                          final actionWidget = isCurrent
+                              ? Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 7,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF10B981)
+                                        .withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: const Color(0xFF10B981)
+                                          .withValues(alpha: 0.3),
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
                                       Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 2,
+                                        width: 7,
+                                        height: 7,
+                                        decoration: const BoxDecoration(
+                                          color: Color(0xFF10B981),
+                                          shape: BoxShape.circle,
                                         ),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF10B981)
-                                              .withValues(alpha: 0.15),
-                                          borderRadius: BorderRadius.circular(10),
-                                        ),
-                                        child: const Text(
-                                          'This Device',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w700,
-                                            color: Color(0xFF10B981),
-                                          ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      const Text(
+                                        'Current Session',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: Color(0xFF10B981),
                                         ),
                                       ),
                                     ],
+                                  ),
+                                )
+                              : OutlinedButton(
+                                  style: OutlinedButton.styleFrom(
+                                    side: const BorderSide(
+                                      color: Color(0xFFEF4444),
+                                      width: 1.2,
+                                    ),
+                                    foregroundColor: const Color(0xFFEF4444),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 18,
+                                      vertical: 9,
+                                    ),
+                                  ),
+                                  onPressed: () async {
+                                    final sid = sess['id'] ?? '';
+                                    setState(() => _activeDeviceSessions.remove(sess));
+                                    if (sid.isNotEmpty) {
+                                      try {
+                                        await UserRepository.revokeSession(sid);
+                                      } catch (_) {}
+                                    }
+                                    _showSnackBar('Signed out from session.');
+                                  },
+                                  child: const Text(
+                                    'Sign Out',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                );
+
+                          if (isMobile) {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    iconWidget,
+                                    const SizedBox(width: 14),
+                                    Expanded(child: infoWidget),
                                   ],
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  sess['ip'] ?? 'Web Browser',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                    color: isDark
-                                        ? Colors.white70
-                                        : const Color(0xFF64748B),
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  sess['lastActive'] ?? '',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: isDark
-                                        ? Colors.white38
-                                        : const Color(0xFF94A3B8),
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
+                                const SizedBox(height: 12),
+                                Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: actionWidget,
                                 ),
                               ],
-                            ),
-                          ),
-                          const SizedBox(width: 12),
+                            );
+                          }
 
-                          // Right Action: Current badge or Sign Out Button
-                          if (isCurrent)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 7,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF10B981)
-                                    .withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: const Color(0xFF10B981)
-                                      .withValues(alpha: 0.3),
-                                  width: 1,
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Container(
-                                    width: 7,
-                                    height: 7,
-                                    decoration: const BoxDecoration(
-                                      color: Color(0xFF10B981),
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  const Text(
-                                    'Current Session',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700,
-                                      color: Color(0xFF10B981),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            )
-                          else
-                            OutlinedButton(
-                              style: OutlinedButton.styleFrom(
-                                side: const BorderSide(
-                                  color: Color(0xFFEF4444),
-                                  width: 1.2,
-                                ),
-                                foregroundColor: const Color(0xFFEF4444),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 18,
-                                  vertical: 9,
-                                ),
-                              ),
-                              onPressed: () async {
-                                final sid = sess['id'] ?? '';
-                                setState(() => _activeDeviceSessions.remove(sess));
-                                if (sid.isNotEmpty) {
-                                  try {
-                                    await UserRepository.revokeSession(sid);
-                                  } catch (_) {}
-                                }
-                                _showSnackBar('Signed out from session.');
-                              },
-                              child: const Text(
-                                'Sign Out',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                        ],
+                          return Row(
+                            children: [
+                              iconWidget,
+                              const SizedBox(width: 16),
+                              Expanded(child: infoWidget),
+                              const SizedBox(width: 12),
+                              actionWidget,
+                            ],
+                          );
+                        },
                       ),
                     );
                   },
@@ -6417,10 +6521,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         width: 1.2,
                       ),
                     ),
-                    child: Row(
-                      children: [
-                        // Shield Icon Container
-                        Container(
+                    child: LayoutBuilder(
+                      builder: (context, cardConstraints) {
+                        final isMobile = defaultTargetPlatform != TargetPlatform.macOS &&
+                            (cardConstraints.maxWidth < 480 ||
+                                defaultTargetPlatform == TargetPlatform.android ||
+                                defaultTargetPlatform == TargetPlatform.iOS);
+
+                        final iconWidget = Container(
                           width: 46,
                           height: 46,
                           decoration: BoxDecoration(
@@ -6435,55 +6543,49 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             size: 22,
                             color: Color(0xFF155EEF),
                           ),
-                        ),
-                        const SizedBox(width: 16),
+                        );
 
-                        // Info Column
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                app['name'] ?? 'Authorized App',
-                                style: TextStyle(
-                                  fontSize: 14.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: isDark
-                                      ? Colors.white
-                                      : const Color(0xFF1E293B),
-                                ),
-                                overflow: TextOverflow.ellipsis,
+                        final infoWidget = Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              app['name'] ?? 'Authorized App',
+                              style: TextStyle(
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w700,
+                                color: isDark
+                                    ? Colors.white
+                                    : const Color(0xFF1E293B),
                               ),
-                              const SizedBox(height: 4),
-                              Text(
-                                app['scope'] ?? 'Basic Profile Access',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                  color: isDark
-                                      ? Colors.white70
-                                      : const Color(0xFF64748B),
-                                ),
-                                overflow: TextOverflow.ellipsis,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              app['scope'] ?? 'Basic Profile Access',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: isDark
+                                    ? Colors.white70
+                                    : const Color(0xFF64748B),
                               ),
-                              const SizedBox(height: 4),
-                              Text(
-                                app['date'] ?? '',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: isDark
-                                      ? Colors.white38
-                                      : const Color(0xFF94A3B8),
-                                ),
-                                overflow: TextOverflow.ellipsis,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              app['date'] ?? '',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isDark
+                                    ? Colors.white38
+                                    : const Color(0xFF94A3B8),
                               ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 12),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        );
 
-                        // Revoke Access Button
-                        OutlinedButton(
+                        final revokeBtn = OutlinedButton(
                           style: OutlinedButton.styleFrom(
                             side: const BorderSide(
                               color: Color(0xFFEF4444),
@@ -6511,8 +6613,39 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               fontWeight: FontWeight.w600,
                             ),
                           ),
-                        ),
-                      ],
+                        );
+
+                        if (isMobile) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  iconWidget,
+                                  const SizedBox(width: 14),
+                                  Expanded(child: infoWidget),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: revokeBtn,
+                              ),
+                            ],
+                          );
+                        }
+
+                        return Row(
+                          children: [
+                            iconWidget,
+                            const SizedBox(width: 16),
+                            Expanded(child: infoWidget),
+                            const SizedBox(width: 12),
+                            revokeBtn,
+                          ],
+                        );
+                      },
                     ),
                   ),
                 ),
@@ -6659,9 +6792,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           width: 1.1,
                         ),
                       ),
-                      child: Row(
-                        children: [
-                          Container(
+                      child: LayoutBuilder(
+                        builder: (context, itemConstraints) {
+                          final isMobile = defaultTargetPlatform != TargetPlatform.macOS &&
+                              (itemConstraints.maxWidth < 500 ||
+                                  defaultTargetPlatform == TargetPlatform.android ||
+                                  defaultTargetPlatform == TargetPlatform.iOS);
+                          final displayTime = _formatActivityTimestamp(timestamp);
+
+                          final iconWidget = Container(
                             width: 38,
                             height: 38,
                             decoration: BoxDecoration(
@@ -6674,53 +6813,114 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               size: 19,
                               color: activityColor,
                             ),
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
+                          );
+
+                          if (isMobile) {
+                            return Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  activityName,
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w700,
-                                    color: isDark
-                                        ? Colors.white
-                                        : const Color(0xFF1E293B),
+                                iconWidget,
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        activityName,
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w700,
+                                          color: isDark
+                                              ? Colors.white
+                                              : const Color(0xFF1E293B),
+                                        ),
+                                      ),
+                                      if (ip.isNotEmpty || details.isNotEmpty) ...[
+                                        const SizedBox(height: 3),
+                                        Text(
+                                          [
+                                            if (ip.isNotEmpty) ip,
+                                            if (details.isNotEmpty) details,
+                                          ].join(' • '),
+                                          style: TextStyle(
+                                            fontSize: 12.5,
+                                            color: isDark
+                                                ? Colors.white60
+                                                : const Color(0xFF64748B),
+                                          ),
+                                        ),
+                                      ],
+                                      if (displayTime.isNotEmpty) ...[
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          displayTime,
+                                          style: TextStyle(
+                                            fontSize: 11.5,
+                                            fontWeight: FontWeight.w400,
+                                            color: isDark
+                                                ? Colors.white38
+                                                : const Color(0xFF94A3B8),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
                                   ),
-                                ),
-                                const SizedBox(height: 3),
-                                Text(
-                                  [
-                                    if (ip.isNotEmpty) ip,
-                                    if (details.isNotEmpty) details,
-                                  ].join(' • '),
-                                  style: TextStyle(
-                                    fontSize: 12.5,
-                                    color: isDark
-                                        ? Colors.white60
-                                        : const Color(0xFF64748B),
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ],
-                            ),
-                          ),
-                          if (timestamp.isNotEmpty) ...[
-                            const SizedBox(width: 12),
-                            Text(
-                              timestamp,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w400,
-                                color: isDark
-                                    ? Colors.white38
-                                    : const Color(0xFF94A3B8),
+                            );
+                          }
+
+                          return Row(
+                            children: [
+                              iconWidget,
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      activityName,
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700,
+                                        color: isDark
+                                            ? Colors.white
+                                            : const Color(0xFF1E293B),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      [
+                                        if (ip.isNotEmpty) ip,
+                                        if (details.isNotEmpty) details,
+                                      ].join(' • '),
+                                      style: TextStyle(
+                                        fontSize: 12.5,
+                                        color: isDark
+                                            ? Colors.white60
+                                            : const Color(0xFF64748B),
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
-                          ],
-                        ],
+                              if (displayTime.isNotEmpty) ...[
+                                const SizedBox(width: 12),
+                                Text(
+                                  displayTime,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w400,
+                                    color: isDark
+                                        ? Colors.white38
+                                        : const Color(0xFF94A3B8),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          );
+                        },
                       ),
                     );
                   },

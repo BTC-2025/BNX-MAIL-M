@@ -112,18 +112,20 @@ class _BusinessOnboardingScreenState
     final effectiveEmail = passedEmail.isNotEmpty ? passedEmail : storedEmail;
 
     // Check if this specific business account has ALREADY completed onboarding
-    if (effectiveEmail.isNotEmpty || storedEmail.isNotEmpty || passedEmail.isNotEmpty) {
-      final alreadyOnboarded =
-          (effectiveEmail.isNotEmpty &&
-              await UserRepository.isBusinessAccountOnboarded(effectiveEmail)) ||
-          (passedEmail.isNotEmpty &&
-              await UserRepository.isBusinessAccountOnboarded(passedEmail)) ||
-          (storedEmail.isNotEmpty &&
-              await UserRepository.isBusinessAccountOnboarded(storedEmail));
-      if (alreadyOnboarded && mounted) {
+    if (effectiveEmail.isNotEmpty) {
+      final alreadyLocally = await TokenService.isBusinessOnboardingCompleted(effectiveEmail);
+      if (alreadyLocally && mounted) {
         context.go('/home');
         return;
       }
+      try {
+        final alreadyRemotely = await UserRepository.isBusinessAccountOnboarded(effectiveEmail)
+            .timeout(const Duration(milliseconds: 1200));
+        if (alreadyRemotely && mounted) {
+          context.go('/home');
+          return;
+        }
+      } catch (_) {}
     }
 
     final initialBizType = widget.initialData?['businessType']?.toString();
@@ -456,8 +458,8 @@ class _BusinessOnboardingScreenState
                   ],
                 ),
                 padding: EdgeInsets.symmetric(
-                  horizontal: isDesktop ? 40 : 22,
-                  vertical: isDesktop ? 38 : 28,
+                  horizontal: isDesktop ? 40 : 18,
+                  vertical: isDesktop ? 38 : 24,
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -696,25 +698,28 @@ class _BusinessOnboardingScreenState
               backgroundColor: const Color(0xFF3B82F6),
               foregroundColor: Colors.white,
               elevation: 0,
-              padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 14),
+              padding: EdgeInsets.symmetric(
+                horizontal: isDesktop ? 26 : 18,
+                vertical: 13,
+              ),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
               shadowColor: const Color(0xFF3B82F6).withValues(alpha: 0.3),
             ),
-            child: const Row(
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   'Continue',
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: isDesktop ? 14 : 13,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.2,
                   ),
                 ),
-                SizedBox(width: 6),
-                Icon(Icons.arrow_forward_rounded, size: 16),
+                const SizedBox(width: 6),
+                const Icon(Icons.arrow_forward_rounded, size: 16),
               ],
             ),
           ),
@@ -945,51 +950,64 @@ class _BusinessOnboardingScreenState
               label: const Text(
                 'Back',
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
               ),
               style: TextButton.styleFrom(
                 foregroundColor: const Color(0xFF475569),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
             ),
-            ElevatedButton(
-              onPressed: _isSubmitting ? null : _onCompleteOnboarding,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF4F46E5),
-                foregroundColor: Colors.white,
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+            const SizedBox(width: 8),
+            Flexible(
+              child: ElevatedButton(
+                onPressed: _isSubmitting ? null : _onCompleteOnboarding,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF4F46E5),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isDesktop ? 22 : 14,
+                    vertical: 13,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  shadowColor: const Color(0xFF4F46E5).withValues(alpha: 0.3),
                 ),
-                shadowColor: const Color(0xFF4F46E5).withValues(alpha: 0.3),
-              ),
-              child: _isSubmitting
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    )
-                  : const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'Complete Onboarding',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.2,
-                          ),
+                child: _isSubmitting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                         ),
-                        SizedBox(width: 6),
-                        Icon(Icons.arrow_forward_rounded, size: 16),
-                      ],
-                    ),
+                      )
+                    : Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              'Complete Onboarding',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: isDesktop ? 14 : 13,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.2,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          const Icon(Icons.arrow_forward_rounded, size: 16),
+                        ],
+                      ),
+              ),
             ),
           ],
         ),

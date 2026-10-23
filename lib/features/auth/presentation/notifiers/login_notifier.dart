@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/network/api_exception.dart';
 import '../../../../data/repositories/auth_repository.dart';
+import '../../../../models/user_model.dart';
 
 class LoginState {
   final bool isLoading;
@@ -9,6 +10,7 @@ class LoginState {
   final String? passwordError;
   final String? generalError;
   final bool staySignedIn;
+  final UserModel? user;
 
   LoginState({
     this.isLoading = false,
@@ -16,6 +18,7 @@ class LoginState {
     this.passwordError,
     this.generalError,
     this.staySignedIn = true,
+    this.user,
   });
 
   LoginState copyWith({
@@ -24,6 +27,8 @@ class LoginState {
     String? passwordError,
     String? generalError,
     bool? staySignedIn,
+    UserModel? user,
+    bool clearUser = false,
   }) {
     return LoginState(
       isLoading: isLoading ?? this.isLoading,
@@ -31,6 +36,7 @@ class LoginState {
       passwordError: passwordError,
       generalError: generalError,
       staySignedIn: staySignedIn ?? this.staySignedIn,
+      user: clearUser ? null : (user ?? this.user),
     );
   }
 }
@@ -38,13 +44,15 @@ class LoginState {
 class LoginNotifier extends ValueNotifier<LoginState> {
   LoginNotifier() : super(LoginState());
 
+  UserModel? get authenticatedUser => value.user;
+
   void toggleStaySignedIn(bool? value) {
     this.value = this.value.copyWith(staySignedIn: value ?? false);
   }
 
   Future<bool> signIn(String email, String password) async {
     // Reset state
-    value = value.copyWith(isLoading: true, generalError: null);
+    value = value.copyWith(isLoading: true, generalError: null, clearUser: true);
 
     // Basic Validation
     String? emailErr;
@@ -75,8 +83,8 @@ class LoginNotifier extends ValueNotifier<LoginState> {
 
     try {
       // Connects to live AuthRepository.login
-      await AuthRepository.login(email, password);
-      value = value.copyWith(isLoading: false);
+      final user = await AuthRepository.login(email, password);
+      value = value.copyWith(isLoading: false, user: user);
       return true; // Success
     } on ApiException catch (e) {
       value = value.copyWith(isLoading: false, generalError: e.message);

@@ -12,6 +12,7 @@ import '../../../../data/email_provider.dart';
 import '../../../../data/account_provider.dart';
 import '../../../../data/colab_provider.dart';
 import '../../../../data/app_state_provider.dart';
+import '../../../../core/network/token_service.dart';
 import '../../../../data/repositories/user_repository.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -84,6 +85,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
     if (success && mounted) {
       final newEmail = _emailController.text.trim().toLowerCase();
+      final user = _loginNotifier.authenticatedUser;
+
       // Instantly set logged in state
       ref.read(authProvider.notifier).login();
 
@@ -97,24 +100,52 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       // Load mailboxes in parallel
       ref.read(accountsProvider.notifier).loadMailboxes();
 
-      // CRITICAL: Onboarding applies ONLY to BUSINESS accounts, and ONLY ONCE!
-      // Once details have been entered for this specific business account, never enter again!
-      final profile = await UserRepository.getProfile(email: newEmail);
-      final effectiveEmail = (profile?.email.isNotEmpty == true)
-          ? profile!.email.trim().toLowerCase()
-          : newEmail;
-      final isBusiness =
-          (profile?.accountType?.toUpperCase() == 'BUSINESS');
+      // FAST PATH: Determine if onboarding is required.
+      // Onboarding applies ONLY to BUSINESS accounts, and ONLY ONCE!
+      final rawAccountType = user?.accountType?.toUpperCase();
+      bool isBusiness = false;
+
+      if (rawAccountType != null && rawAccountType.isNotEmpty) {
+        isBusiness = (rawAccountType == 'BUSINESS');
+      } else {
+        // Check local cached settings first before making any network calls
+        final localSettings = await TokenService.getUserSettings(newEmail);
+        final cachedType = localSettings?['accountType']?.toString().toUpperCase() ??
+            localSettings?['mode']?.toString().toUpperCase();
+        if (cachedType != null && cachedType.isNotEmpty) {
+          isBusiness = (cachedType == 'BUSINESS');
+        } else {
+          // Fallback with a short timeout so login never hangs
+          try {
+            final profile = await UserRepository.getProfile(email: newEmail).timeout(
+              const Duration(milliseconds: 1200),
+            );
+            isBusiness = (profile?.accountType?.toUpperCase() == 'BUSINESS');
+          } catch (_) {}
+        }
+      }
 
       if (isBusiness) {
-        final alreadyOnboarded =
-            await UserRepository.isBusinessAccountOnboarded(effectiveEmail) ||
-            await UserRepository.isBusinessAccountOnboarded(newEmail);
+        // Check local store first (instantaneous)
+        bool alreadyOnboarded = await TokenService.isBusinessOnboardingCompleted(newEmail);
+        if (!alreadyOnboarded && newEmail.contains('@')) {
+          alreadyOnboarded = await TokenService.isBusinessOnboardingCompleted(
+            newEmail.split('@').first,
+          );
+        }
+
+        if (!alreadyOnboarded) {
+          // Quick remote fallback with timeout so login never hangs
+          try {
+            alreadyOnboarded = await UserRepository.isBusinessAccountOnboarded(newEmail)
+                .timeout(const Duration(milliseconds: 1500));
+          } catch (_) {}
+        }
 
         if (!alreadyOnboarded && mounted) {
           context.go(
             '/signup/business-onboarding',
-            extra: {'email': effectiveEmail},
+            extra: {'email': newEmail},
           );
           return;
         }

@@ -12,6 +12,7 @@ import 'package:flutter_bnx_mail/data/account_provider.dart';
 import 'package:flutter_bnx_mail/models/account_model.dart';
 import 'package:flutter_bnx_mail/data/colab_provider.dart';
 import 'package:flutter_bnx_mail/models/email_model.dart';
+import 'package:flutter_bnx_mail/features/auth/presentation/pages/business_onboarding_screen.dart';
 
 void main() {
   testWidgets('MacOsStoragePage renders on 360px mobile viewport without overflow errors', (tester) async {
@@ -249,6 +250,52 @@ void main() {
 
       // Check Appearance tab (density pill buttons) rendered with zero overflows
       expect(errors, isEmpty, reason: 'Overflow in SettingsScreen Appearance & Layout tab on mobile');
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+      FlutterError.onError = oldOnError;
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    }
+  });
+
+  testWidgets('SettingsScreen Labels & Sidebar and Active Sessions & Logs render without overflow on 360px mobile', (tester) async {
+    final List<FlutterErrorDetails> errors = [];
+    final oldOnError = FlutterError.onError;
+    FlutterError.onError = (details) {
+      if (details.exceptionAsString().contains('overflowed')) {
+        errors.add(details);
+      }
+    };
+
+    try {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      tester.view.physicalSize = const Size(360, 780);
+      tester.view.devicePixelRatio = 1.0;
+
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: SettingsScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Tap Labels & Sidebar tab
+      final labelsTab = find.text('Labels & Sidebar');
+      if (labelsTab.evaluate().isNotEmpty) {
+        await tester.tap(labelsTab.first);
+        await tester.pumpAndSettle();
+      }
+      expect(errors, isEmpty, reason: 'Overflow in SettingsScreen Labels & Sidebar tab on mobile');
+
+      // Tap Active Sessions & Logs tab
+      final sessionsTab = find.text('Active Sessions & Logs');
+      if (sessionsTab.evaluate().isNotEmpty) {
+        await tester.tap(sessionsTab.first);
+        await tester.pumpAndSettle();
+      }
+      expect(errors, isEmpty, reason: 'Overflow in SettingsScreen Active Sessions & Logs tab on mobile');
     } finally {
       debugDefaultTargetPlatformOverride = null;
       FlutterError.onError = oldOnError;
@@ -545,6 +592,60 @@ void main() {
 
       await tester.pumpWidget(const SizedBox());
       await tester.pump();
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+      FlutterError.onError = oldOnError;
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    }
+  });
+
+  testWidgets('BusinessOnboardingScreen renders Step 1 and Step 2 on 360px mobile viewport without overflow errors', (tester) async {
+    final List<FlutterErrorDetails> errors = [];
+    final oldOnError = FlutterError.onError;
+    FlutterError.onError = (details) {
+      if (details.exceptionAsString().contains('overflowed')) {
+        errors.add(details);
+      }
+    };
+
+    try {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      tester.view.physicalSize = const Size(360, 780);
+      tester.view.devicePixelRatio = 1.0;
+
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: BusinessOnboardingScreen(
+              initialData: {
+                'businessType': 'Sole Proprietorship',
+                'industry': 'Technology',
+                'companySize': '1-10',
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(errors, isEmpty, reason: 'RenderFlex overflow errors occurred on Step 1 of onboarding');
+
+      // Scroll to "Continue" button and tap
+      final continueBtn = find.text('Continue');
+      expect(continueBtn, findsOneWidget);
+      await tester.ensureVisible(continueBtn);
+      await tester.pumpAndSettle();
+      await tester.tap(continueBtn);
+      await tester.pumpAndSettle();
+
+      // Verify we are on Step 2
+      expect(find.text('Step 2: Branding & Preferences'), findsOneWidget);
+      expect(find.text('Complete Onboarding'), findsOneWidget);
+      expect(find.text('Back'), findsOneWidget);
+
+      // Verify no overflow occurred on Step 2 (where 26px overflow previously occurred)
+      expect(errors, isEmpty, reason: 'RenderFlex overflow errors occurred on Step 2 of onboarding');
     } finally {
       debugDefaultTargetPlatformOverride = null;
       FlutterError.onError = oldOnError;
