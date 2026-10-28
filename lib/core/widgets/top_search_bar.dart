@@ -5,6 +5,7 @@ import 'profile_button.dart';
 import '../../data/app_state_provider.dart';
 import '../../data/notification_provider.dart';
 import '../../data/email_provider.dart';
+import '../../data/all_inboxes_provider.dart';
 import 'create_label_dialog.dart';
 import '../../features/inbox/presentation/snooze_scheduler_dialog.dart';
 import '../../models/label_model.dart';
@@ -142,88 +143,11 @@ class TopSearchBar extends ConsumerWidget implements PreferredSizeWidget {
 
                     SizedBox(width: isMobile ? 4 : 8),
 
-                    // Reload icon
-                    (() {
-                      final activeFolder = ref.watch(appUiProvider).activeFolder;
-                      final isRefreshing = ref.watch(emailProvider).isLoading;
-
-                      return isRefreshing
-                          ? const Padding(
-                              padding: EdgeInsets.all(6),
-                              child: SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Color(0xFF195BAC),
-                                ),
-                              ),
-                            )
-                          : IconButton(
-                              icon: const Icon(
-                                Icons.refresh_rounded,
-                                size: 20,
-                              ),
-                              onPressed: () async {
-                                final currentFolder =
-                                    activeFolder.isNotEmpty ? activeFolder : 'Inbox';
-                                final bool isMobileOS = !kIsWeb &&
-                                    (defaultTargetPlatform == TargetPlatform.android ||
-                                        defaultTargetPlatform == TargetPlatform.iOS);
-                                if (!isMobileOS) {
-                                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Row(
-                                        children: [
-                                          const SizedBox(
-                                            width: 16,
-                                            height: 16,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Text(
-                                            'Refreshing $currentFolder...',
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.w600,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      backgroundColor: const Color(0xFF195BAC),
-                                      duration: const Duration(seconds: 2),
-                                      behavior: SnackBarBehavior.floating,
-                                    ),
-                                  );
-                                }
-                                await ref
-                                    .read(emailProvider.notifier)
-                                    .forceRefreshFolder(currentFolder);
-                                if (context.mounted && !isMobileOS) {
-                                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Mailbox refreshed successfully ✓'),
-                                      duration: Duration(seconds: 2),
-                                      backgroundColor: Color(0xFF2E7D32),
-                                      behavior: SnackBarBehavior.floating,
-                                    ),
-                                  );
-                                }
-                              },
-                              tooltip: 'Refresh Mailbox',
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(
-                                minWidth: 32,
-                                minHeight: 32,
-                              ),
-                              color: isDark ? Colors.white70 : Colors.black87,
-                            );
-                    })(),
+                    // Reload icon with smooth spinning animation
+                    _ReloadIconButton(
+                      isDark: isDark,
+                      isMobile: isMobile,
+                    ),
 
                     if (!isMobile) ...[
                       const SizedBox(width: 8),
@@ -692,6 +616,160 @@ class TopSearchBar extends ConsumerWidget implements PreferredSizeWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ReloadIconButton extends ConsumerStatefulWidget {
+  final bool isDark;
+  final bool isMobile;
+
+  const _ReloadIconButton({
+    required this.isDark,
+    required this.isMobile,
+  });
+
+  @override
+  ConsumerState<_ReloadIconButton> createState() => _ReloadIconButtonState();
+}
+
+class _ReloadIconButtonState extends ConsumerState<_ReloadIconButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  bool _isManuallyRefreshing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleRefresh() async {
+    if (_isManuallyRefreshing) return;
+
+    setState(() {
+      _isManuallyRefreshing = true;
+    });
+    _controller.repeat();
+
+    final uiState = ref.read(appUiProvider);
+    final String currentFolder = (uiState.activeFolder == 'Casbox' ||
+            uiState.activeFolder == 'Chat' ||
+            uiState.activeFolder == 'Colab' ||
+            uiState.activeFolder.trim().isEmpty)
+        ? 'Inbox'
+        : uiState.activeFolder;
+
+    final bool isMobileOS = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS);
+
+    if (!isMobileOS) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Refreshing $currentFolder...',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFF195BAC),
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+
+    try {
+      if (currentFolder.toLowerCase() == 'all inboxes') {
+        await Future.wait([
+          ref.read(allInboxesProvider.notifier).loadAllInboxes(),
+          Future.delayed(const Duration(milliseconds: 600)),
+        ]);
+      } else {
+        await Future.wait([
+          ref.read(emailProvider.notifier).forceRefreshFolder(currentFolder),
+          Future.delayed(const Duration(milliseconds: 600)),
+        ]);
+      }
+    } catch (_) {
+      // Ignored
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isManuallyRefreshing = false;
+        });
+        _controller.stop();
+        _controller.reset();
+
+        if (!isMobileOS) {
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Mailbox refreshed successfully ✓'),
+              duration: Duration(seconds: 2),
+              backgroundColor: Color(0xFF2E7D32),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen<EmailState>(emailProvider, (prev, next) {
+      if (next.isLoading && !_controller.isAnimating) {
+        _controller.repeat();
+      } else if (!next.isLoading &&
+          !_isManuallyRefreshing &&
+          _controller.isAnimating) {
+        _controller.stop();
+        _controller.reset();
+      }
+    });
+
+    return RotationTransition(
+      turns: _controller,
+      child: IconButton(
+        icon: const Icon(
+          Icons.refresh_rounded,
+          size: 20,
+        ),
+        onPressed: _isManuallyRefreshing ? () {} : _handleRefresh,
+        tooltip: 'Refresh Mailbox',
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(
+          minWidth: 32,
+          minHeight: 32,
+        ),
+        color: widget.isDark ? Colors.white70 : Colors.black87,
       ),
     );
   }
