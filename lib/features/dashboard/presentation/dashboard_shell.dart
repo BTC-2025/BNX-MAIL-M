@@ -99,6 +99,28 @@ class DashboardShell extends ConsumerWidget {
       selectedIndex = -1;
     }
 
+    // Keep activeFolder strictly synchronized with currentRoute:
+    if ((currentRoute == '/home' || currentRoute == '/') &&
+        (uiState.activeFolder == 'Casbox' ||
+            uiState.activeFolder == 'Chat' ||
+            uiState.activeFolder == 'Colab' ||
+            uiState.activeFolder.trim().isEmpty)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) {
+          ref.read(appUiProvider.notifier).selectFolder('Inbox');
+        }
+      });
+    } else if (currentRoute == '/colab' &&
+        uiState.activeFolder != 'Casbox' &&
+        uiState.activeFolder != 'Chat' &&
+        uiState.activeFolder != 'Colab') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) {
+          ref.read(appUiProvider.notifier).selectFolder('Casbox');
+        }
+      });
+    }
+
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
@@ -359,13 +381,14 @@ class DashboardShell extends ConsumerWidget {
                         bottom: false,
                         child: Column(
                           children: [
-                            // Top App Bar - Hide in Settings, Profile, Manage Account, Colab, or Help
-                            if (currentRoute != '/profile' &&
-                                currentRoute != '/manage-account' &&
-                                uiState.activeFolder != 'Settings' &&
-                                uiState.activeFolder != 'Chat' &&
-                                uiState.activeFolder != 'Casbox' &&
-                                uiState.activeFolder != 'Help')
+                            // Top App Bar - Show on Mail (/home or default), hide only on specialized routes
+                            if (currentRoute == '/home' ||
+                                (currentRoute != '/profile' &&
+                                    currentRoute != '/manage-account' &&
+                                    currentRoute != '/colab' &&
+                                    currentRoute != '/settings' &&
+                                    currentRoute != '/help' &&
+                                    currentRoute != '/compose'))
                               const TopSearchBar(),
 
                             // Main Content Split Area
@@ -586,10 +609,8 @@ class DashboardShell extends ConsumerWidget {
                 // Mail tab
                 InkWell(
                   onTap: () {
-                    if (isColab) {
-                      context.go('/home');
-                      ref.read(appUiProvider.notifier).selectFolder('Inbox');
-                    }
+                    context.go('/home');
+                    ref.read(appUiProvider.notifier).selectFolder('Inbox');
                   },
                   borderRadius: BorderRadius.circular(16),
                   child: Container(
@@ -618,10 +639,8 @@ class DashboardShell extends ConsumerWidget {
                 // Casbox tab
                 InkWell(
                   onTap: () {
-                    if (!isColab) {
-                      context.go('/colab');
-                      ref.read(appUiProvider.notifier).selectFolder('Casbox');
-                    }
+                    context.go('/colab');
+                    ref.read(appUiProvider.notifier).selectFolder('Casbox');
                   },
                   borderRadius: BorderRadius.circular(16),
                   child: Container(

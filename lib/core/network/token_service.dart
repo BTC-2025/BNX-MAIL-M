@@ -572,6 +572,43 @@ class TokenService {
     }
   }
 
+  // ── Casbox Archive / Unarchive Persistence ─────────────────────────────────
+
+  static String _kArchivedCasboxIds(String email) => 'bnx_archived_casbox_ids_${email.trim().toLowerCase()}';
+  static String _kUnarchivedCasboxIds(String email) => 'bnx_unarchived_casbox_ids_${email.trim().toLowerCase()}';
+
+  static Future<void> clearCasboxArchivePersistence() async {
+    final email = await getUserEmail() ?? '';
+    try {
+      await _safeWrite(key: _kArchivedCasboxIds(email), value: '');
+      await _safeWrite(key: _kUnarchivedCasboxIds(email), value: '');
+    } catch (_) {}
+  }
+
+  static Future<Set<String>> getArchivedCasboxIds() async {
+    return {};
+  }
+
+  static Future<void> saveArchivedCasboxId(String id) async {
+    // No-op: archive state is retrieved directly from backend API
+  }
+
+  static Future<void> removeArchivedCasboxId(String id) async {
+    // No-op
+  }
+
+  static Future<Set<String>> getUnarchivedCasboxIds() async {
+    return {};
+  }
+
+  static Future<void> saveUnarchivedCasboxId(String id) async {
+    // No-op: archive state is retrieved directly from backend API
+  }
+
+  static Future<void> removeUnarchivedCasboxId(String id) async {
+    // No-op
+  }
+
   // ── Persistent Label Storage ──────────────────────────────────────────────
 
   static const _kAssignedEmailLabels = 'bnx_assigned_email_labels';

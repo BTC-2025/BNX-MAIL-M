@@ -115,7 +115,14 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        final initialFolder = ref.read(appUiProvider).activeFolder;
+        var initialFolder = ref.read(appUiProvider).activeFolder;
+        if (initialFolder == 'Casbox' ||
+            initialFolder == 'Chat' ||
+            initialFolder == 'Colab' ||
+            initialFolder.trim().isEmpty) {
+          initialFolder = 'Inbox';
+          ref.read(appUiProvider.notifier).selectFolder('Inbox');
+        }
         if (initialFolder != 'Subscriptions' &&
             initialFolder != 'Templates' &&
             initialFolder != 'Storage') {
@@ -183,6 +190,24 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
         (defaultTargetPlatform == TargetPlatform.macOS ||
             defaultTargetPlatform == TargetPlatform.windows);
 
+    // Ensure effectiveFolder on /home is strictly a Mail folder (never Casbox, Chat, Colab, or empty)
+    final String effectiveFolder;
+    if (uiState.activeFolder == 'Casbox' ||
+        uiState.activeFolder == 'Chat' ||
+        uiState.activeFolder == 'Colab' ||
+        uiState.activeFolder.trim().isEmpty) {
+      effectiveFolder = 'Inbox';
+      if (uiState.activeFolder != 'Inbox') {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            ref.read(appUiProvider.notifier).selectFolder('Inbox');
+          }
+        });
+      }
+    } else {
+      effectiveFolder = uiState.activeFolder;
+    }
+
     // Reactively load folder or category only when activeFolder changes
     ref.listen<String>(appUiProvider.select((s) => s.activeFolder), (
       previous,
@@ -202,6 +227,8 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
             ref.read(emailProvider.notifier).fetchCategory(next.toLowerCase());
           } else if (next == 'Subscriptions' || next == 'Templates') {
             // Frontend views do not trigger mailbox folder loads
+          } else if (next == 'Casbox' || next == 'Chat' || next == 'Colab') {
+            // Non-mail sections do not trigger mailbox folder loads
           } else {
             ref.read(emailProvider.notifier).loadFolder(next);
           }
@@ -243,7 +270,7 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
           .toList();
     } else {
       // Filter by folder
-      switch (uiState.activeFolder) {
+      switch (effectiveFolder) {
         case 'Important':
           filtered = emails.where((e) => e.isStarred && !e.isTrash).toList();
           break;
@@ -486,21 +513,59 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
               .toList();
           break;
         default:
-          filtered = emails;
+          // Default to Primary Inbox filtering: exclude draft, trash, archive, scheduled, spam
+          filtered = emails
+              .where(
+                (e) =>
+                    !e.isTrash &&
+                    !e.isDraft &&
+                    !e.isScheduled &&
+                    !e.isArchive &&
+                    !e.isSpam &&
+                    !e.memberOfFolders.contains('Trash') &&
+                    !e.memberOfFolders.contains('Archive') &&
+                    !e.memberOfFolders.contains('Draft') &&
+                    !e.memberOfFolders.contains('Scheduled') &&
+                    !e.memberOfFolders.contains('Spam') &&
+                    _isIncomingOrSelf(e, activeAccount),
+              )
+              .toList();
       }
     }
 
     // Filter out Casbox secure messages from regular email folders (Primary, Starred, Sent, etc.)
-    if (uiState.activeFolder != 'All Mail' &&
-        uiState.activeFolder != 'Trash' &&
-        uiState.activeFolder != 'Starred') {
+    if (effectiveFolder != 'All Mail' &&
+        effectiveFolder != 'Trash' &&
+        effectiveFolder != 'Starred') {
       filtered = filtered
           .where((e) => !e.labels.any((l) => l.toLowerCase() == 'casbox'))
           .toList();
     }
 
+    // In Android and iOS alone: for Inbox, show only emails from the past month
+    final bool isMobileOS = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS);
+    if (isMobileOS &&
+        (effectiveFolder == 'Inbox' || effectiveFolder == 'Primary') &&
+        uiState.activeLabel == null) {
+      final now = DateTime.now();
+      int targetYear = now.year;
+      int targetMonth = now.month - 1;
+      if (targetMonth < 1) {
+        targetMonth = 12;
+        targetYear -= 1;
+      }
+      final daysInTargetMonth = DateTime(targetYear, targetMonth + 1, 0).day;
+      final targetDay =
+          now.day > daysInTargetMonth ? daysInTargetMonth : now.day;
+      final oneMonthAgo = DateTime(targetYear, targetMonth, targetDay, 0, 0, 0);
+
+      filtered = filtered.where((e) => !e.date.isBefore(oneMonthAgo)).toList();
+    }
+
     print(
-      '[STAGE 6: UI FILTERED] ActiveFolder: "${uiState.activeFolder}" | SubTab: $currentTabIndex | Total State Emails: ${emails.length} | Rendered Count: ${filtered.length}',
+      '[STAGE 6: UI FILTERED] ActiveFolder: "$effectiveFolder" | SubTab: $currentTabIndex | Total State Emails: ${emails.length} | Rendered Count: ${filtered.length}',
     );
 
     // 2. FILTER EMAILS BY SEARCH QUERY
@@ -560,7 +625,7 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
     filtered = filtered.where((e) => seenIds.add(e.id)).toList();
 
     // Reset desktop pagination to page 1 if folder, label, search, subtab, or date filter changes
-    final String currentFolder = uiState.activeFolder;
+    final String currentFolder = effectiveFolder;
     final String? currentLabel = uiState.activeLabel;
     final String currentSearch = uiState.searchQuery;
     final EmailDateFilterOption currentDateFilter = dateFilter.option;
@@ -583,7 +648,7 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
     // Desktop pagination: 20 emails per page
     const int pageSize = 20;
     final int serverReported =
-        MailRepository.serverFolderCounts[uiState.activeFolder] ?? 0;
+        MailRepository.serverFolderCounts[effectiveFolder] ?? 0;
     final int totalEmailCount = (serverReported > filtered.length &&
             uiState.searchQuery.isEmpty &&
             uiState.activeLabel == null)
@@ -611,15 +676,15 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
         : filtered;
 
     print(
-      '[UI RENDER DIAGNOSTIC] Active Folder: ${uiState.activeFolder} | SubTab: $currentTabIndex | Total Provider State Emails: ${emails.length} | UI Filtered Rendered Count: ${filtered.length} | Page: $safePage/$totalPages (Showing $startItem-$endItem)',
+      '[UI RENDER DIAGNOSTIC] Active Folder: $effectiveFolder | SubTab: $currentTabIndex | Total Provider State Emails: ${emails.length} | UI Filtered Rendered Count: ${filtered.length} | Page: $safePage/$totalPages (Showing $startItem-$endItem)',
     );
 
     // 4. HANDLE VIEW TOGGLING: DETAIL VIEW vs. LIST VIEW
     final Widget mainBody;
 
-    if (uiState.activeFolder == 'Templates' && uiState.activeLabel == null) {
+    if (effectiveFolder == 'Templates' && uiState.activeLabel == null) {
       mainBody = const TemplatesView();
-    } else if (uiState.activeFolder == 'Subscriptions' &&
+    } else if (effectiveFolder == 'Subscriptions' &&
         uiState.activeLabel == null) {
       mainBody = const SubscriptionsView();
     } else {
@@ -629,8 +694,8 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
           // --- INBOX TAB / ACTION BAR ---
           if (isDesktopOS)
             _buildDesktopEmailHeaderBar(context, ref, uiState, isDark, filtered)
-          else if ((uiState.activeFolder == 'Inbox' ||
-                  uiState.activeFolder == 'Primary') &&
+          else if ((effectiveFolder == 'Inbox' ||
+                  effectiveFolder == 'Primary') &&
               uiState.activeLabel == null &&
               uiState.searchQuery.isEmpty)
             Container(
@@ -689,11 +754,11 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
             child: isDesktopOS
                 ? (filtered.isEmpty
                       ? _buildEmptyState(
-                          (uiState.activeFolder == 'Inbox' ||
-                                      uiState.activeFolder == 'Primary') &&
+                          (effectiveFolder == 'Inbox' ||
+                                      effectiveFolder == 'Primary') &&
                                   uiState.activeLabel == null
                               ? _tabs[currentTabIndex]
-                              : uiState.activeFolder,
+                              : effectiveFolder,
                           isDark,
                         )
                       : ListView.separated(
@@ -721,7 +786,7 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
                                       .toggleEmailSelection(email.id);
                                 } else if (email.isDraft ||
                                     email.memberOfFolders.contains('Draft') ||
-                                    uiState.activeFolder == 'Draft') {
+                                    effectiveFolder == 'Draft') {
                                   if (!email.isRead) {
                                     ref
                                         .read(emailProvider.notifier)
@@ -734,13 +799,13 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
                                   context.push('/draft/${email.id}');
                                 } else {
                                   if (!email.isRead &&
-                                      uiState.activeFolder != 'All Inboxes' &&
-                                      uiState.activeFolder != 'All inboxes') {
+                                      effectiveFolder != 'All Inboxes' &&
+                                      effectiveFolder != 'All inboxes') {
                                     ref
                                         .read(emailProvider.notifier)
                                         .toggleRead(
                                           email.id,
-                                          uiState.activeFolder,
+                                          effectiveFolder,
                                           forceValue: true,
                                         );
                                   }
@@ -754,12 +819,12 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
                     duration: const Duration(milliseconds: 200),
                     child: KeyedSubtree(
                       key: ValueKey(
-                        '${uiState.activeFolder}_${uiState.activeLabel}_$currentTabIndex',
+                        '${effectiveFolder}_${uiState.activeLabel}_$currentTabIndex',
                       ),
                       child: () {
                         final isFolderLoading =
-                            (uiState.activeFolder == 'All Inboxes' ||
-                                uiState.activeFolder == 'All inboxes')
+                            (effectiveFolder == 'All Inboxes' ||
+                                effectiveFolder == 'All inboxes')
                             ? ref.watch(allInboxesProvider).isLoading
                             : ref.watch(emailProvider).isLoading;
 
@@ -769,13 +834,13 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
 
                         if (filtered.isEmpty) {
                           return FadeInWidget(
-                            key: ValueKey('empty_${uiState.activeFolder}_${uiState.activeLabel}'),
+                            key: ValueKey('empty_${effectiveFolder}_${uiState.activeLabel}'),
                             child: _buildEmptyState(
-                              (uiState.activeFolder == 'Inbox' ||
-                                          uiState.activeFolder == 'Primary') &&
+                              (effectiveFolder == 'Inbox' ||
+                                          effectiveFolder == 'Primary') &&
                                       uiState.activeLabel == null
                                   ? _tabs[currentTabIndex]
-                                  : uiState.activeFolder,
+                                  : effectiveFolder,
                               isDark,
                             ),
                           );
@@ -783,8 +848,8 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
 
                         return RefreshIndicator(
                           onRefresh: () async {
-                            if (uiState.activeFolder == 'All Inboxes' ||
-                                uiState.activeFolder == 'All inboxes') {
+                            if (effectiveFolder == 'All Inboxes' ||
+                                effectiveFolder == 'All inboxes') {
                               await ref
                                   .read(allInboxesProvider.notifier)
                                   .loadAllInboxes(forceRefresh: true);
@@ -897,7 +962,7 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
                                                 email.memberOfFolders.contains(
                                                   'Draft',
                                                 ) ||
-                                                uiState.activeFolder ==
+                                                effectiveFolder ==
                                                     'Draft') {
                                               if (!email.isRead) {
                                                 ref
@@ -915,9 +980,9 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
                                               );
                                             } else {
                                               if (!email.isRead &&
-                                                  uiState.activeFolder !=
+                                                  effectiveFolder !=
                                                       'All Inboxes' &&
-                                                  uiState.activeFolder !=
+                                                  effectiveFolder !=
                                                       'All inboxes') {
                                                 ref
                                                     .read(
@@ -925,7 +990,7 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
                                                     )
                                                     .toggleRead(
                                                       email.id,
-                                                      uiState.activeFolder,
+                                                      effectiveFolder,
                                                       forceValue: true,
                                                     );
                                               }
@@ -1129,7 +1194,13 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
             color: isDark ? Colors.white70 : const Color(0xFF475569),
             tooltip: 'Refresh',
             onPressed: () {
-              ref.read(emailProvider.notifier).forceRefreshFolder(uiState.activeFolder);
+              final targetFolder = (uiState.activeFolder == 'Casbox' ||
+                      uiState.activeFolder == 'Chat' ||
+                      uiState.activeFolder == 'Colab' ||
+                      uiState.activeFolder.trim().isEmpty)
+                  ? 'Inbox'
+                  : uiState.activeFolder;
+              ref.read(emailProvider.notifier).forceRefreshFolder(targetFolder);
             },
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),

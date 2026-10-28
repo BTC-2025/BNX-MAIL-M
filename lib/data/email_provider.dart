@@ -88,7 +88,7 @@ class EmailNotifier extends StateNotifier<EmailState> {
       print('[FAST LOAD] Fetching Primary Inbox first...');
       final inboxList = await MailRepository.fetchFolder(
         'Inbox',
-        limit: 50,
+        limit: 1000,
       ).catchError((_) => <EmailModel>[]);
 
       final merged = <String, EmailModel>{};
@@ -155,7 +155,7 @@ class EmailNotifier extends StateNotifier<EmailState> {
           try {
             final list = await MailRepository.fetchFolder(
               folderName,
-              limit: 30,
+              limit: 1000,
             );
             if (list.isNotEmpty) {
               _mergeFolderResults(folderName, list);
@@ -264,7 +264,7 @@ class EmailNotifier extends StateNotifier<EmailState> {
       if (token != null && token.isNotEmpty) {
         print('[FCM TOKEN] Device Token: $token');
       }
-      final fetched = await MailRepository.fetchFolder('Inbox', limit: 50);
+      final fetched = await MailRepository.fetchFolder('Inbox', limit: 1000);
       if (fetched.isEmpty) {
         _isSyncing = false;
         return;
@@ -371,7 +371,7 @@ class EmailNotifier extends StateNotifier<EmailState> {
       state = state.copyWith(isLoading: true, error: null);
     }
     try {
-      final fetched = await MailRepository.fetchFolder(folder, limit: 50);
+      final fetched = await MailRepository.fetchFolder(folder, limit: 1000);
       final merged = <String, EmailModel>{};
       for (final e in state.emails) {
         merged[e.canonicalKey] = e;
@@ -451,7 +451,7 @@ class EmailNotifier extends StateNotifier<EmailState> {
     if (MailRepository.nonMailFolders.contains(folder)) return;
     if (folder == 'Storage') return;
     try {
-      final fetched = await MailRepository.fetchFolder(folder, limit: 50);
+      final fetched = await MailRepository.fetchFolder(folder, limit: 1000);
       final merged = <String, EmailModel>{};
 
       // Keep all existing emails in state to preserve multi-folder tags
@@ -599,7 +599,7 @@ class EmailNotifier extends StateNotifier<EmailState> {
       };
 
       final results = await Future.wait(
-        foldersToRefresh.map((f) => MailRepository.fetchFolder(f, limit: 50)),
+        foldersToRefresh.map((f) => MailRepository.fetchFolder(f, limit: 1000)),
       );
 
       final merged = <String, EmailModel>{};
@@ -1355,7 +1355,7 @@ class EmailNotifier extends StateNotifier<EmailState> {
         try {
           final serverScheduled = await MailRepository.fetchFolder(
             'Scheduled',
-            limit: 50,
+            limit: 1000,
           );
           for (final e in serverScheduled) {
             if (!_dispatchingIds.contains(e.id)) {

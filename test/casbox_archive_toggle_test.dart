@@ -254,25 +254,10 @@ void main() {
         await tester.pumpAndSettle();
       }
 
-      // Check Activity section header
-      expect(find.text('Activity (4)'), findsOneWidget);
-
-      // Verify that all 3 follow-up messages are present
-      final recentFinder = find.text('hello bro wht doing (most recent)');
-      final midFinder = find.text('ok see coming or not (middle)');
-      final oldFinder = find.text('lets test correctly (oldest)');
-
-      expect(recentFinder, findsOneWidget);
-      expect(midFinder, findsOneWidget);
-      expect(oldFinder, findsOneWidget);
-
-      // Verify vertical positions: recent at top, older at bottom
-      final recentY = tester.getTopLeft(recentFinder).dy;
-      final midY = tester.getTopLeft(midFinder).dy;
-      final oldY = tester.getTopLeft(oldFinder).dy;
-
-      expect(recentY, lessThan(midY), reason: 'Most recent message must be positioned higher than middle message');
-      expect(midY, lessThan(oldY), reason: 'Middle message must be positioned higher than oldest message');
+      // Verify that Activity section is completely removed from Casbox messages section
+      expect(find.textContaining('Activity ('), findsNothing);
+      expect(find.text('Reply'), findsOneWidget);
+      expect(find.text('Forward'), findsOneWidget);
     });
   });
 }

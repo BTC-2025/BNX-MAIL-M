@@ -113,7 +113,7 @@ class AllInboxesNotifier extends StateNotifier<AllInboxesState> {
             final list = await MailRepository.fetchFolderWithToken(
               entry.value,
               'Inbox',
-              limit: 50,
+              limit: 1000,
               ownerEmail: entry.key,
             );
             return MapEntry(entry.key, list);

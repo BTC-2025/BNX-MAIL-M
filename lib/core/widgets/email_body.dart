@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -20,7 +20,6 @@ import '../network/api_exception.dart';
 import '../network/token_service.dart';
 import '../theme/colors.dart';
 import '../theme/neumorphic.dart';
-import '../constants/constants.dart';
 
 import 'create_label_dialog.dart';
 import '../../features/ai/presentation/ai_smart_reply_bar.dart';
@@ -1019,7 +1018,7 @@ class EmailBody extends ConsumerWidget {
               Expanded(child: Text('Downloading "${att.fileName}"...')),
             ],
           ),
-          duration: const Duration(seconds: 10),
+          duration: const Duration(seconds: 15),
         ),
       );
 
@@ -1032,10 +1031,19 @@ class EmailBody extends ConsumerWidget {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       if (savedPath != null) {
+        final displayName = savedPath.split(Platform.pathSeparator).last;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: const Color(0xFF16A34A),
-            content: Text('✓ Saved ${att.fileName}\n$savedPath'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('✓ Downloaded $displayName', style: const TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 2),
+                Text(savedPath, style: const TextStyle(fontSize: 11, color: Colors.white70), maxLines: 2, overflow: TextOverflow.ellipsis),
+              ],
+            ),
             duration: const Duration(seconds: 5),
             action: SnackBarAction(
               label: 'OK',
@@ -1048,7 +1056,7 @@ class EmailBody extends ConsumerWidget {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: Colors.red,
-            content: Text('Failed to save ${att.fileName}'),
+            content: Text('Failed to download ${att.fileName}. Please check connection.'),
           ),
         );
       }
@@ -1156,95 +1164,217 @@ class EmailBody extends ConsumerWidget {
     Widget buildAttachments() {
       if (email.attachments.isEmpty) return const SizedBox.shrink();
 
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Divider(height: 32),
-          Text(
-            '${email.attachments.length} Attachment${email.attachments.length > 1 ? 's' : ''}',
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: email.attachments.map((att) {
-              final isImage = att.fileType == 'IMG' ||
-                  att.fileName.toLowerCase().endsWith('.png') ||
-                  att.fileName.toLowerCase().endsWith('.jpg') ||
-                  att.fileName.toLowerCase().endsWith('.jpeg') ||
-                  att.fileName.toLowerCase().endsWith('.webp') ||
-                  att.fileName.toLowerCase().endsWith('.gif');
-              final isPdf = att.fileType == 'PDF' || att.fileName.toLowerCase().endsWith('.pdf');
+      final isMobile = screenWidth < 600;
+      final cardWidth = isMobile
+          ? (screenWidth < 420 ? (screenWidth - 48) / 2 : 180.0)
+          : 210.0;
 
-              final badgeColor = isImage
-                  ? Colors.blue.withValues(alpha: 0.1)
-                  : (isPdf ? Colors.red.withValues(alpha: 0.1) : Colors.amber.withValues(alpha: 0.1));
-              final iconColor = isImage
-                  ? Colors.blue
-                  : (isPdf ? Colors.red : Colors.amber.shade800);
-              final iconData = isImage
-                  ? Icons.image_rounded
-                  : (isPdf ? Icons.picture_as_pdf_rounded : Icons.description_rounded);
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'ATTACHMENTS (${email.attachments.length})',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+                letterSpacing: 0.5,
+                color: isDark ? BNXColors.darkTextSecondary : BNXColors.lightTextSecondary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: email.attachments.map((att) {
+                final isImage = att.fileType == 'IMG' ||
+                    att.fileName.toLowerCase().endsWith('.png') ||
+                    att.fileName.toLowerCase().endsWith('.jpg') ||
+                    att.fileName.toLowerCase().endsWith('.jpeg') ||
+                    att.fileName.toLowerCase().endsWith('.webp') ||
+                    att.fileName.toLowerCase().endsWith('.gif');
 
-              return InkWell(
-                onTap: () => showAttachmentPreviewDialog(context, att, isDark),
-                borderRadius: BorderRadius.circular(BNXConstants.borderRadiusS),
-                child: NeumorphicContainer(
-                  width: 220,
-                  padding: const EdgeInsets.all(8),
-                  borderRadius: BNXConstants.borderRadiusS,
-                  color: isDark ? const Color(0xFF1E293B) : Colors.white,
-                  child: Row(
+                return Container(
+                  width: cardWidth,
+                  height: 152,
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                      width: 1,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: badgeColor,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Icon(
-                          iconData,
-                          color: iconColor,
-                          size: 20,
+                      // Top Half: Preview Area (Thumbnail or File Icon with Badge)
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => showAttachmentPreviewDialog(context, att, isDark),
+                          child: Container(
+                            width: double.infinity,
+                            color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                            child: isImage
+                                ? SmartImageWidget(
+                                    attachment: att,
+                                    emailId: email.id,
+                                    folder: attachmentFolder,
+                                    height: double.infinity,
+                                    width: double.infinity,
+                                    fit: BoxFit.cover,
+                                  )
+                                : Center(
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Transform.rotate(
+                                          angle: -0.5,
+                                          child: Icon(
+                                            Icons.attach_file_rounded,
+                                            size: 28,
+                                            color: isDark
+                                                ? const Color(0xFF94A3B8)
+                                                : const Color(0xFF64748B),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 8, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: isDark
+                                                ? const Color(0xFF334155)
+                                                : const Color(0xFFE2E8F0),
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: Text(
+                                            att.fileType.isNotEmpty
+                                                ? att.fileType.toUpperCase()
+                                                : 'FILE',
+                                            style: TextStyle(
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.bold,
+                                              letterSpacing: 0.5,
+                                              color: isDark
+                                                  ? Colors.white70
+                                                  : const Color(0xFF475569),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                          ),
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              att.fileName,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                      // Bottom Half: File Name, Subtitle and Action Icons
+                      Container(
+                        height: 56,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                          border: Border(
+                            top: BorderSide(
+                              color: isDark
+                                  ? const Color(0xFF334155)
+                                  : const Color(0xFFE2E8F0),
+                              width: 0.8,
                             ),
-                            Text(
-                              att.fileSize,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    att.fileName,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    isImage
+                                        ? 'Image File'
+                                        : (att.fileType.isNotEmpty && att.fileType != 'FILE'
+                                            ? '${att.fileType} File'
+                                            : 'File File'),
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: isDark
+                                          ? BNXColors.darkTextSecondary
+                                          : BNXColors.lightTextSecondary,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            // Preview / Eye Button
+                            Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () => showAttachmentPreviewDialog(context, att, isDark),
+                                borderRadius: BorderRadius.circular(16),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(5),
+                                  child: Icon(
+                                    Icons.visibility_outlined,
+                                    size: 16,
+                                    color: isDark
+                                        ? BNXColors.darkTextSecondary
+                                        : const Color(0xFF64748B),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            // Download Button
+                            Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () => triggerAttachmentDownload(context, att),
+                                borderRadius: BorderRadius.circular(16),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(5),
+                                  child: Icon(
+                                    Icons.download_rounded,
+                                    size: 16,
+                                    color: isDark
+                                        ? BNXColors.darkTextSecondary
+                                        : const Color(0xFF64748B),
+                                  ),
+                                ),
                               ),
                             ),
                           ],
                         ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.visibility_outlined, size: 18),
-                        tooltip: 'View / Download',
-                        onPressed: () => showAttachmentPreviewDialog(context, att, isDark),
-                      ),
                     ],
                   ),
-                ),
-              );
-            }).toList(),
-          ),
-        ],
+                );
+              }).toList(),
+            ),
+          ],
+        ),
       );
     }
 
@@ -1336,17 +1466,19 @@ class EmailBody extends ConsumerWidget {
         buildToolbar(),
         Expanded(
           child: ListView(
-            padding: EdgeInsets.fromLTRB(isMobile ? 12 : 24, 0, isMobile ? 12 : 24, 110),
+            padding: EdgeInsets.fromLTRB(isMobile ? 12 : 24, 0, isMobile ? 12 : 24, isMobile ? 110 : 24),
             children: [
               buildHeaderSection(),
-              const Divider(),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               // Email Body Content
               EmailHtmlView(
                 html: email.htmlBody,
                 text: email.body,
                 isDark: isDark,
               ),
+              const SizedBox(height: 16),
+              const Divider(height: 1),
+              const SizedBox(height: 16),
               buildAttachments(),
               // Feature 1: AI Smart Reply bar
               AiSmartReplyBar(email: email),
@@ -1760,14 +1892,29 @@ class AttachmentDownloader {
       }.toList();
 
       final candidateUrls = <String>[
-        if (cleanUid.isNotEmpty)
-          for (final f in folders)
-            '${ApiClient.baseUrl}/api/mail/$cleanUid/attachments/${Uri.encodeComponent(cleanName)}?folder=${Uri.encodeQueryComponent(f)}',
-        if (cleanUid.isNotEmpty)
-          '${ApiClient.baseUrl}/api/mail/$cleanUid/attachments/${Uri.encodeComponent(cleanName)}',
+        // Direct raw path if provided
         if (rawPath.startsWith('http://') || rawPath.startsWith('https://')) rawPath,
         if (rawPath.isNotEmpty && !rawPath.startsWith('http'))
           '${ApiClient.baseUrl}/${rawPath.startsWith('/') ? rawPath.substring(1) : rawPath}',
+
+        // Primary email UID endpoints with folder query
+        if (cleanUid.isNotEmpty)
+          for (final f in folders) ...[
+            '${ApiClient.baseUrl}/api/mail/$cleanUid/attachments/${Uri.encodeComponent(cleanName)}?folder=${Uri.encodeQueryComponent(f)}',
+            '${ApiClient.baseUrl}/api/mail/$cleanUid/attachment/${Uri.encodeComponent(cleanName)}?folder=${Uri.encodeQueryComponent(f)}',
+            '${ApiClient.baseUrl}/api/mail/$cleanUid/attachments/$cleanName?folder=${Uri.encodeQueryComponent(f)}',
+          ],
+
+        // Fallback email UID endpoints without folder query
+        if (cleanUid.isNotEmpty) ...[
+          '${ApiClient.baseUrl}/api/mail/$cleanUid/attachments/${Uri.encodeComponent(cleanName)}',
+          '${ApiClient.baseUrl}/api/mail/$cleanUid/attachment/${Uri.encodeComponent(cleanName)}',
+          '${ApiClient.baseUrl}/api/mail/$cleanUid/attachments/$cleanName',
+        ],
+
+        // General attachment endpoints
+        '${ApiClient.baseUrl}/api/mail/attachments/${Uri.encodeComponent(cleanName)}',
+        '${ApiClient.baseUrl}/api/mail/attachments/$cleanName',
       ];
 
       for (final url in candidateUrls) {
@@ -1796,31 +1943,54 @@ class AttachmentDownloader {
     return RegExp(r'^[A-Za-z0-9+/=]+$').hasMatch(clean);
   }
 
-  static Future<Directory> _resolveDownloadDir() async {
-    try {
+  static Future<List<Directory>> _resolveDownloadDirs() async {
+    final dirs = <Directory>[];
+    if (!kIsWeb) {
       if (Platform.isAndroid) {
+        // 1. Try public Download folder
         for (final p in const ['/storage/emulated/0/Download', '/sdcard/Download']) {
-          final d = Directory(p);
-          if (await d.exists()) return d;
+          dirs.add(Directory(p));
         }
+        // 2. Try app-specific external Downloads folder (always accessible on Android without storage permissions)
+        try {
+          final appExtDownloads = await getExternalStorageDirectories(type: StorageDirectory.downloads);
+          if (appExtDownloads != null && appExtDownloads.isNotEmpty) {
+            dirs.addAll(appExtDownloads);
+          }
+        } catch (_) {}
+        // 3. Try app-specific external files folder
+        try {
+          final extDir = await getExternalStorageDirectory();
+          if (extDir != null) {
+            dirs.add(Directory('${extDir.path}/Download'));
+            dirs.add(extDir);
+          }
+        } catch (_) {}
       } else if (Platform.isMacOS || Platform.isLinux || Platform.isWindows) {
-        final d = await getDownloadsDirectory();
-        if (d != null) {
-          if (!await d.exists()) await d.create(recursive: true);
-          return d;
-        }
+        try {
+          final d = await getDownloadsDirectory();
+          if (d != null) dirs.add(d);
+        } catch (_) {}
         final home = Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
         if (home != null) {
-          final fallback = Directory('$home${Platform.pathSeparator}Downloads');
-          if (await fallback.exists()) return fallback;
+          dirs.add(Directory('$home${Platform.pathSeparator}Downloads'));
         }
+      } else if (Platform.isIOS) {
+        try {
+          final docs = await getApplicationDocumentsDirectory();
+          dirs.add(Directory('${docs.path}/Downloads'));
+          dirs.add(docs);
+        } catch (_) {}
       }
-    } catch (_) {}
-    try {
-      return await getApplicationDocumentsDirectory();
-    } catch (_) {
-      return Directory.systemTemp;
+
+      // Universal fallbacks
+      try {
+        final docs = await getApplicationDocumentsDirectory();
+        dirs.add(docs);
+      } catch (_) {}
+      dirs.add(Directory.systemTemp);
     }
+    return dirs;
   }
 
   static Future<String?> downloadAndSave(
@@ -1830,9 +2000,12 @@ class AttachmentDownloader {
   }) async {
     try {
       final bytes = await getAttachmentBytes(att, emailId: emailId, folder: folder);
-      if (bytes == null || bytes.isEmpty) return null;
+      if (bytes == null || bytes.isEmpty) {
+        debugPrint('[DOWNLOAD ATTACHMENT ERROR] No bytes retrieved for ${att.fileName}');
+        return null;
+      }
 
-      final downloadDir = await _resolveDownloadDir();
+      final candidateDirs = await _resolveDownloadDirs();
 
       // Keep spaces/unicode; only strip characters illegal on any OS.
       var name = att.fileName
@@ -1848,15 +2021,32 @@ class AttachmentDownloader {
       final dot = name.lastIndexOf('.');
       final stem = dot > 0 ? name.substring(0, dot) : name;
       final ext = dot > 0 ? name.substring(dot) : '';
-      var savePath = '${downloadDir.path}${Platform.pathSeparator}$name';
-      var n = 1;
-      while (await File(savePath).exists()) {
-        savePath = '${downloadDir.path}${Platform.pathSeparator}$stem ($n)$ext';
-        n++;
+
+      // Try writing to each candidate directory in order until one succeeds!
+      for (final downloadDir in candidateDirs) {
+        try {
+          if (!await downloadDir.exists()) {
+            await downloadDir.create(recursive: true);
+          }
+
+          var savePath = '${downloadDir.path}${Platform.pathSeparator}$name';
+          var n = 1;
+          while (await File(savePath).exists()) {
+            savePath = '${downloadDir.path}${Platform.pathSeparator}$stem ($n)$ext';
+            n++;
+          }
+
+          final file = File(savePath);
+          await file.writeAsBytes(bytes, flush: true);
+          debugPrint('[DOWNLOAD ATTACHMENT SUCCESS] Saved to $savePath');
+          return savePath;
+        } catch (e) {
+          debugPrint('[DOWNLOAD CANDIDATE ATTEMPT FAILED] ${downloadDir.path}: $e');
+          // Proceed to next directory candidate
+        }
       }
 
-      await File(savePath).writeAsBytes(bytes, flush: true);
-      return savePath;
+      return null;
     } catch (e) {
       debugPrint('[DOWNLOAD ATTACHMENT ERROR] $e');
       return null;

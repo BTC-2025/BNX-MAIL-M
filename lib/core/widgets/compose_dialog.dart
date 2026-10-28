@@ -1167,7 +1167,7 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
     final bg = isDark ? const Color(0xFF0D1526) : const Color(0xFFF4F8FF);
     final borderClr = isDark ? Colors.white10 : Colors.grey.shade200;
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
       decoration: BoxDecoration(
         color: bg,
         border: Border(top: BorderSide(color: borderClr)),
@@ -1180,7 +1180,7 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
             children: [
               // ── Send + caret ──
               Expanded(child: _sendSplitBtn()),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               // ── Attach ───────
               _labeledIconBtn(
                 icon: Icons.attach_file_rounded,
@@ -1211,7 +1211,7 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
     final bg = isDark ? const Color(0xFF0D1526) : const Color(0xFFF4F8FF);
     final borderClr = isDark ? Colors.white10 : Colors.grey.shade200;
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
       decoration: BoxDecoration(
         color: bg,
         border: Border(top: BorderSide(color: borderClr)),
@@ -1219,7 +1219,7 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
       child: Row(
         children: [
           Expanded(child: _casboxSendBtn()),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
           _labeledIconBtn(
             icon: Icons.attach_file_rounded,
             label: 'Attach',
@@ -1265,20 +1265,24 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
                     colors: [Color(0xFF195BAC), Color(0xFF2471D4)],
                   ),
                 ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.send_rounded, color: Colors.white, size: 16),
-                    SizedBox(width: 8),
-                    Text(
-                      'Send',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
+                child: const FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.send_rounded, color: Colors.white, size: 16),
+                      SizedBox(width: 8),
+                      Text(
+                        'Send',
+                        maxLines: 1,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -1387,26 +1391,30 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
               });
         },
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 13),
           decoration: const BoxDecoration(
             gradient: LinearGradient(
               colors: [Color(0xFF195BAC), Color(0xFF2471D4)],
             ),
           ),
-          child: const Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.send_rounded, color: Colors.white, size: 16),
-              SizedBox(width: 8),
-              Text(
-                'Send via Casbox',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 15,
+          child: const FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.send_rounded, color: Colors.white, size: 16),
+                SizedBox(width: 6),
+                Text(
+                  'Send via Casbox',
+                  maxLines: 1,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -1428,7 +1436,7 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
         onTap: fn,
         borderRadius: BorderRadius.circular(10),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1478,7 +1486,7 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
         ),
       ],
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [

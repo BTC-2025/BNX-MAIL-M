@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'profile_button.dart';
 import '../../data/app_state_provider.dart';
@@ -35,11 +36,17 @@ class TopSearchBar extends ConsumerWidget implements PreferredSizeWidget {
     }
 
     // Determine if we should show a folder title below the search bar
+    final String effectiveFolder = (uiState.activeFolder == 'Casbox' ||
+            uiState.activeFolder == 'Chat' ||
+            uiState.activeFolder == 'Colab' ||
+            uiState.activeFolder.trim().isEmpty)
+        ? 'Inbox'
+        : uiState.activeFolder;
     final bool showFolderTitle =
         !uiState.isSelectionMode &&
         uiState.searchQuery.isEmpty &&
-        uiState.activeFolder != 'Inbox';
-    final String folderTitle = uiState.activeLabel ?? uiState.activeFolder;
+        effectiveFolder != 'Inbox';
+    final String folderTitle = uiState.activeLabel ?? effectiveFolder;
 
     return Container(
       decoration: BoxDecoration(
@@ -160,38 +167,43 @@ class TopSearchBar extends ConsumerWidget implements PreferredSizeWidget {
                               onPressed: () async {
                                 final currentFolder =
                                     activeFolder.isNotEmpty ? activeFolder : 'Inbox';
-                                ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Row(
-                                      children: [
-                                        const SizedBox(
-                                          width: 16,
-                                          height: 16,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            color: Colors.white,
+                                final bool isMobileOS = !kIsWeb &&
+                                    (defaultTargetPlatform == TargetPlatform.android ||
+                                        defaultTargetPlatform == TargetPlatform.iOS);
+                                if (!isMobileOS) {
+                                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Row(
+                                        children: [
+                                          const SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: Colors.white,
+                                            ),
                                           ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Text(
-                                          'Refreshing $currentFolder...',
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w600,
-                                            color: Colors.white,
+                                          const SizedBox(width: 12),
+                                          Text(
+                                            'Refreshing $currentFolder...',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              color: Colors.white,
+                                            ),
                                           ),
-                                        ),
-                                      ],
+                                        ],
+                                      ),
+                                      backgroundColor: const Color(0xFF195BAC),
+                                      duration: const Duration(seconds: 2),
+                                      behavior: SnackBarBehavior.floating,
                                     ),
-                                    backgroundColor: const Color(0xFF195BAC),
-                                    duration: const Duration(seconds: 2),
-                                    behavior: SnackBarBehavior.floating,
-                                  ),
-                                );
+                                  );
+                                }
                                 await ref
                                     .read(emailProvider.notifier)
                                     .forceRefreshFolder(currentFolder);
-                                if (context.mounted) {
+                                if (context.mounted && !isMobileOS) {
                                   ScaffoldMessenger.of(context).hideCurrentSnackBar();
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(

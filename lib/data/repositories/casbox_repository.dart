@@ -54,36 +54,38 @@ class CasboxRepository {
 
     final result = <CasboxMessage>[];
     for (final item in rawList) {
-      if (item is Map<String, dynamic>) {
-        final innerMessages = item['messages'] ??
-            item['threadMessages'] ??
-            item['chatMessages'];
+      if (item is Map) {
+        final itemMap = Map<String, dynamic>.from(item);
+        final innerMessages = itemMap['messages'] ??
+            itemMap['threadMessages'] ??
+            itemMap['chatMessages'];
         if (innerMessages is List && innerMessages.isNotEmpty) {
-          final contactEmail = item['contactEmail']?.toString() ??
-              item['sender']?.toString() ??
-              item['email']?.toString() ??
-              item['senderEmail']?.toString() ??
+          final contactEmail = itemMap['contactEmail']?.toString() ??
+              itemMap['sender']?.toString() ??
+              itemMap['email']?.toString() ??
+              itemMap['senderEmail']?.toString() ??
               '';
-          final status = item['status']?.toString() ?? 'SENT';
-          final threadId = item['id']?.toString() ??
-              item['threadId']?.toString() ??
+          final status = itemMap['status']?.toString() ?? 'SENT';
+          final threadId = itemMap['id']?.toString() ??
+              itemMap['threadId']?.toString() ??
               '';
 
           for (final msg in innerMessages) {
-            if (msg is Map<String, dynamic>) {
+            if (msg is Map) {
+              final msgMap = Map<String, dynamic>.from(msg);
               result.add(CasboxMessage.fromJson({
-                ...msg,
-                if (!msg.containsKey('contactEmail') &&
+                ...msgMap,
+                if (!msgMap.containsKey('contactEmail') &&
                     contactEmail.isNotEmpty)
                   'contactEmail': contactEmail,
-                if (!msg.containsKey('status')) 'status': status,
-                if (!msg.containsKey('threadId') && threadId.isNotEmpty)
+                if (!msgMap.containsKey('status')) 'status': status,
+                if (!msgMap.containsKey('threadId') && threadId.isNotEmpty)
                   'threadId': threadId,
               }));
             }
           }
         } else {
-          result.add(CasboxMessage.fromJson(item));
+          result.add(CasboxMessage.fromJson(itemMap));
         }
       }
     }
@@ -181,37 +183,118 @@ class CasboxRepository {
   }
 
   /// API 4: Batch Archive / Unarchive Messages: PATCH /api/casbox/archive
-  /// Body: {"messageIds":[1,2],"archived":true}
+  /// Body: {"messageIds":[1040,1041],"archived":true}
   static Future<void> batchArchiveMessages(
       List<dynamic> messageIds, bool archived) async {
     if (messageIds.isEmpty) return;
-    final parsedIds =
-        messageIds.map((id) => int.tryParse(id.toString()) ?? id).toList();
+    final validIds = messageIds
+        .map((id) => int.tryParse(id.toString()))
+        .whereType<int>()
+        .toList();
+    if (validIds.isEmpty) return;
+
     final body = {
-      'messageIds': parsedIds,
+      'messageIds': validIds,
       'archived': archived,
     };
     try {
       await ApiClient.patch('/api/casbox/archive', body: body);
-      print('[CASBOX REPO] batchArchiveMessages succeeded');
+      print('[CASBOX REPO] batchArchiveMessages succeeded via PATCH /api/casbox/archive for ${validIds.length} ids (archived=$archived)');
+      return;
     } catch (e) {
       print('[CASBOX REPO WARNING] PATCH /api/casbox/archive failed ($e), trying POST...');
+    }
+
+    try {
+      await ApiClient.post('/api/casbox/archive', body: body);
+      print('[CASBOX REPO] batchArchiveMessages succeeded via POST /api/casbox/archive for ${validIds.length} ids (archived=$archived)');
+      return;
+    } catch (e2) {
+      print('[CASBOX REPO ERROR] batchArchiveMessages failed on both PATCH and POST: $e2');
+    }
+
+    // Comprehensive fallback for unarchive: try individual endpoints
+    for (final id in validIds) {
       try {
-        await ApiClient.post('/api/casbox/archive', body: body);
+        await archiveMessage(id, archived);
       } catch (_) {}
     }
   }
 
   /// API 5: Single Message Archive / Unarchive: PATCH /api/casbox/{id}/archive?archived={bool}
+  /// Also seamless fallback to API 4: PATCH /api/casbox/archive and explicit unarchive routes
   static Future<void> archiveMessage(dynamic messageId, bool archived) async {
+    final parsedId = int.tryParse(messageId.toString());
+    if (parsedId == null) {
+      print('[CASBOX REPO WARNING] archiveMessage: non-numeric id "$messageId", skipping direct API');
+      return;
+    }
+
+    // 1. Try batch endpoint (API 4) first as used by web frontend
     try {
       await ApiClient.patch(
-          '/api/casbox/$messageId/archive?archived=$archived');
-      print('[CASBOX REPO] archiveMessage succeeded for id=$messageId');
+        '/api/casbox/archive',
+        body: {
+          'messageIds': [parsedId],
+          'archived': archived,
+        },
+      );
+      print('[CASBOX REPO] archiveMessage succeeded via PATCH /api/casbox/archive for id=$parsedId (archived=$archived)');
+      return;
     } catch (e) {
-      print('[CASBOX REPO WARNING] PATCH /api/casbox/$messageId/archive failed: $e');
-      // Fallback to batch archive
-      await batchArchiveMessages([messageId], archived);
+      print('[CASBOX REPO WARNING] PATCH /api/casbox/archive failed ($e), trying single endpoint API 5...');
+    }
+
+    // 2. Try single endpoint (API 5) with query parameter
+    try {
+      await ApiClient.patch(
+        '/api/casbox/$parsedId/archive?archived=$archived',
+        body: {'archived': archived},
+      );
+      print('[CASBOX REPO] archiveMessage succeeded via PATCH /api/casbox/$parsedId/archive for id=$parsedId (archived=$archived)');
+      return;
+    } catch (e2) {
+      print('[CASBOX REPO WARNING] PATCH /api/casbox/$parsedId/archive failed: $e2, trying POST...');
+    }
+
+    // 3. Try POST fallback for single endpoint
+    try {
+      await ApiClient.post(
+        '/api/casbox/$parsedId/archive?archived=$archived',
+        body: {'archived': archived},
+      );
+      print('[CASBOX REPO] archiveMessage succeeded via POST /api/casbox/$parsedId/archive for id=$parsedId (archived=$archived)');
+      return;
+    } catch (_) {}
+
+    // 4. If unarchiving, also attempt explicit unarchive endpoints
+    if (!archived) {
+      try {
+        await ApiClient.patch('/api/casbox/$parsedId/unarchive');
+        print('[CASBOX REPO] archiveMessage succeeded via PATCH /api/casbox/$parsedId/unarchive');
+        return;
+      } catch (_) {}
+      try {
+        await ApiClient.post('/api/casbox/$parsedId/unarchive');
+        print('[CASBOX REPO] archiveMessage succeeded via POST /api/casbox/$parsedId/unarchive');
+        return;
+      } catch (_) {}
+      try {
+        await ApiClient.patch(
+          '/api/casbox/unarchive',
+          body: {'messageIds': [parsedId]},
+        );
+        print('[CASBOX REPO] archiveMessage succeeded via PATCH /api/casbox/unarchive');
+        return;
+      } catch (_) {}
+      try {
+        await ApiClient.post(
+          '/api/casbox/unarchive',
+          body: {'messageIds': [parsedId]},
+        );
+        print('[CASBOX REPO] archiveMessage succeeded via POST /api/casbox/unarchive');
+        return;
+      } catch (_) {}
     }
   }
 
@@ -219,17 +302,16 @@ class CasboxRepository {
   /// Body: {"messageIds":[101,102],"status":"SEEN"}
   static Future<void> updateStatus(dynamic messageId, String status) async {
     final parsedInt = int.tryParse(messageId.toString());
-    final idVal = parsedInt ?? messageId;
+    if (parsedInt == null) return;
+
     final targetStatus = (status.toUpperCase() == 'READ' ||
             status.toUpperCase() == 'SEEN')
         ? 'SEEN'
         : status.toUpperCase();
 
     final body = {
-      'messageIds': [idVal],
+      'messageIds': [parsedInt],
       'status': targetStatus,
-      'ids': [idVal],
-      'threadId': idVal,
     };
 
     try {
@@ -246,8 +328,12 @@ class CasboxRepository {
   static Future<void> updateMessagesStatus(
       List<dynamic> messageIds, String status) async {
     if (messageIds.isEmpty) return;
-    final intIds =
-        messageIds.map((id) => int.tryParse(id.toString()) ?? id).toList();
+    final intIds = messageIds
+        .map((id) => int.tryParse(id.toString()))
+        .whereType<int>()
+        .toList();
+    if (intIds.isEmpty) return;
+
     final targetStatus = (status.toUpperCase() == 'READ' ||
             status.toUpperCase() == 'SEEN')
         ? 'SEEN'
@@ -256,7 +342,6 @@ class CasboxRepository {
     final body = {
       'messageIds': intIds,
       'status': targetStatus,
-      'ids': intIds,
     };
 
     try {
@@ -359,7 +444,10 @@ class CasboxRepository {
       final res = await ApiClient.get('/api/connections/accepted');
       final rawList = _extractList(res);
       if (rawList != null) {
-        return rawList.whereType<Map<String, dynamic>>().toList();
+        return rawList
+            .whereType<Map>()
+            .map((m) => Map<String, dynamic>.from(m))
+            .toList();
       }
     } catch (e) {
       print('[CASBOX REPO ERROR] getAcceptedConnections: $e');
@@ -374,7 +462,10 @@ class CasboxRepository {
       final res = await ApiClient.get('/api/connections');
       final rawList = _extractList(res);
       if (rawList != null) {
-        return rawList.whereType<Map<String, dynamic>>().toList();
+        return rawList
+            .whereType<Map>()
+            .map((m) => Map<String, dynamic>.from(m))
+            .toList();
       }
     } catch (e) {
       print('[CASBOX REPO ERROR] getAllConnections: $e');
@@ -386,15 +477,20 @@ class CasboxRepository {
   /// Body: {"status":"DISCONNECTED" | "CONNECTED"}
   static Future<void> updateConnectionStatus(
       dynamic connectionId, String status) async {
+    final parsedId = int.tryParse(connectionId.toString());
+    if (parsedId == null) {
+      print('[CASBOX REPO WARNING] updateConnectionStatus: "$connectionId" is not a numeric connectionId');
+      return;
+    }
     final body = {'status': status.toUpperCase()};
     try {
-      await ApiClient.patch('/api/connections/$connectionId/status', body: body);
-      print('[CASBOX REPO] updateConnectionStatus succeeded via PATCH');
+      await ApiClient.patch('/api/connections/$parsedId/status', body: body);
+      print('[CASBOX REPO] updateConnectionStatus succeeded via PATCH /api/connections/$parsedId/status');
       return;
     } catch (_) {
       try {
-        await ApiClient.put('/api/connections/$connectionId/status', body: body);
-        print('[CASBOX REPO] updateConnectionStatus succeeded via PUT');
+        await ApiClient.put('/api/connections/$parsedId/status', body: body);
+        print('[CASBOX REPO] updateConnectionStatus succeeded via PUT /api/connections/$parsedId/status');
       } catch (e) {
         print('[CASBOX REPO ERROR] updateConnectionStatus: $e');
         rethrow;

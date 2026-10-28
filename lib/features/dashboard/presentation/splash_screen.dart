@@ -10,6 +10,7 @@ import '../../../../data/repositories/user_repository.dart';
 import '../../../../data/email_provider.dart';
 import '../../../../data/account_provider.dart';
 import '../../../../data/colab_provider.dart';
+import '../../../../data/app_state_provider.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -54,34 +55,47 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     if (isLoggedIn) {
       final email = await TokenService.getUserEmail() ?? '';
       ref.read(authProvider.notifier).login();
-      // Start backend fetches asynchronously without blocking the UI thread
-      ref.read(accountsProvider.notifier).loadMailboxes();
-      ref.read(colabListProvider.notifier).loadGroups();
-      ref.read(colabInvitationsProvider.notifier).loadInvitations();
-      // Pre-fetch all emails from backend to populate inbox, sent, draft folders
+      ref.read(appUiProvider.notifier).selectFolder('Inbox');
+
+      // 1. Immediately initiate primary inbox load
       ref.read(emailProvider.notifier).initialLoad();
-      
+
+      // 2. Parallelly initiate background loading of Casbox messages, connections, groups & profile
+      _loadSecondaryDataParallelly(email);
+
+      // 3. Quick check for business onboarding (checks local cache first to avoid blocking)
       if (email.isNotEmpty) {
-        final profile = await UserRepository.getProfile(email: email);
-        final effectiveEmail = (profile?.email.isNotEmpty == true)
-            ? profile!.email.trim().toLowerCase()
-            : email.trim().toLowerCase();
-        final isBiz =
-            (profile?.accountType?.toUpperCase() == 'BUSINESS');
+        final isLocallyOnboarded =
+            await TokenService.isBusinessOnboardingCompleted(email);
+        if (!isLocallyOnboarded) {
+          try {
+            final profile = await UserRepository.getProfile(email: email)
+                .timeout(const Duration(milliseconds: 1000));
+            final effectiveEmail = (profile?.email.isNotEmpty == true)
+                ? profile!.email.trim().toLowerCase()
+                : email.trim().toLowerCase();
+            final isBiz =
+                (profile?.accountType?.toUpperCase() == 'BUSINESS');
 
-        if (isBiz) {
-          final alreadyOnboarded =
-              await UserRepository.isBusinessAccountOnboarded(effectiveEmail) ||
-              await UserRepository.isBusinessAccountOnboarded(email);
+            if (isBiz) {
+              final alreadyOnboarded =
+                  await UserRepository.isBusinessAccountOnboarded(effectiveEmail)
+                      .timeout(const Duration(milliseconds: 800));
 
-          if (!alreadyOnboarded && mounted) {
-            context.go('/signup/business-onboarding', extra: {'email': effectiveEmail});
-            return;
-          }
+              if (!alreadyOnboarded && mounted) {
+                context.go(
+                  '/signup/business-onboarding',
+                  extra: {'email': effectiveEmail},
+                );
+                return;
+              }
+            }
+          } catch (_) {}
         }
       }
 
       if (mounted) {
+        ref.read(appUiProvider.notifier).selectFolder('Inbox');
         context.go('/home');
       }
     } else {
@@ -90,6 +104,32 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
         context.go('/login');
       }
     }
+  }
+
+  void _loadSecondaryDataParallelly(String email) {
+    Future.microtask(() async {
+      try {
+        // Accounts & mailboxes in parallel
+        ref.read(accountsProvider.notifier).loadMailboxes();
+
+        // Colab groups & invitations in parallel
+        ref.read(colabListProvider.notifier).loadGroups();
+        ref.read(colabInvitationsProvider.notifier).loadInvitations();
+
+        // Casbox messages, connections, aliases & safety in parallel
+        ref.read(casboxMessagesProvider.notifier).fetchMessages();
+        ref.read(casboxConnectionsProvider.notifier).fetchConnections();
+        ref.read(casboxBlockedContactsProvider.notifier).fetchBlockedContacts();
+        ref.read(casboxAliasesProvider.notifier).fetchAliases();
+
+        // Profile background sync (automatically caches user profile & avatar)
+        if (email.isNotEmpty) {
+          await UserRepository.getProfile(email: email);
+        }
+      } catch (e) {
+        print('[PARALLEL LOAD] Background hydration notice: $e');
+      }
+    });
   }
 
   @override

@@ -95,10 +95,10 @@ class MailRepository {
     return null;
   }
 
-  /// Fetches emails for a given [folder]. Defaults to 50 items.
+  /// Fetches emails for a given [folder]. Defaults to 1000 items to ensure all emails are fetched.
   static Future<List<EmailModel>> fetchFolder(
     String folder, {
-    int limit = 50,
+    int limit = 1000,
   }) async {
     if (nonMailFolders.contains(folder)) {
       return [];
@@ -119,7 +119,7 @@ class MailRepository {
 
   static Future<List<EmailModel>> _fetchFolderInternal(
     String folder, {
-    int limit = 50,
+    int limit = 1000,
   }) async {
     final path = _folderPaths[folder] ?? '/api/mail/inbox';
     dynamic res;
@@ -144,6 +144,10 @@ class MailRepository {
         'queryParams': {'limit': '$limit'},
       });
       candidates.add({'path': '/api/mail/schedule', 'queryParams': null});
+      candidates.add({
+        'path': '/api/mail/scheduled-emails',
+        'queryParams': {'limit': '$limit'},
+      });
       candidates.add({
         'path': '/api/mail/scheduled-emails',
         'queryParams': null,
@@ -179,29 +183,53 @@ class MailRepository {
       return [];
     }
 
+    int? reportedTotal;
     if (res is Map) {
       final dataObj = res['data'];
       if (dataObj is Map && dataObj['totalCount'] != null) {
         final tc = int.tryParse(dataObj['totalCount'].toString());
         if (tc != null) {
           serverFolderCounts[folder] = tc;
+          reportedTotal = tc;
         }
       } else if (res['totalCount'] != null) {
         final tc = int.tryParse(res['totalCount'].toString());
         if (tc != null) {
           serverFolderCounts[folder] = tc;
+          reportedTotal = tc;
         }
       }
     }
 
-    var rawList = _extractList(res);
-    if (rawList == null) {
+    final initialList = _extractList(res);
+    if (initialList == null) {
       return [];
+    }
+    List<dynamic> rawList = initialList;
+
+    // Dynamic Pagination Expansion: If the server reports more total emails than returned,
+    // immediately re-fetch using the full totalCount to guarantee 100% of emails are loaded.
+    if (reportedTotal != null && reportedTotal > rawList.length && limit < reportedTotal) {
+      print(
+        '[PAGINATION EXPANSION] Folder "$folder" reported $reportedTotal total emails but only returned ${rawList.length}. Re-fetching with expanded limit: $reportedTotal',
+      );
+      try {
+        final expandedRes = await ApiClient.get(path, queryParams: {'limit': '$reportedTotal'});
+        final expandedList = _extractList(expandedRes);
+        if (expandedList != null && expandedList.length > rawList.length) {
+          rawList = expandedList;
+          print(
+            '[PAGINATION EXPANSION] Successfully fetched all ${rawList.length} emails for "$folder".',
+          );
+        }
+      } catch (e) {
+        print('[PAGINATION EXPANSION WARNING] Failed to re-fetch with expanded limit: $e');
+      }
     }
 
     final rawCount = rawList.length;
     print(
-      '[STAGE 1: BACKEND API] Endpoint "$path" for folder "$folder" returned $rawCount raw items.',
+      '[STAGE 1: BACKEND API] Endpoint "$path" for folder "$folder" returned $rawCount raw items (total: ${reportedTotal ?? rawCount}).',
     );
 
     final parsedEmails = <EmailModel>[];
@@ -230,7 +258,7 @@ class MailRepository {
   static Future<List<EmailModel>> fetchFolderWithToken(
     String accessToken,
     String folder, {
-    int limit = 50,
+    int limit = 1000,
     String? ownerEmail,
   }) async {
     if (nonMailFolders.contains(folder)) {
@@ -265,8 +293,34 @@ class MailRepository {
     }
 
     if (res == null) return [];
-    var rawList = _extractList(res);
-    if (rawList == null) return [];
+
+    int? reportedTotal;
+    if (res is Map) {
+      final dataObj = res['data'];
+      if (dataObj is Map && dataObj['totalCount'] != null) {
+        reportedTotal = int.tryParse(dataObj['totalCount'].toString());
+      } else if (res['totalCount'] != null) {
+        reportedTotal = int.tryParse(res['totalCount'].toString());
+      }
+    }
+
+    final initialList = _extractList(res);
+    if (initialList == null) return [];
+    List<dynamic> rawList = initialList;
+
+    if (reportedTotal != null && reportedTotal > rawList.length && limit < reportedTotal) {
+      try {
+        final expandedRes = await ApiClient.get(
+          path,
+          queryParams: {'limit': '$reportedTotal'},
+          tempToken: accessToken,
+        );
+        final expandedList = _extractList(expandedRes);
+        if (expandedList != null && expandedList.length > rawList.length) {
+          rawList = expandedList;
+        }
+      } catch (_) {}
+    }
 
     final list = <EmailModel>[];
     for (final item in rawList) {

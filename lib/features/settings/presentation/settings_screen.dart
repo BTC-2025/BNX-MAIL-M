@@ -106,6 +106,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       TextEditingController();
   String _readingPaneMode = 'No Split (Full List)';
 
+  // ── Show More Toggles for Subsections (Default initial view: 4 items) ─────
+  bool _showAllSessions = false;
+  bool _showAllConnectedApps = false;
+  bool _showAllActivityLogs = false;
+  bool _showAllSystemFolders = false;
+  bool _showAllCustomLabels = false;
+  bool _showAllExtraAccounts = false;
+
   // ── Active Sessions List (Loaded dynamically from GET /api/auth/sessions) ───
   List<Map<String, String>> _activeDeviceSessions = [];
 
@@ -725,75 +733,207 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
                 const SizedBox(height: 14),
 
-                // ── Top Main Category Buttons ──────────────────────────────
+                // ── Top Main Category Buttons (4 Primary Tabs + "Show more") ──
                 SizedBox(
                   height: 46,
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
-                    itemCount: categories.length,
+                    itemCount: 5, // 4 primary tabs + 1 "Show more" tab
                     separatorBuilder: (ctx, idx) => const SizedBox(width: 8),
                     itemBuilder: (ctx, index) {
-                      final cat = categories[index];
-                      final isSelected = _selectedTabIndex == index;
-                      return Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: () =>
-                              setState(() => _selectedTabIndex = index),
-                          borderRadius: BorderRadius.circular(24),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 180),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? (isDark
-                                        ? const Color(0xFF1E3A5F)
-                                        : const Color(0xFFE3F2FD))
-                                  : (isDark
-                                        ? const Color(0xFF1E293B)
-                                        : Colors.white),
-                              borderRadius: BorderRadius.circular(24),
-                              border: Border.all(
-                                color: isSelected
-                                    ? const Color(0xFF195BAC)
-                                    : (isDark
-                                          ? Colors.white12
-                                          : Colors.grey.shade200),
-                                width: isSelected ? 1.5 : 1.0,
+                      if (index < 4) {
+                        final cat = categories[index];
+                        final isSelected = _selectedTabIndex == index;
+                        return Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () =>
+                                setState(() => _selectedTabIndex = index),
+                            borderRadius: BorderRadius.circular(24),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 180),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 8,
                               ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  cat['icon'] as IconData,
-                                  size: 18,
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? (isDark
+                                          ? const Color(0xFF1E3A5F)
+                                          : const Color(0xFFE3F2FD))
+                                    : (isDark
+                                          ? const Color(0xFF1E293B)
+                                          : Colors.white),
+                                borderRadius: BorderRadius.circular(24),
+                                border: Border.all(
                                   color: isSelected
                                       ? const Color(0xFF195BAC)
                                       : (isDark
-                                            ? Colors.white70
-                                            : Colors.black87),
+                                            ? Colors.white12
+                                            : Colors.grey.shade200),
+                                  width: isSelected ? 1.5 : 1.0,
                                 ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  cat['title'] as String,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: isSelected
-                                        ? FontWeight.bold
-                                        : FontWeight.w500,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    cat['icon'] as IconData,
+                                    size: 18,
                                     color: isSelected
                                         ? const Color(0xFF195BAC)
                                         : (isDark
-                                              ? Colors.white
+                                              ? Colors.white70
                                               : Colors.black87),
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    cat['title'] as String,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: isSelected
+                                          ? FontWeight.bold
+                                          : FontWeight.w500,
+                                      color: isSelected
+                                          ? const Color(0xFF195BAC)
+                                          : (isDark
+                                                ? Colors.white
+                                                : Colors.black87),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
+                          ),
+                        );
+                      }
+
+                      // 5th tab: "Show more" dropdown for remaining categories (Security, Labels, Active Sessions)
+                      final isMoreSelected = _selectedTabIndex >= 4;
+                      final selectedMoreCat =
+                          isMoreSelected ? categories[_selectedTabIndex] : null;
+
+                      return PopupMenuButton<int>(
+                        tooltip: 'More settings sections',
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 220,
+                          maxWidth: 280,
+                        ),
+                        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                        elevation: 6,
+                        offset: const Offset(0, 50),
+                        onSelected: (catIndex) {
+                          setState(() => _selectedTabIndex = catIndex);
+                        },
+                        itemBuilder: (ctx) {
+                          return [
+                            for (int i = 4; i < categories.length; i++)
+                              PopupMenuItem<int>(
+                                value: i,
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      categories[i]['icon'] as IconData,
+                                      size: 18,
+                                      color: _selectedTabIndex == i
+                                          ? const Color(0xFF195BAC)
+                                          : (isDark
+                                                ? Colors.white70
+                                                : Colors.black87),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        categories[i]['title'] as String,
+                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 1,
+                                        style: TextStyle(
+                                          fontSize: 13.5,
+                                          fontWeight: _selectedTabIndex == i
+                                              ? FontWeight.bold
+                                              : FontWeight.w500,
+                                          color: _selectedTabIndex == i
+                                              ? const Color(0xFF195BAC)
+                                              : (isDark
+                                                    ? Colors.white
+                                                    : Colors.black87),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ];
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isMoreSelected
+                                ? (isDark
+                                      ? const Color(0xFF1E3A5F)
+                                      : const Color(0xFFE3F2FD))
+                                : (isDark
+                                      ? const Color(0xFF1E293B)
+                                      : Colors.white),
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(
+                              color: isMoreSelected
+                                  ? const Color(0xFF195BAC)
+                                  : (isDark
+                                        ? Colors.white12
+                                        : Colors.grey.shade200),
+                              width: isMoreSelected ? 1.5 : 1.0,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                selectedMoreCat != null
+                                    ? (selectedMoreCat['icon'] as IconData)
+                                    : Icons.more_horiz_rounded,
+                                size: 18,
+                                color: isMoreSelected
+                                    ? const Color(0xFF195BAC)
+                                    : (isDark
+                                          ? Colors.white70
+                                          : Colors.black87),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                selectedMoreCat != null
+                                    ? '${selectedMoreCat['title']}'
+                                    : 'Show more',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: isMoreSelected
+                                      ? FontWeight.bold
+                                      : FontWeight.w500,
+                                  color: isMoreSelected
+                                      ? const Color(0xFF195BAC)
+                                      : (isDark
+                                            ? Colors.white
+                                            : Colors.black87),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Icon(
+                                Icons.arrow_drop_down_rounded,
+                                size: 18,
+                                color: isMoreSelected
+                                    ? const Color(0xFF195BAC)
+                                    : (isDark
+                                          ? Colors.white70
+                                          : Colors.black87),
+                              ),
+                            ],
                           ),
                         ),
                       );
@@ -1034,7 +1174,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               // Linked Accounts if any were added
               if (_extraLinkedAccounts.isNotEmpty) ...[
                 const SizedBox(height: 12),
-                ..._extraLinkedAccounts.map((extra) {
+                ...() {
+                  final displayedExtra = _showAllExtraAccounts
+                      ? _extraLinkedAccounts
+                      : _extraLinkedAccounts.take(3).toList();
+                  return [
+                    ...displayedExtra.map((extra) {
                   final email = extra['email'] ?? '';
                   final name = extra['name'] ?? 'Other Account';
                   final initial =
@@ -1116,6 +1261,35 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ),
                   );
                 }),
+                if (_extraLinkedAccounts.length > 3)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Center(
+                      child: TextButton.icon(
+                        onPressed: () => setState(() =>
+                            _showAllExtraAccounts = !_showAllExtraAccounts),
+                        icon: Icon(
+                          _showAllExtraAccounts
+                              ? Icons.keyboard_arrow_up_rounded
+                              : Icons.keyboard_arrow_down_rounded,
+                          size: 18,
+                          color: const Color(0xFF155EEF),
+                        ),
+                        label: Text(
+                          _showAllExtraAccounts
+                              ? 'Show less'
+                              : 'Show more (${_extraLinkedAccounts.length - 3} more accounts)',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF155EEF),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ];
+            }(),
               ],
             ],
           ),
@@ -5652,86 +5826,121 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   final totalSpacing = spacing * (crossAxisCount - 1);
                   final itemWidth = (constraints.maxWidth - totalSpacing) / crossAxisCount;
 
-                  return Wrap(
-                    spacing: spacing,
-                    runSpacing: spacing,
-                    children: _standardSystemFolders.map((label) {
-                      final isChecked = vis[label] ?? _sidebarLabels[label] ?? true;
-                      return SizedBox(
-                        width: itemWidth,
-                        child: Container(
-                          height: 56,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? const Color(0xFF0F172A)
-                                : Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: isDark
-                                  ? Colors.white12
-                                  : const Color(0xFFE2E8F0),
-                              width: 1.2,
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                _getFolderIcon(label),
-                                size: 20,
-                                color: isDark
-                                    ? Colors.white70
-                                    : const Color(0xFF155EEF),
+                  final displayedFolders = _showAllSystemFolders
+                      ? _standardSystemFolders
+                      : _standardSystemFolders.take(4).toList();
+
+                  return Column(
+                    children: [
+                      Wrap(
+                        spacing: spacing,
+                        runSpacing: spacing,
+                        children: displayedFolders.map((label) {
+                          final isChecked = vis[label] ?? _sidebarLabels[label] ?? true;
+                          return SizedBox(
+                            width: itemWidth,
+                            child: Container(
+                              height: 56,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
                               ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  label,
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: isDark
-                                        ? Colors.white
-                                        : const Color(0xFF1E293B),
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? const Color(0xFF0F172A)
+                                    : Colors.white,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: isDark
+                                      ? Colors.white12
+                                      : const Color(0xFFE2E8F0),
+                                  width: 1.2,
                                 ),
                               ),
-                              Switch(
-                                value: isChecked,
-                                onChanged: (val) async {
-                                  setState(() => _sidebarLabels[label] = val);
-                                  ref
-                                      .read(appUiProvider.notifier)
-                                      .setSidebarLabel(label, val);
-                                  final email =
-                                      ref.read(activeAccountProvider).email;
-                                  final updatedMap =
-                                      ref.read(appUiProvider).sidebarLabelVisibility;
-                                  if (email.isNotEmpty) {
-                                    await TokenService.saveUserSettings(email, {
-                                      'sidebarLabels': updatedMap,
-                                    });
-                                  }
-                                  try {
-                                    await UserRepository.updateSettings({
-                                      'sidebarLabels': updatedMap,
-                                    });
-                                  } catch (_) {}
-                                },
-                                activeThumbColor: const Color(0xFF155EEF),
-                                activeTrackColor:
-                                    const Color(0xFF155EEF).withValues(alpha: 0.35),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    _getFolderIcon(label),
+                                    size: 20,
+                                    color: isDark
+                                        ? Colors.white70
+                                        : const Color(0xFF155EEF),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      label,
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: isDark
+                                            ? Colors.white
+                                            : const Color(0xFF1E293B),
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  Switch(
+                                    value: isChecked,
+                                    onChanged: (val) async {
+                                      setState(() => _sidebarLabels[label] = val);
+                                      ref
+                                          .read(appUiProvider.notifier)
+                                          .setSidebarLabel(label, val);
+                                      final email =
+                                          ref.read(activeAccountProvider).email;
+                                      final updatedMap =
+                                          ref.read(appUiProvider).sidebarLabelVisibility;
+                                      if (email.isNotEmpty) {
+                                        await TokenService.saveUserSettings(email, {
+                                          'sidebarLabels': updatedMap,
+                                        });
+                                      }
+                                      try {
+                                        await UserRepository.updateSettings({
+                                          'sidebarLabels': updatedMap,
+                                        });
+                                      } catch (_) {}
+                                    },
+                                    activeThumbColor: const Color(0xFF155EEF),
+                                    activeTrackColor:
+                                        const Color(0xFF155EEF).withValues(alpha: 0.35),
+                                  ),
+                                ],
                               ),
-                            ],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      if (_standardSystemFolders.length > 4)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Center(
+                            child: TextButton.icon(
+                              onPressed: () => setState(() =>
+                                  _showAllSystemFolders = !_showAllSystemFolders),
+                              icon: Icon(
+                                _showAllSystemFolders
+                                    ? Icons.keyboard_arrow_up_rounded
+                                    : Icons.keyboard_arrow_down_rounded,
+                                size: 18,
+                                color: const Color(0xFF155EEF),
+                              ),
+                              label: Text(
+                                _showAllSystemFolders
+                                    ? 'Show less'
+                                    : 'Show more (${_standardSystemFolders.length - 4} more folders)',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF155EEF),
+                                ),
+                              ),
+                            ),
                           ),
                         ),
-                      );
-                    }).toList(),
+                    ],
                   );
                 },
               ),
@@ -5875,10 +6084,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     final spacing = 14.0;
                     final itemWidth = (constraints.maxWidth - (spacing * (crossAxisCount - 1))) / crossAxisCount;
 
-                    return Wrap(
-                      spacing: spacing,
-                      runSpacing: spacing,
-                      children: customLabels.map((lbl) {
+                    final displayedCustomLabels = _showAllCustomLabels
+                        ? customLabels
+                        : customLabels.take(4).toList();
+
+                    return Column(
+                      children: [
+                        Wrap(
+                          spacing: spacing,
+                          runSpacing: spacing,
+                          children: displayedCustomLabels.map((lbl) {
                         final isVisible = vis[lbl.name] ?? _sidebarLabels[lbl.name] ?? true;
                         return SizedBox(
                           width: itemWidth,
@@ -6006,9 +6221,38 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           ),
                         );
                       }).toList(),
-                    );
-                  },
-                ),
+                    ),
+                    if (customLabels.length > 4)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Center(
+                          child: TextButton.icon(
+                            onPressed: () => setState(() =>
+                                _showAllCustomLabels = !_showAllCustomLabels),
+                            icon: Icon(
+                              _showAllCustomLabels
+                                  ? Icons.keyboard_arrow_up_rounded
+                                  : Icons.keyboard_arrow_down_rounded,
+                              size: 18,
+                              color: const Color(0xFF155EEF),
+                            ),
+                            label: Text(
+                              _showAllCustomLabels
+                                  ? 'Show less'
+                                  : 'Show more (${customLabels.length - 4} more labels)',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF155EEF),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
             ],
           ),
         ),
@@ -6178,9 +6422,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ],
                   ),
                 )
-              else
-                ..._activeDeviceSessions.map(
-                  (sess) {
+              else ...() {
+                final displayedSessions = _showAllSessions
+                    ? _activeDeviceSessions
+                    : _activeDeviceSessions.take(4).toList();
+                return [
+                  ...displayedSessions.map(
+                    (sess) {
                     final isCurrent = sess['currentSession'] == 'true';
                     final title = sess['title'] ?? 'Unknown Device';
                     final ua = sess['userAgent'] ?? '';
@@ -6423,8 +6671,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         },
                       ),
                     );
-                  },
-                ),
+                  }),
+                  if (_activeDeviceSessions.length > 4)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4, bottom: 8),
+                      child: Center(
+                        child: TextButton.icon(
+                          onPressed: () => setState(
+                              () => _showAllSessions = !_showAllSessions),
+                          icon: Icon(
+                            _showAllSessions
+                                ? Icons.keyboard_arrow_up_rounded
+                                : Icons.keyboard_arrow_down_rounded,
+                            size: 18,
+                            color: const Color(0xFF155EEF),
+                          ),
+                          label: Text(
+                            _showAllSessions
+                                ? 'Show less'
+                                : 'Show more (${_activeDeviceSessions.length - 4} more sessions)',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF155EEF),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ];
+              }(),
             ],
           ),
         ),
@@ -6502,9 +6778,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ],
                   ),
                 )
-              else
-                ..._connectedApplications.map(
-                  (app) => Container(
+              else ...() {
+                final displayedApps = _showAllConnectedApps
+                    ? _connectedApplications
+                    : _connectedApplications.take(4).toList();
+                return [
+                  ...displayedApps.map(
+                    (app) => Container(
                     width: double.infinity,
                     margin: const EdgeInsets.only(bottom: 14),
                     padding: const EdgeInsets.symmetric(
@@ -6649,6 +6929,35 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ),
                   ),
                 ),
+                if (_connectedApplications.length > 4)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4, bottom: 8),
+                    child: Center(
+                      child: TextButton.icon(
+                        onPressed: () => setState(() =>
+                            _showAllConnectedApps = !_showAllConnectedApps),
+                        icon: Icon(
+                          _showAllConnectedApps
+                              ? Icons.keyboard_arrow_up_rounded
+                              : Icons.keyboard_arrow_down_rounded,
+                          size: 18,
+                          color: const Color(0xFF155EEF),
+                        ),
+                        label: Text(
+                          _showAllConnectedApps
+                              ? 'Show less'
+                              : 'Show more (${_connectedApplications.length - 4} more apps)',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF155EEF),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ];
+            }(),
             ],
           ),
         ),
@@ -6742,9 +7051,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ],
                   ),
                 )
-              else
-                ..._recentActivityLogs.map(
-                  (log) {
+              else ...() {
+                final displayedLogs = _showAllActivityLogs
+                    ? _recentActivityLogs
+                    : _recentActivityLogs.take(4).toList();
+                return [
+                  ...displayedLogs.map(
+                    (log) {
                     final activityName = log['activity'] ?? 'Account Event';
                     final ip = log['ip'] ?? '';
                     final details = log['details'] ?? '';
@@ -6925,6 +7238,35 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     );
                   },
                 ),
+                if (_recentActivityLogs.length > 4)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4, bottom: 8),
+                    child: Center(
+                      child: TextButton.icon(
+                        onPressed: () => setState(
+                            () => _showAllActivityLogs = !_showAllActivityLogs),
+                        icon: Icon(
+                          _showAllActivityLogs
+                              ? Icons.keyboard_arrow_up_rounded
+                              : Icons.keyboard_arrow_down_rounded,
+                          size: 18,
+                          color: const Color(0xFF155EEF),
+                        ),
+                        label: Text(
+                          _showAllActivityLogs
+                              ? 'Show less'
+                              : 'Show more (${_recentActivityLogs.length - 4} more logs)',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF155EEF),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ];
+            }(),
             ],
           ),
         ),

@@ -103,6 +103,28 @@ class _BusinessOnboardingScreenState
   @override
   void initState() {
     super.initState();
+    if (widget.initialData != null) {
+      final initialBizType = widget.initialData!['businessType']?.toString();
+      final initialIndustry = widget.initialData!['industry']?.toString();
+      final initialCompanySize = widget.initialData!['companySize']?.toString();
+      final initialWebsite = widget.initialData!['website']?.toString();
+      final initialAddress = widget.initialData!['address']?.toString();
+      if (initialBizType != null && _businessTypeOptions.contains(initialBizType)) {
+        _selectedBusinessType = initialBizType;
+      }
+      if (initialIndustry != null && initialIndustry.isNotEmpty) {
+        _industryController.text = initialIndustry;
+      }
+      if (initialCompanySize != null && _companySizeOptions.contains(initialCompanySize)) {
+        _selectedCompanySize = initialCompanySize;
+      }
+      if (initialWebsite != null && initialWebsite.isNotEmpty) {
+        _websiteController.text = initialWebsite;
+      }
+      if (initialAddress != null && initialAddress.isNotEmpty) {
+        _addressController.text = initialAddress;
+      }
+    }
     _initFromData();
   }
 
@@ -115,14 +137,18 @@ class _BusinessOnboardingScreenState
     if (effectiveEmail.isNotEmpty) {
       final alreadyLocally = await TokenService.isBusinessOnboardingCompleted(effectiveEmail);
       if (alreadyLocally && mounted) {
-        context.go('/home');
+        try {
+          context.go('/home');
+        } catch (_) {}
         return;
       }
       try {
         final alreadyRemotely = await UserRepository.isBusinessAccountOnboarded(effectiveEmail)
             .timeout(const Duration(milliseconds: 1200));
         if (alreadyRemotely && mounted) {
-          context.go('/home');
+          try {
+            context.go('/home');
+          } catch (_) {}
           return;
         }
       } catch (_) {}

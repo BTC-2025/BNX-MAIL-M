@@ -1,28 +1,27 @@
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:webview_flutter/webview_flutter.dart';
 
-/// Renders email bodies with 100% pixel-perfect fidelity across platforms.
+/// Renders email bodies with 100% pixel-perfect fidelity and adaptive sizing
+/// across all operating systems (macOS, iOS, Android, Linux, Windows, Web).
 ///
-/// On macOS, iOS, and Android: utilizes [WebViewController] (WKWebView / WebView)
-/// to execute full CSS stylesheets, responsive tables, flexbox, inline styling,
-/// web fonts, images, and buttons exactly like webmail (Gmail/Outlook).
-///
-/// On Linux/Windows/Web: falls back to [HtmlWidget] with custom CSS builders.
-/// Plain-text emails are styled cleanly with paragraphs and clickable links.
+/// Plain-text and HTML emails size adaptively to their content so short emails
+/// take only the necessary vertical space without pushing attachments or action
+/// footers off screen. For very long emails, content stays neatly bounded within
+/// a responsive maximum height with smooth internal scrolling.
 class EmailHtmlView extends StatefulWidget {
   final String html;
   final String text;
   final bool isDark;
+  final double? maxHeight;
 
   const EmailHtmlView({
     super.key,
     required this.html,
     required this.text,
     required this.isDark,
+    this.maxHeight,
   });
 
   static final RegExp _htmlSignature = RegExp(
@@ -32,209 +31,46 @@ class EmailHtmlView extends StatefulWidget {
 
   static bool looksLikeHtml(String s) => _htmlSignature.hasMatch(s);
 
+  static final RegExp _richTemplateRegex = RegExp(
+    r'<\s*(table|tbody|thead|tr|td|th|center|style|section|article|header|footer|svg|iframe)\b|'
+    r'<\s*img\b|'
+    r'align\s*=\s*["\x27]?center["\x27]?|'
+    r'margin\s*:\s*0?\s*auto|'
+    r'max-width\s*:\s*\d+px',
+    caseSensitive: false,
+  );
+
+  /// Distinguishes rich template/newsletter long formats from regular text/conversational emails.
+  /// - Text emails (plain text or simple HTML without complex layout grids/tables/banners) align to the left side.
+  /// - Other long formats (newsletters, marketing emails, rich HTML templates) center horizontally within a 740px column.
+  static bool isLongFormat(String html, String text) {
+    final source = html.trim().isNotEmpty ? html : text;
+    if (source.trim().isEmpty) return false;
+    if (!looksLikeHtml(source)) return false;
+    return _richTemplateRegex.hasMatch(source);
+  }
+
   @override
   State<EmailHtmlView> createState() => _EmailHtmlViewState();
 }
 
 class _EmailHtmlViewState extends State<EmailHtmlView> {
-  WebViewController? _controller;
-  double _webViewHeight = 450.0;
-  bool _useWebView = false;
-  bool _isDisposed = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _initRenderer();
-  }
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void didUpdateWidget(EmailHtmlView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.html != widget.html ||
-        oldWidget.text != widget.text ||
-        oldWidget.isDark != widget.isDark) {
-      if (_useWebView && _controller != null) {
-        _loadWebViewContent();
-      } else {
-        _initRenderer();
+    if (oldWidget.html != widget.html || oldWidget.text != widget.text) {
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(0.0);
       }
     }
   }
 
   @override
   void dispose() {
-    _isDisposed = true;
+    _scrollController.dispose();
     super.dispose();
-  }
-
-  void _initRenderer() {
-    final source = widget.html.trim().isNotEmpty ? widget.html : widget.text;
-    final isHtml = EmailHtmlView.looksLikeHtml(source);
-
-    // WebView is used exclusively on macOS (desktop WKWebView).
-    // On Android and iOS, native Flutter HtmlWidget is used to eliminate PlatformView
-    // surface recreation loops, infinite height glitches, and gesture conflicts.
-    if (isHtml && !kIsWeb && Platform.isMacOS) {
-      try {
-        _controller = WebViewController()
-          ..setJavaScriptMode(JavaScriptMode.unrestricted)
-          ..setNavigationDelegate(
-            NavigationDelegate(
-              onNavigationRequest: (NavigationRequest request) {
-                final url = request.url.trim();
-                if (url.startsWith('http://') ||
-                    url.startsWith('https://') ||
-                    url.startsWith('mailto:') ||
-                    url.startsWith('tel:')) {
-                  final uri = Uri.tryParse(url);
-                  if (uri != null) {
-                    launchUrl(uri, mode: LaunchMode.externalApplication);
-                  }
-                  return NavigationDecision.prevent;
-                }
-                return NavigationDecision.navigate;
-              },
-              onPageFinished: (_) {
-                _pollHeight();
-              },
-            ),
-          )
-          ..addJavaScriptChannel(
-            'HeightChannel',
-            onMessageReceived: (JavaScriptMessage message) {
-              if (_isDisposed) return;
-              final parsed = double.tryParse(message.message);
-              if (parsed != null && parsed > 50 && mounted) {
-                setState(() {
-                  _webViewHeight = parsed + 24; // safety padding
-                });
-              }
-            },
-          );
-
-        _useWebView = true;
-        _loadWebViewContent();
-      } catch (e) {
-        debugPrint('[EmailHtmlView] WebView initialization failed: $e');
-        _useWebView = false;
-      }
-    } else {
-      _useWebView = false;
-    }
-  }
-
-  void _pollHeight() {
-    if (_isDisposed || _controller == null) return;
-    try {
-      _controller?.runJavaScript('''
-        (function() {
-          var body = document.body;
-          var html = document.documentElement;
-          var h = Math.max(
-            body ? body.scrollHeight : 0,
-            body ? body.offsetHeight : 0,
-            html ? html.clientHeight : 0,
-            html ? html.scrollHeight : 0,
-            html ? html.offsetHeight : 0
-          );
-          if (window.HeightChannel && h > 0) {
-            window.HeightChannel.postMessage(h.toString());
-          }
-        })();
-      ''');
-    } catch (_) {}
-  }
-
-  void _loadWebViewContent() {
-    if (_controller == null) return;
-    final source = widget.html.trim().isNotEmpty ? widget.html : widget.text;
-    final isHtml = EmailHtmlView.looksLikeHtml(source);
-    final content = isHtml ? source : _plainTextToHtml(source);
-
-    final htmlDocument = '''
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <style>
-    * {
-      box-sizing: border-box;
-      -webkit-font-smoothing: antialiased;
-    }
-    html, body {
-      margin: 0;
-      padding: 0;
-      background-color: transparent;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      font-size: 14px;
-      line-height: 1.6;
-      color: ${widget.isDark ? '#e2e8f0' : '#1e293b'};
-      overflow-x: hidden;
-      word-wrap: break-word;
-    }
-    img {
-      max-width: 100% !important;
-      height: auto !important;
-    }
-    table {
-      max-width: 100% !important;
-    }
-    a {
-      color: #0969da;
-    }
-    /* Hide tracking pixels */
-    img[width="1"][height="1"],
-    img[width="0"][height="0"] {
-      display: none !important;
-    }
-  </style>
-</head>
-<body>
-  $content
-  <script>
-    function reportHeight() {
-      try {
-        var body = document.body;
-        var html = document.documentElement;
-        var h = Math.max(
-          body ? body.scrollHeight : 0,
-          body ? body.offsetHeight : 0,
-          html ? html.clientHeight : 0,
-          html ? html.scrollHeight : 0,
-          html ? html.offsetHeight : 0
-        );
-        if (window.HeightChannel && h > 50) {
-          window.HeightChannel.postMessage(h.toString());
-        }
-      } catch (e) {}
-    }
-    window.addEventListener('load', function() {
-      reportHeight();
-      setTimeout(reportHeight, 150);
-      setTimeout(reportHeight, 500);
-      setTimeout(reportHeight, 1200);
-      setTimeout(reportHeight, 3000);
-    });
-    window.addEventListener('resize', reportHeight);
-    if (window.ResizeObserver) {
-      new ResizeObserver(reportHeight).observe(document.body);
-    }
-    if (window.MutationObserver) {
-      new MutationObserver(reportHeight).observe(document.body, { childList: true, subtree: true, attributes: true });
-    }
-    // Also trigger on any image load
-    var images = document.getElementsByTagName('img');
-    for (var i = 0; i < images.length; i++) {
-      images[i].addEventListener('load', reportHeight);
-    }
-  </script>
-</body>
-</html>
-''';
-
-    _controller!.loadHtmlString(htmlDocument);
   }
 
   static String _escape(String s) => s
@@ -294,54 +130,26 @@ class _EmailHtmlViewState extends State<EmailHtmlView> {
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Text(
           '(No Content)',
-          style: TextStyle(color: widget.isDark ? Colors.white54 : Colors.black45),
+          style: TextStyle(
+            color: widget.isDark ? Colors.white54 : Colors.black45,
+            fontStyle: FontStyle.italic,
+            fontSize: 14,
+          ),
         ),
       );
     }
 
     final isHtml = EmailHtmlView.looksLikeHtml(source);
-
-    // 1. Native High-Fidelity WebView Engine (macOS, iOS, Android)
-    if (_useWebView && _controller != null) {
-      return Container(
-        width: double.infinity,
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: widget.isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-            width: 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: widget.isDark ? 0.2 : 0.04),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 760),
-            child: SizedBox(
-              width: double.infinity,
-              height: _webViewHeight,
-              child: WebViewWidget(controller: _controller!),
-            ),
-          ),
-        ),
-      );
-    }
-
-    // 2. Cross-Platform Fallback Engine (Linux, Windows, Web, or WebView fallback)
     final content = isHtml ? source : _plainTextToHtml(source);
-    final textColor = isHtml ? const Color(0xFF1F2937) : (widget.isDark ? const Color(0xFFE5E7EB) : const Color(0xFF1F2937));
-    final baseStyle = TextStyle(fontSize: 14, height: 1.55, color: textColor);
 
-    final bool isMobile = MediaQuery.of(context).size.width < 600;
+    final textColor = widget.isDark ? const Color(0xFFE2E8F0) : const Color(0xFF1E293B);
+    final baseStyle = TextStyle(
+      fontSize: 14,
+      height: 1.6,
+      color: textColor,
+    );
 
-    final fallbackWidget = SelectionArea(
+    final htmlContentWidget = SelectionArea(
       child: HtmlWidget(
         content,
         textStyle: baseStyle,
@@ -352,7 +160,7 @@ class _EmailHtmlViewState extends State<EmailHtmlView> {
             final style = e.attributes['style'] ?? '';
             if (!RegExp(r'(^|;)\s*color\s*:', caseSensitive: false).hasMatch(style) &&
                 e.attributes['color'] == null) {
-              return {'color': widget.isDark && !isHtml ? '#8AB4F8' : '#0969da'};
+              return {'color': widget.isDark ? '#60A5FA' : '#2563EB'};
             }
           }
           if (e.localName == 'img') {
@@ -372,38 +180,62 @@ class _EmailHtmlViewState extends State<EmailHtmlView> {
       ),
     );
 
-    if (!isHtml) {
-      return Align(alignment: Alignment.topLeft, child: fallbackWidget);
+    final screenHeight = MediaQuery.of(context).size.height;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    final bool isMobileDevice = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS);
+    final bool isMobileOS = isMobile && isMobileDevice;
+
+    // Dynamic natural scrolling for mobile OS alone:
+    // No fixed height constraints or nested SingleChildScrollView, so the entire
+    // email page in EmailBody scrolls smoothly and dynamically without fixed footer traps.
+    if (isMobileOS && widget.maxHeight == null) {
+      return SizedBox(
+        width: double.infinity,
+        child: Align(
+          alignment: Alignment.topLeft,
+          child: htmlContentWidget,
+        ),
+      );
     }
 
-    return Container(
-      width: double.infinity,
-      clipBehavior: Clip.antiAlias,
-      padding: EdgeInsets.symmetric(
-        horizontal: isMobile ? 14 : 20,
-        vertical: isMobile ? 16 : 24,
+    final defaultMax = (screenHeight * 0.60).clamp(400.0, 680.0);
+    final effectiveMaxHeight = widget.maxHeight ?? defaultMax;
+
+    final isFormatLong = EmailHtmlView.isLongFormat(widget.html, widget.text);
+
+    final scrollableBody = ConstrainedBox(
+      constraints: BoxConstraints(
+        minHeight: 0,
+        maxHeight: effectiveMaxHeight,
+        maxWidth: (isMobile || !isFormatLong) ? double.infinity : 740.0,
       ),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: widget.isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: widget.isDark ? 0.2 : 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+      child: Scrollbar(
+        controller: _scrollController,
+        thumbVisibility: false,
+        child: SingleChildScrollView(
+          controller: _scrollController,
+          physics: const ClampingScrollPhysics(),
+          child: SizedBox(
+            width: double.infinity,
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: htmlContentWidget,
+            ),
           ),
-        ],
-      ),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 760),
-          child: fallbackWidget,
         ),
       ),
     );
+
+    if (isFormatLong && !isMobile) {
+      return Center(child: scrollableBody);
+    } else {
+      return Align(
+        alignment: Alignment.topLeft,
+        child: scrollableBody,
+      );
+    }
   }
 }

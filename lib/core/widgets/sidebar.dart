@@ -403,8 +403,10 @@ class _SidebarState extends ConsumerState<Sidebar> {
       );
     }
 
+    final currentRoute = GoRouterState.of(context).uri.toString();
+
     // If Chat/Colab section is active, show the specialized sidebar as per the screenshot
-    if (uiState.activeFolder == 'Chat' || uiState.activeFolder == 'Casbox') {
+    if (currentRoute == '/colab') {
       return AnnotatedRegion<SystemUiOverlayStyle>(
         value: SystemUiOverlayStyle(
           statusBarColor: Colors.transparent,
@@ -785,11 +787,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
   }) {
     final currentRoute = GoRouterState.of(context).uri.toString();
     final labelsVis = uiState.sidebarLabelVisibility;
-    final isColab =
-        currentRoute == '/colab' ||
-        uiState.activeFolder == 'Chat' ||
-        uiState.activeFolder == 'Casbox' ||
-        uiState.activeFolder == 'Colab';
+    final isColab = currentRoute == '/colab';
 
     return Container(
       color: isDark ? BNXColors.darkBg : const Color(0xFFE9F4FF),

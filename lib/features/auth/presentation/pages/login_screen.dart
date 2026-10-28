@@ -152,6 +152,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       }
 
       if (mounted) {
+        ref.read(appUiProvider.notifier).selectFolder('Inbox');
+        ref.read(emailProvider.notifier).initialLoad();
+        Future.microtask(() {
+          try {
+            ref.read(accountsProvider.notifier).loadMailboxes();
+            ref.read(colabListProvider.notifier).loadGroups();
+            ref.read(colabInvitationsProvider.notifier).loadInvitations();
+            ref.read(casboxMessagesProvider.notifier).fetchMessages();
+            ref.read(casboxConnectionsProvider.notifier).fetchConnections();
+            ref.read(casboxBlockedContactsProvider.notifier).fetchBlockedContacts();
+            ref.read(casboxAliasesProvider.notifier).fetchAliases();
+          } catch (_) {}
+        });
         context.go('/home');
       }
     } else if (mounted && _loginNotifier.value.generalError != null) {

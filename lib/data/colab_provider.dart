@@ -513,6 +513,8 @@ class CasboxMessage {
   final List<AttachmentModel> attachments;
   final bool isArchived;
   final bool isEdited;
+  final String? contactDisplayName;
+  final String? contactUsername;
 
   CasboxMessage({
     required this.id,
@@ -527,6 +529,8 @@ class CasboxMessage {
     this.attachments = const [],
     this.isArchived = false,
     this.isEdited = false,
+    this.contactDisplayName,
+    this.contactUsername,
   });
 
   CasboxMessage copyWith({
@@ -542,6 +546,8 @@ class CasboxMessage {
     List<AttachmentModel>? attachments,
     bool? isArchived,
     bool? isEdited,
+    String? contactDisplayName,
+    String? contactUsername,
   }) {
     return CasboxMessage(
       id: id ?? this.id,
@@ -556,6 +562,8 @@ class CasboxMessage {
       attachments: attachments ?? this.attachments,
       isArchived: isArchived ?? this.isArchived,
       isEdited: isEdited ?? this.isEdited,
+      contactDisplayName: contactDisplayName ?? this.contactDisplayName,
+      contactUsername: contactUsername ?? this.contactUsername,
     );
   }
 
@@ -652,11 +660,42 @@ class CasboxMessage {
           .toList();
     }
 
+    bool toBool(dynamic v) {
+      if (v == null) return false;
+      if (v is bool) return v;
+      if (v is num) return v != 0;
+      final s = v.toString().trim().toLowerCase();
+      return s == 'true' || s == '1';
+    }
+
     final rawStatus = (json['status']?.toString() ?? 'SENT').trim().toUpperCase();
-    final isReadMsg = (json['isRead'] as bool? ?? false) ||
+    final isReadMsg = toBool(json['isRead']) ||
         rawStatus == 'SEEN' ||
         rawStatus == 'READ' ||
         rawStatus == 'ACCEPTED';
+
+    final sEmail = _parseEmailString(json['senderEmail'] ?? json['sender'] ?? json['contactEmail'] ?? json['from'] ?? json['userEmail'])?.toLowerCase().trim() ?? '';
+    final rEmail = _parseEmailString(json['receiverEmail'] ?? json['to'] ?? json['recipient'] ?? json['contactEmail'])?.toLowerCase().trim() ?? '';
+
+    final bool isArchivedMsg;
+    if (json.containsKey('isArchived') && json['isArchived'] != null) {
+      isArchivedMsg = toBool(json['isArchived']);
+    } else if (json.containsKey('archived') && json['archived'] != null) {
+      isArchivedMsg = toBool(json['archived']);
+    } else if (json.containsKey('senderArchived') || json.containsKey('receiverArchived')) {
+      final senderArchived = toBool(json['senderArchived']);
+      final receiverArchived = toBool(json['receiverArchived']);
+      final curEmail = (json['currentUserEmail'] ?? json['currentEmail'])?.toString().toLowerCase().trim() ?? '';
+      if (curEmail.isNotEmpty && curEmail == sEmail) {
+        isArchivedMsg = senderArchived;
+      } else if (curEmail.isNotEmpty && curEmail == rEmail) {
+        isArchivedMsg = receiverArchived;
+      } else {
+        isArchivedMsg = senderArchived && receiverArchived;
+      }
+    } else {
+      isArchivedMsg = false;
+    }
 
     return CasboxMessage(
       id:
@@ -676,15 +715,19 @@ class CasboxMessage {
           json['text']?.toString() ??
           '',
       timestamp: date,
-      isStarred: json['isStarred'] as bool? ?? false,
+      isStarred: toBool(json['isStarred']),
       isRead: isReadMsg,
       status: rawStatus,
       attachments: attachments,
-      isArchived: (json['isArchived'] as bool? ?? false) ||
-          (json['archived'] as bool? ?? false) ||
-          (json['senderArchived'] as bool? ?? false) ||
-          (json['receiverArchived'] as bool? ?? false),
-      isEdited: json['isEdited'] as bool? ?? false,
+      isArchived: isArchivedMsg,
+      isEdited: toBool(json['isEdited']) || toBool(json['edited']),
+      contactDisplayName: json['contactDisplayName']?.toString() ??
+          json['customName']?.toString() ??
+          json['senderDisplayName']?.toString() ??
+          json['receiverDisplayName']?.toString(),
+      contactUsername: json['contactUsername']?.toString() ??
+          json['senderUsername']?.toString() ??
+          json['receiverUsername']?.toString(),
     );
   }
 
@@ -711,12 +754,16 @@ class CasboxMessagesNotifier extends StateNotifier<List<CasboxMessage>> {
 
   bool isLoading = false;
   final Set<String> _readIds = {};
+  final Set<String> _explicitlyArchivedIds = {};
+  final Set<String> _explicitlyUnarchivedIds = {};
   final Map<String, List<CasboxMessage>> _accountCaches = {};
   String _currentAccountId = 'default';
 
   void clear() {
     state = const [];
     _readIds.clear();
+    _explicitlyArchivedIds.clear();
+    _explicitlyUnarchivedIds.clear();
     _accountCaches.clear();
   }
 
@@ -725,6 +772,8 @@ class CasboxMessagesNotifier extends StateNotifier<List<CasboxMessage>> {
       _accountCaches[_currentAccountId] = state;
     }
     _currentAccountId = accountId;
+    _explicitlyArchivedIds.clear();
+    _explicitlyUnarchivedIds.clear();
     if (_accountCaches.containsKey(accountId)) {
       state = _accountCaches[accountId]!;
       fetchMessages(); // Background fetch
@@ -748,6 +797,7 @@ class CasboxMessagesNotifier extends StateNotifier<List<CasboxMessage>> {
     final acceptedSenders = await TokenService.getAcceptedCasboxSenders();
     final rejectedSenders = await TokenService.getRejectedCasboxSenders();
     final readIds = await TokenService.getReadCasboxIds();
+    await TokenService.clearCasboxArchivePersistence();
 
     final fetched = await CasboxRepository.fetchCasbox();
     print('[DIAGNOSTIC] fetchMessages() retrieved ${fetched.length} messages from server.');
@@ -832,9 +882,14 @@ class CasboxMessagesNotifier extends StateNotifier<List<CasboxMessage>> {
               m.status.toUpperCase() == 'SEEN' ||
               readIds.contains(m.id) ||
               _readIds.contains(m.id);
-          final isArchived = _localArchivedIds.contains(m.id)
-              ? true
-              : (_localUnarchivedIds.contains(m.id) ? false : m.isArchived);
+
+          bool isArchived = m.isArchived;
+          if (_explicitlyUnarchivedIds.contains(m.id)) {
+            isArchived = false;
+          } else if (_explicitlyArchivedIds.contains(m.id)) {
+            isArchived = true;
+          }
+
           return m.copyWith(isRead: isRead, isArchived: isArchived);
         })
         .toList()
@@ -1090,51 +1145,65 @@ class CasboxMessagesNotifier extends StateNotifier<List<CasboxMessage>> {
     }
   }
 
-  final Set<String> _localArchivedIds = {};
-  final Set<String> _localUnarchivedIds = {};
-
   Future<void> archiveMessage(dynamic messageId, [bool archived = true]) async {
     final strId = messageId.toString();
     if (archived) {
-      _localArchivedIds.add(strId);
-      _localUnarchivedIds.remove(strId);
+      _explicitlyArchivedIds.add(strId);
+      _explicitlyUnarchivedIds.remove(strId);
     } else {
-      _localUnarchivedIds.add(strId);
-      _localArchivedIds.remove(strId);
+      _explicitlyUnarchivedIds.add(strId);
+      _explicitlyArchivedIds.remove(strId);
     }
+
+    // 1. Optimistic update
     state = state.map((m) {
       if (m.id == strId) {
         return m.copyWith(isArchived: archived);
       }
       return m;
     }).toList();
+
+    // 2. Seamlessly call backend API
     try {
       await CasboxRepository.archiveMessage(messageId, archived);
+      print('[CASBOX NOTIFIER] archiveMessage backend call completed for $messageId (archived=$archived)');
     } catch (e) {
-      print('[CASBOX WARNING] archiveMessage failed: $e');
+      print('[CASBOX NOTIFIER ERROR] archiveMessage backend call failed: $e');
     }
+
+    // 3. Immediately retrieve fresh state from the backend API each time
+    await fetchMessages();
   }
 
   Future<void> batchArchiveMessages(List<dynamic> messageIds, [bool archived = true]) async {
+    if (messageIds.isEmpty) return;
     final strIds = messageIds.map((id) => id.toString()).toSet();
     if (archived) {
-      _localArchivedIds.addAll(strIds);
-      _localUnarchivedIds.removeAll(strIds);
+      _explicitlyArchivedIds.addAll(strIds);
+      _explicitlyUnarchivedIds.removeAll(strIds);
     } else {
-      _localUnarchivedIds.addAll(strIds);
-      _localArchivedIds.removeAll(strIds);
+      _explicitlyUnarchivedIds.addAll(strIds);
+      _explicitlyArchivedIds.removeAll(strIds);
     }
+
+    // 1. Optimistic update
     state = state.map((m) {
       if (strIds.contains(m.id)) {
         return m.copyWith(isArchived: archived);
       }
       return m;
     }).toList();
+
+    // 2. Seamlessly call backend API
     try {
       await CasboxRepository.batchArchiveMessages(messageIds, archived);
+      print('[CASBOX NOTIFIER] batchArchiveMessages backend call completed for ${messageIds.length} msgs (archived=$archived)');
     } catch (e) {
-      print('[CASBOX WARNING] batchArchiveMessages failed: $e');
+      print('[CASBOX NOTIFIER ERROR] batchArchiveMessages backend call failed: $e');
     }
+
+    // 3. Immediately retrieve fresh state from the backend API each time
+    await fetchMessages();
   }
 
   Future<void> deleteConversation(String contactEmail) async {
@@ -1254,40 +1323,183 @@ class CasboxConnectionsNotifier
 
   bool isLoading = false;
 
-  Future<void> fetchConnections() async {
+  Future<void> fetchConnections([String? userEmail]) async {
     isLoading = true;
     try {
-      final accepted = await CasboxRepository.getAcceptedConnections();
-      final all = await CasboxRepository.getAllConnections();
-      final authorized = await CasboxRepository.getAuthorizedContacts();
+      final myEmail = (userEmail ?? await TokenService.getUserEmail() ?? '')
+          .trim()
+          .toLowerCase();
+      final myHandle = myEmail.contains('@') ? myEmail.split('@').first.toLowerCase() : myEmail;
 
+      // API 12: GET /api/connections/accepted - exactly matching web Casbox.jsx
+      final accepted = await CasboxRepository.getAcceptedConnections();
+      final savedAccounts = await TokenService.getSavedAccountsFromRegistry();
       final merged = <String, Map<String, dynamic>>{};
-      for (final c in all) {
-        final email =
-            c['email']?.toString() ?? c['contactEmail']?.toString() ?? '';
-        if (email.isNotEmpty) merged[email.toLowerCase()] = c;
-      }
+
       for (final c in accepted) {
-        final email =
-            c['email']?.toString() ?? c['contactEmail']?.toString() ?? '';
-        if (email.isNotEmpty) {
-          merged[email.toLowerCase()] = {
-            ...(merged[email.toLowerCase()] ?? {}),
-            ...c,
-            'status': 'CONNECTED'
-          };
+        final uEmail = (c['userEmail'] ?? c['senderEmail'] ?? '').toString().trim().toLowerCase();
+        final cEmail = (c['connectedUserEmail'] ?? c['receiverEmail'] ?? c['contactEmail'] ?? c['email'] ?? '').toString().trim().toLowerCase();
+        final uHandle = uEmail.contains('@') ? uEmail.split('@').first.toLowerCase() : uEmail;
+        final cHandle = cEmail.contains('@') ? cEmail.split('@').first.toLowerCase() : cEmail;
+
+        String peerEmail = '';
+        String peerName = '';
+        dynamic peerUserId;
+        bool isSender = false;
+
+        if (myEmail.isNotEmpty && (uEmail == myEmail || uHandle == myHandle)) {
+          isSender = true;
+          peerEmail = cEmail;
+          peerName = (c['connectedUserName'] ?? c['receiverName'] ?? c['name'] ?? '').toString();
+          peerUserId = c['connectedUserId'];
+        } else if (myEmail.isNotEmpty && (cEmail == myEmail || cHandle == myHandle)) {
+          isSender = false;
+          peerEmail = uEmail;
+          peerName = (c['userName'] ?? c['senderName'] ?? c['name'] ?? '').toString();
+          peerUserId = c['userId'];
+        } else {
+          peerEmail = cEmail.isNotEmpty ? cEmail : uEmail;
+          peerName = (c['connectedUserName'] ?? c['userName'] ?? c['name'] ?? '').toString();
+          peerUserId = c['connectedUserId'] ?? c['userId'];
         }
+
+        if (peerEmail.isEmpty) continue;
+
+        final rawHandle = peerEmail.contains('@') ? peerEmail.split('@').first : peerEmail;
+        final normHandle = rawHandle.toLowerCase();
+
+        // Never list the authenticated user as a contact to themselves!
+        if (myHandle.isNotEmpty && normHandle == myHandle) continue;
+        if (myEmail.isNotEmpty && peerEmail == myEmail) continue;
+
+        final rawStatus = c['status']?.toString().toUpperCase() ?? 'CONNECTED';
+        final displayName = (c['customName'] ?? peerName).toString().trim();
+
+        // Check avatar from connection record
+        String? avatarUrl;
+        final rawAvatar = (isSender
+                ? (c['connectedUserProfilePictureUrl'] ??
+                    c['connectedUserProfilePicture'] ??
+                    c['connectedUserAvatarUrl'] ??
+                    c['connectedUserAvatar'] ??
+                    c['receiverProfilePictureUrl'] ??
+                    c['receiverAvatarUrl'])
+                : (c['userProfilePictureUrl'] ??
+                    c['userProfilePicture'] ??
+                    c['userAvatarUrl'] ??
+                    c['userAvatar'] ??
+                    c['senderProfilePictureUrl'] ??
+                    c['senderAvatarUrl'])) ??
+            c['avatarUrl'] ??
+            c['avatar'] ??
+            c['profilePictureUrl'] ??
+            c['profilePicture'] ??
+            c['photoUrl'];
+
+        if (rawAvatar != null &&
+            rawAvatar.toString().trim().isNotEmpty &&
+            rawAvatar.toString() != 'null') {
+          avatarUrl = rawAvatar.toString().trim();
+        }
+
+        // Check locally saved user avatar
+        if (avatarUrl == null || avatarUrl.isEmpty) {
+          final localAvatar = await TokenService.getUserAvatar(peerEmail) ??
+              await TokenService.getUserAvatar(normHandle);
+          if (localAvatar != null &&
+              localAvatar.trim().isNotEmpty &&
+              localAvatar.trim() != 'null') {
+            avatarUrl = localAvatar.trim();
+          }
+        }
+
+        // Check saved accounts registry
+        if (avatarUrl == null || avatarUrl.isEmpty) {
+          for (final acc in savedAccounts) {
+            final accEmail =
+                (acc['email'] ?? '').toString().trim().toLowerCase();
+            final accHandle =
+                accEmail.contains('@') ? accEmail.split('@').first : accEmail;
+            if (accEmail == peerEmail || accHandle == normHandle) {
+              final av =
+                  (acc['avatarUrl'] ?? acc['avatar'] ?? '').toString().trim();
+              if (av.isNotEmpty && av != 'null') {
+                avatarUrl = av;
+                break;
+              }
+            }
+          }
+        }
+
+        // Fallback to server user profile picture endpoint
+        avatarUrl ??= '/api/users/profile-picture/$normHandle';
+
+        // Key by normHandle so chandran123 and chandran123@bnxmail.com NEVER produce duplicates!
+        final existing = merged[normHandle];
+        merged[normHandle] = {
+          'id': c['id'] ?? existing?['id'],
+          'connectionId': c['id'] ?? existing?['connectionId'],
+          'email': peerEmail,
+          'contactEmail': peerEmail,
+          'name': displayName.isNotEmpty ? displayName : (existing?['name'] ?? rawHandle),
+          'handle': '@$rawHandle',
+          'letter': rawHandle.isNotEmpty ? rawHandle[0].toUpperCase() : 'U',
+          'status': rawStatus,
+          'contactUserId': peerUserId ?? existing?['contactUserId'],
+          'avatarUrl': avatarUrl,
+          'isPhoto': avatarUrl.isNotEmpty,
+        };
       }
-      for (final authEmail in authorized) {
-        if (!merged.containsKey(authEmail.toLowerCase())) {
-          merged[authEmail.toLowerCase()] = {
-            'email': authEmail,
+
+      // If accepted connections returned empty, fallback to authorized contacts
+      if (merged.isEmpty) {
+        final authorized = await CasboxRepository.getAuthorizedContacts();
+        for (final authEmail in authorized) {
+          final clean = authEmail.trim().toLowerCase();
+          if (clean.isEmpty) continue;
+          final rawHandle = clean.contains('@') ? clean.split('@').first : clean;
+          final normHandle = rawHandle.toLowerCase();
+          if (myHandle.isNotEmpty && normHandle == myHandle) continue;
+          if (myEmail.isNotEmpty && clean == myEmail) continue;
+
+          String? avatarUrl = await TokenService.getUserAvatar(clean) ??
+              await TokenService.getUserAvatar(normHandle);
+          if (avatarUrl == null || avatarUrl.isEmpty) {
+            for (final acc in savedAccounts) {
+              final accEmail =
+                  (acc['email'] ?? '').toString().trim().toLowerCase();
+              final accHandle =
+                  accEmail.contains('@') ? accEmail.split('@').first : accEmail;
+              if (accEmail == clean || accHandle == normHandle) {
+                final av =
+                    (acc['avatarUrl'] ?? acc['avatar'] ?? '').toString().trim();
+                if (av.isNotEmpty && av != 'null') {
+                  avatarUrl = av;
+                  break;
+                }
+              }
+            }
+          }
+          avatarUrl ??= '/api/users/profile-picture/$normHandle';
+
+          merged[normHandle] = {
+            'id': null,
+            'connectionId': null,
+            'email': clean,
+            'contactEmail': clean,
+            'name': rawHandle,
+            'handle': '@$rawHandle',
+            'letter': rawHandle.isNotEmpty ? rawHandle[0].toUpperCase() : 'U',
             'status': 'CONNECTED',
+            'avatarUrl': avatarUrl,
+            'isPhoto': avatarUrl.isNotEmpty,
           };
         }
       }
+
       if (mounted) {
         state = merged.values.toList();
+        print('[CASBOX CONNECTIONS] fetchConnections loaded ${state.length} unique connections (no duplicates)');
       }
     } catch (e) {
       print('[CASBOX CONNECTIONS] fetch error: $e');
@@ -1297,19 +1509,59 @@ class CasboxConnectionsNotifier
   }
 
   Future<void> updateConnectionStatus(
-      dynamic connectionId, String status) async {
+      dynamic connectionIdOrEmail, String status) async {
+    final strTarget = connectionIdOrEmail.toString().trim().toLowerCase();
+    final newStatus = status.toUpperCase();
+    dynamic numericId;
+    String? contactEmail;
+
     state = state.map((c) {
-      if (c['id']?.toString() == connectionId.toString() ||
-          c['email']?.toString().toLowerCase() ==
-              connectionId.toString().toLowerCase()) {
-        return {...c, 'status': status.toUpperCase()};
+      final cId = c['id']?.toString() ?? c['connectionId']?.toString();
+      final cEmail = c['email']?.toString().toLowerCase().trim() ?? '';
+      final matchesId = cId != null && cId == strTarget;
+      final matchesEmail = cEmail.isNotEmpty &&
+          (cEmail == strTarget ||
+              (strTarget.contains('@') && cEmail == strTarget.split('@').first) ||
+              (!strTarget.contains('@') && cEmail.startsWith('$strTarget@')));
+
+      if (matchesId || matchesEmail) {
+        numericId = c['id'] ?? c['connectionId'];
+        contactEmail = cEmail;
+        return {...c, 'status': newStatus};
       }
       return c;
     }).toList();
+
+    if (numericId == null && int.tryParse(strTarget) != null) {
+      numericId = int.parse(strTarget);
+    }
+    contactEmail ??= strTarget;
+
+    if (numericId != null && int.tryParse(numericId.toString()) != null) {
+      try {
+        await CasboxRepository.updateConnectionStatus(numericId, newStatus);
+      } catch (e) {
+        print('[CASBOX CONNECTIONS] update error: $e');
+      }
+    }
+
     try {
-      await CasboxRepository.updateConnectionStatus(connectionId, status);
+      final currentAuth = await CasboxRepository.getAuthorizedContacts();
+      final clean = contactEmail!.toLowerCase().trim();
+      final updated = List<String>.from(currentAuth);
+      if (newStatus == 'CONNECTED') {
+        if (!updated.contains(clean)) {
+          updated.add(clean);
+        }
+      } else {
+        updated.remove(clean);
+        if (clean.contains('@')) {
+          updated.remove(clean.split('@').first);
+        }
+      }
+      await CasboxRepository.updateAuthorizedContacts(updated);
     } catch (e) {
-      print('[CASBOX CONNECTIONS] update error: $e');
+      print('[CASBOX CONNECTIONS] authorized contacts update error: $e');
     }
   }
 }
