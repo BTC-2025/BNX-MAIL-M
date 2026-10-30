@@ -101,8 +101,12 @@ class AttachmentModel {
 
   Map<String, dynamic> toJson() => {
     'filename': fileName,
+    'name': fileName,
     'contentType': fileType,
     'fileSize': fileSize,
+    'size': fileSize,
+    if (filePath != null) 'url': filePath,
+    if (filePath != null) 'filePath': filePath,
   };
 
   AttachmentModel copyWith({

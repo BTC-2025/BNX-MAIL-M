@@ -1,6 +1,7 @@
 import 'dart:convert';
 import '../../models/attachment_model.dart';
 import '../../core/network/api_client.dart';
+import '../../core/network/token_service.dart';
 import '../colab_provider.dart';
 
 class CasboxRepository {
@@ -48,7 +49,7 @@ class CasboxRepository {
     return null;
   }
 
-  static List<CasboxMessage> _parseMessagesFromResponse(dynamic res) {
+  static List<CasboxMessage> _parseMessagesFromResponse(dynamic res, [String? currentUserEmail]) {
     final rawList = _extractList(res);
     if (rawList == null) return [];
 
@@ -81,11 +82,17 @@ class CasboxRepository {
                 if (!msgMap.containsKey('status')) 'status': status,
                 if (!msgMap.containsKey('threadId') && threadId.isNotEmpty)
                   'threadId': threadId,
-              }));
+                if (currentUserEmail != null && currentUserEmail.isNotEmpty)
+                  'currentUserEmail': currentUserEmail,
+              }, currentUserEmail));
             }
           }
         } else {
-          result.add(CasboxMessage.fromJson(itemMap));
+          result.add(CasboxMessage.fromJson({
+            ...itemMap,
+            if (currentUserEmail != null && currentUserEmail.isNotEmpty)
+              'currentUserEmail': currentUserEmail,
+          }, currentUserEmail));
         }
       }
     }
@@ -96,7 +103,11 @@ class CasboxRepository {
 
   /// API 1: Fetch All Messages: GET /api/casbox
   /// Retrieves incoming and outgoing Cashbox messages for authenticated user.
-  static Future<List<CasboxMessage>> fetchCasbox() async {
+  static Future<List<CasboxMessage>> fetchCasbox([String? userEmail]) async {
+    final curEmail = (userEmail != null && userEmail.trim().isNotEmpty)
+        ? userEmail.trim()
+        : (await TokenService.getUserEmail() ?? '');
+
     dynamic res;
     final candidateEndpoints = [
       '/api/casbox',
@@ -115,16 +126,20 @@ class CasboxRepository {
     }
 
     if (res != null) {
-      return _parseMessagesFromResponse(res);
+      return _parseMessagesFromResponse(res, curEmail);
     }
     return [];
   }
 
   /// API 2: Fetch Conversation Thread: GET /api/casbox/thread/{contactEmail}
   /// Retrieves historical messages between user and counterpart sorted timestamp ASC.
-  static Future<List<CasboxMessage>> fetchThread(String contactEmail) async {
+  static Future<List<CasboxMessage>> fetchThread(String contactEmail, [String? userEmail]) async {
     final cleanContact = contactEmail.trim();
     if (cleanContact.isEmpty) return [];
+
+    final curEmail = (userEmail != null && userEmail.trim().isNotEmpty)
+        ? userEmail.trim()
+        : (await TokenService.getUserEmail() ?? '');
 
     final encoded = Uri.encodeComponent(cleanContact);
     dynamic res;
@@ -144,7 +159,7 @@ class CasboxRepository {
     }
 
     if (res != null) {
-      return _parseMessagesFromResponse(res);
+      return _parseMessagesFromResponse(res, curEmail);
     }
     return [];
   }

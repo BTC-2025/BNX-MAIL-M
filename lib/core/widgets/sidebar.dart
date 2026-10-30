@@ -12,6 +12,7 @@ import '../../data/repositories/storage_repository.dart';
 import '../../data/repositories/mail_repository.dart';
 import '../../models/email_model.dart';
 import '../../models/label_model.dart';
+import '../../data/colab_provider.dart';
 import '../theme/colors.dart';
 import '../theme/neumorphic.dart';
 import 'create_label_dialog.dart';
@@ -26,6 +27,7 @@ class Sidebar extends ConsumerStatefulWidget {
 
 class _SidebarState extends ConsumerState<Sidebar> {
   bool _isMoreExpanded = false;
+  bool _isColabExpanded = true;
 
   Set<String> get _activeToolNames => ref.watch(appUiProvider).activeToolNames;
 
@@ -495,16 +497,76 @@ class _SidebarState extends ConsumerState<Sidebar> {
                         title: 'Casbox',
                         isSelected: uiState.activeFolder == 'Casbox',
                         collapsed: isCollapsed,
-                        onTap: () => navigateToFolder('Casbox', '/colab'),
+                        onTap: () {
+                          ref.read(selectedColabIdProvider.notifier).state = null;
+                          ref.read(selectedCasboxThreadProvider.notifier).state = null;
+                          navigateToFolder('Casbox', '/colab');
+                        },
                       ),
                       // "Colab" section button
                       _buildPillTile(
                         icon: Icons.people_alt_outlined,
                         title: 'Colab',
-                        isSelected: uiState.activeFolder == 'Chat',
+                        isSelected:
+                            uiState.activeFolder == 'Chat' ||
+                            uiState.activeFolder == 'Colab',
                         collapsed: isCollapsed,
-                        onTap: () => navigateToFolder('Chat', '/colab'),
+                        trailing: InkWell(
+                          onTap: () {
+                            setState(() {
+                              _isColabExpanded = !_isColabExpanded;
+                            });
+                          },
+                          child: Icon(
+                            _isColabExpanded
+                                ? Icons.keyboard_arrow_up_rounded
+                                : Icons.keyboard_arrow_down_rounded,
+                            size: 18,
+                            color: (uiState.activeFolder == 'Chat' ||
+                                    uiState.activeFolder == 'Colab')
+                                ? const Color(0xFF195BAC)
+                                : (isDark ? Colors.white60 : Colors.grey),
+                          ),
+                        ),
+                        onTap: () {
+                          ref.read(selectedColabIdProvider.notifier).state = null;
+                          ref.read(selectedCasboxThreadProvider.notifier).state = null;
+                          if (!_isColabExpanded) {
+                            setState(() => _isColabExpanded = true);
+                          }
+                          navigateToFolder('Colab', '/colab');
+                        },
                       ),
+                      if (_isColabExpanded) ...[
+                        _buildPillTile(
+                          icon: Icons.archive_outlined,
+                          title: 'Archive',
+                          isSelected: uiState.activeFolder == 'ColabArchive' ||
+                              uiState.activeFolder == 'Archive',
+                          hasLeftBar: true,
+                          indent: 14.0,
+                          collapsed: isCollapsed,
+                          onTap: () {
+                            ref.read(selectedColabIdProvider.notifier).state = null;
+                            ref.read(selectedCasboxThreadProvider.notifier).state = null;
+                            navigateToFolder('ColabArchive', '/colab');
+                          },
+                        ),
+                        _buildPillTile(
+                          icon: Icons.star_border_rounded,
+                          title: 'Star',
+                          isSelected: uiState.activeFolder == 'ColabStar' ||
+                              uiState.activeFolder == 'Star',
+                          hasLeftBar: true,
+                          indent: 14.0,
+                          collapsed: isCollapsed,
+                          onTap: () {
+                            ref.read(selectedColabIdProvider.notifier).state = null;
+                            ref.read(selectedCasboxThreadProvider.notifier).state = null;
+                            navigateToFolder('ColabStar', '/colab');
+                          },
+                        ),
+                      ],
                       const SizedBox(height: 16),
                       // Bottom sections: Settings and Help & Support
                       _buildPillTile(
@@ -806,12 +868,13 @@ class _SidebarState extends ConsumerState<Sidebar> {
                         _buildPillTile(
                           icon: Icons.chat_bubble_outline_rounded,
                           title: 'Casbox',
-                          isSelected:
-                              uiState.activeFolder == 'Casbox' ||
-                              (uiState.activeFolder != 'Chat' &&
-                                  uiState.activeFolder != 'Colab'),
+                          isSelected: uiState.activeFolder == 'Casbox',
                           collapsed: isCollapsed,
-                          onTap: () => navigateToFolder('Casbox', '/colab'),
+                          onTap: () {
+                            ref.read(selectedColabIdProvider.notifier).state = null;
+                            ref.read(selectedCasboxThreadProvider.notifier).state = null;
+                            navigateToFolder('Casbox', '/colab');
+                          },
                         ),
                         _buildPillTile(
                           icon: Icons.people_alt_outlined,
@@ -820,8 +883,65 @@ class _SidebarState extends ConsumerState<Sidebar> {
                               uiState.activeFolder == 'Chat' ||
                               uiState.activeFolder == 'Colab',
                           collapsed: isCollapsed,
-                          onTap: () => navigateToFolder('Chat', '/colab'),
+                          trailing: isCollapsed
+                              ? null
+                              : InkWell(
+                                  onTap: () {
+                                    setState(() {
+                                      _isColabExpanded = !_isColabExpanded;
+                                    });
+                                  },
+                                  child: Icon(
+                                    _isColabExpanded
+                                        ? Icons.keyboard_arrow_up_rounded
+                                        : Icons.keyboard_arrow_down_rounded,
+                                    size: 18,
+                                    color: (uiState.activeFolder == 'Chat' ||
+                                            uiState.activeFolder == 'Colab')
+                                        ? const Color(0xFF195BAC)
+                                        : (isDark ? Colors.white60 : Colors.grey),
+                                  ),
+                                ),
+                          onTap: () {
+                            ref.read(selectedColabIdProvider.notifier).state = null;
+                            ref.read(selectedCasboxThreadProvider.notifier).state = null;
+                            if (!_isColabExpanded) {
+                              setState(() => _isColabExpanded = true);
+                            }
+                            navigateToFolder('Colab', '/colab');
+                          },
                         ),
+                        if (_isColabExpanded && !isCollapsed) ...[
+                          _buildPillTile(
+                            icon: Icons.archive_outlined,
+                            title: 'Archive',
+                            isSelected:
+                                uiState.activeFolder == 'ColabArchive' ||
+                                    uiState.activeFolder == 'Archive',
+                            hasLeftBar: true,
+                            indent: 14.0,
+                            collapsed: isCollapsed,
+                            onTap: () {
+                              ref.read(selectedColabIdProvider.notifier).state = null;
+                              ref.read(selectedCasboxThreadProvider.notifier).state = null;
+                              navigateToFolder('ColabArchive', '/colab');
+                            },
+                          ),
+                          _buildPillTile(
+                            icon: Icons.star_border_rounded,
+                            title: 'Star',
+                            isSelected: uiState.activeFolder == 'ColabStar' ||
+                                uiState.activeFolder == 'Star',
+                            hasLeftBar: true,
+                            indent: 14.0,
+                            collapsed: isCollapsed,
+                            onTap: () {
+                              ref.read(selectedColabIdProvider.notifier).state = null;
+                              ref.read(selectedCasboxThreadProvider.notifier).state = null;
+                              navigateToFolder('ColabStar', '/colab');
+                            },
+                          ),
+                        ],
                       ]
                     : [
                         if (labelsVis['Inbox'] ?? true)
@@ -1323,6 +1443,8 @@ class _SidebarState extends ConsumerState<Sidebar> {
     Widget? trailing,
     required VoidCallback onTap,
     bool collapsed = false,
+    bool hasLeftBar = false,
+    double indent = 0.0,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     const Color activeColor = Color(0xFF195BAC);
@@ -1368,13 +1490,21 @@ class _SidebarState extends ConsumerState<Sidebar> {
 
     // ── Expanded variant (default) ───────────────────────────────────────────
     return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 12, vertical: verticalPadding),
+      padding: EdgeInsets.only(
+        left: 12 + indent,
+        right: 12,
+        top: verticalPadding,
+        bottom: verticalPadding,
+      ),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(24),
         child: Container(
           height: tileHeight,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
+          padding: EdgeInsets.only(
+            left: (hasLeftBar && isSelected) ? 6 : 14,
+            right: 14,
+          ),
           decoration: BoxDecoration(
             color: isSelected
                 ? (isDark ? const Color(0xFF1E293B) : const Color(0xFFD6E8FD))
@@ -1383,6 +1513,17 @@ class _SidebarState extends ConsumerState<Sidebar> {
           ),
           child: Row(
             children: [
+              if (hasLeftBar && isSelected) ...[
+                Container(
+                  width: 3.5,
+                  height: 18,
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(
+                    color: activeColor,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ],
               Icon(
                 icon,
                 color:

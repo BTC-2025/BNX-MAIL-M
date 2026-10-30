@@ -878,3 +878,70 @@ public class CasboxStatusRequest {
   "isEdited": false
 }
 ```
+
+New API listings :
+
+Casbox
+Archive APIs
+Batch Archive / Unarchive Messages:
+
+Method: PATCH
+Endpoint: /api/casbox/archive
+Service:
+
+casboxAPI.updateArchiveStatus(messageIds, archived)
+Request Body:
+json
+{
+  "messageIds": [101, 102],
+  "archived": true
+}
+Backend Controller:
+
+CasboxController.updateArchiveStatus
+Single Message Archive / Unarchive:
+
+Method: PATCH
+Endpoint: /api/casbox/{id}/archive?archived=true (or false)
+Service:
+
+casboxAPI.archiveMessage(id, archived)
+Backend Controller:
+
+CasboxController.archiveMessage
+Client-side State / Cache Keys:
+
+bnx_casbox_archived_message_ids (stores array of archived message IDs)
+bnx_casbox_unarchived_message_ids (stores array of unarchived message IDs)
+Star APIs
+Casbox In-App Message Starring:
+In Casbox, individual chat messages are starred and persisted via user-scoped localStorage:
+bnx_casbox_starred_map_${userKey} & bnx_casbox_starred_map (stores message objects mapped by key)
+bnx_casbox_starred_messages_${userKey} & bnx_casbox_starred_messages (stores list of starred message IDs)
+Linked Email / Thread Starring:
+When a message is synchronized with IMAP mail:
+Method: POST
+Endpoint: /api/mail/star (Query: ?uid={uid}&folder={folder})
+Service: mailAPI.toggleStar(uid, folder)
+2. Colab (Groups & Direct Chat)
+Archive APIs
+Colab Archived Messages / Groups (
+
+src/pages/Groups.jsx
+):
+Casbox Messages in Colab Archive:
+Method: PATCH
+Endpoint: /api/casbox/archive
+Service:
+
+casboxAPI.updateArchiveStatus(targetIds, false)
+Colab Groups Archive:
+Service: chatAPI.archiveGroup(chatId) / chatAPI.archiveChat(chatId)
+Client Storage Key: bnx_colab_archived_group_ids / bnx_colab_archived_group_ids_${userKey}
+Star APIs
+Colab Starred Groups (
+
+src/pages/Groups.jsx
+):
+Service: chatAPI.toggleStarGroup(chat.id) or chatAPI.starGroup(chat.id, isStarred)
+Client Storage Key: bnx_colab_starred_group_ids (stores set of starred group chat IDs)

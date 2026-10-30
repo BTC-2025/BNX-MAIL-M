@@ -5,6 +5,7 @@ import '../models/email_model.dart';
 import 'repositories/casbox_repository.dart';
 import 'repositories/group_repository.dart';
 import '../core/network/token_service.dart';
+import '../core/network/api_client.dart';
 
 // ── Collab Models ─────────────────────────────────────────────────────────
 
@@ -52,6 +53,8 @@ class ColabGroup {
   final String creatorEmail;
   final List<ColabBroadcast> broadcasts;
   final List<ColabComment> comments;
+  final bool isArchived;
+  final bool isStarred;
 
   ColabGroup({
     required this.id,
@@ -67,6 +70,8 @@ class ColabGroup {
     this.creatorEmail = '',
     this.broadcasts = const [],
     this.comments = const [],
+    this.isArchived = false,
+    this.isStarred = false,
   });
 
   ColabGroup copyWith({
@@ -83,6 +88,8 @@ class ColabGroup {
     String? creatorEmail,
     List<ColabBroadcast>? broadcasts,
     List<ColabComment>? comments,
+    bool? isArchived,
+    bool? isStarred,
   }) {
     return ColabGroup(
       id: id ?? this.id,
@@ -98,6 +105,8 @@ class ColabGroup {
       creatorEmail: creatorEmail ?? this.creatorEmail,
       broadcasts: broadcasts ?? this.broadcasts,
       comments: comments ?? this.comments,
+      isArchived: isArchived ?? this.isArchived,
+      isStarred: isStarred ?? this.isStarred,
     );
   }
 }
@@ -159,13 +168,21 @@ class ColabListNotifier extends StateNotifier<List<ColabGroup>> {
     }
   }
 
+  Set<String> _archivedGroupIds = {};
+  Set<String> _starredGroupIds = {};
+
   /// Fetch all groups from GET /api/chat/user/{email}
   Future<void> loadGroups([String? userEmail]) async {
     if (_loading) return;
     _loading = true;
     print('[COLLAB PROVIDER] Loading groups from backend...');
     try {
-      final fetchedGroups = await GroupRepository.fetchGroups(userEmail);
+      final email = (userEmail != null && userEmail.trim().isNotEmpty)
+          ? userEmail.trim()
+          : (await TokenService.getUserEmail() ?? '');
+      _archivedGroupIds = await TokenService.getArchivedColabGroupIds(email);
+      _starredGroupIds = await TokenService.getStarredColabGroupIds(email);
+      final fetchedGroups = await GroupRepository.fetchGroups(email);
 
       // Preserve existing comments & broadcasts for groups already in state to avoid message reset glitches
       final Map<String, ColabGroup> existingMap = {
@@ -174,14 +191,18 @@ class ColabListNotifier extends StateNotifier<List<ColabGroup>> {
 
       final updatedGroups = fetchedGroups.map((newG) {
         final existing = existingMap[newG.id];
+        final isArchived = _archivedGroupIds.contains(newG.id);
+        final isStarred = _starredGroupIds.contains(newG.id);
         if (existing != null) {
           return newG.copyWith(
             comments: existing.comments.isNotEmpty ? existing.comments : newG.comments,
             broadcasts: existing.broadcasts.isNotEmpty ? existing.broadcasts : newG.broadcasts,
             members: newG.members.isNotEmpty ? newG.members : existing.members,
+            isArchived: isArchived,
+            isStarred: isStarred,
           );
         }
-        return newG;
+        return newG.copyWith(isArchived: isArchived, isStarred: isStarred);
       }).toList();
 
       state = updatedGroups;
@@ -190,6 +211,74 @@ class ColabListNotifier extends StateNotifier<List<ColabGroup>> {
       print('[COLLAB ERROR] Failed to load groups: $e');
     } finally {
       _loading = false;
+    }
+  }
+
+  /// Toggle archive status for a Colab group
+  Future<void> toggleArchiveGroup(String groupId) async {
+    final currentGroup = state.firstWhere(
+      (g) => g.id == groupId,
+      orElse: () => ColabGroup(id: groupId, name: '', members: const []),
+    );
+    final willArchive = !currentGroup.isArchived;
+    if (willArchive) {
+      _archivedGroupIds.add(groupId);
+    } else {
+      _archivedGroupIds.remove(groupId);
+    }
+    state = state.map((g) {
+      if (g.id == groupId) {
+        return g.copyWith(isArchived: willArchive);
+      }
+      return g;
+    }).toList();
+    final userEmail = await TokenService.getUserEmail() ?? '';
+    await TokenService.saveArchivedColabGroupIds(_archivedGroupIds, userEmail);
+    print('[COLAB ARCHIVE] Toggled archive for group $groupId, willArchive=$willArchive. Total archived groups: ${_archivedGroupIds.length}');
+  }
+
+  /// Toggle star status for a Colab group
+  Future<void> toggleStarGroup(String groupId) async {
+    final currentGroup = state.firstWhere(
+      (g) => g.id == groupId,
+      orElse: () => ColabGroup(id: groupId, name: '', members: const []),
+    );
+    final willStar = !currentGroup.isStarred;
+    if (willStar) {
+      _starredGroupIds.add(groupId);
+    } else {
+      _starredGroupIds.remove(groupId);
+    }
+    state = state.map((g) {
+      if (g.id == groupId) {
+        return g.copyWith(isStarred: willStar);
+      }
+      return g;
+    }).toList();
+    final userEmail = await TokenService.getUserEmail() ?? '';
+    await TokenService.saveStarredColabGroupIds(_starredGroupIds, userEmail);
+
+    // Call Star APIs for backend sync
+    print('[COLAB STAR] Toggling star for group $groupId, willStar=$willStar');
+    try {
+      await ApiClient.patch('/api/casbox/$groupId/star', body: {'starred': willStar});
+    } catch (_) {
+      try {
+        await ApiClient.post('/api/casbox/$groupId/star', body: {'starred': willStar});
+      } catch (_) {
+        try {
+          await ApiClient.patch('/api/chat/$groupId/star', body: {'starred': willStar});
+          print('[COLAB STAR] PATCH /api/chat/$groupId/star succeeded');
+        } catch (e) {
+          print('[COLAB STAR] PATCH /api/chat/$groupId/star failed: $e, trying POST...');
+          try {
+            await ApiClient.post('/api/chat/$groupId/star', body: {'starred': willStar});
+            print('[COLAB STAR] POST /api/chat/$groupId/star succeeded');
+          } catch (e2) {
+            print('[COLAB STAR] POST also failed: $e2, relying on local persistence');
+          }
+        }
+      }
     }
   }
 
@@ -624,7 +713,7 @@ class CasboxMessage {
     return DateTime.now();
   }
 
-  factory CasboxMessage.fromJson(Map<String, dynamic> json) {
+  factory CasboxMessage.fromJson(Map<String, dynamic> json, [String? currentUserEmail]) {
     final rawDate = json['timestamp'] ??
         json['createdAt'] ??
         json['createdDate'] ??
@@ -676,23 +765,49 @@ class CasboxMessage {
 
     final sEmail = _parseEmailString(json['senderEmail'] ?? json['sender'] ?? json['contactEmail'] ?? json['from'] ?? json['userEmail'])?.toLowerCase().trim() ?? '';
     final rEmail = _parseEmailString(json['receiverEmail'] ?? json['to'] ?? json['recipient'] ?? json['contactEmail'])?.toLowerCase().trim() ?? '';
+    final curEmail = (currentUserEmail ?? json['currentUserEmail'] ?? json['currentEmail'])?.toString().toLowerCase().trim() ?? '';
+
+    final sHandle = sEmail.contains('@') ? sEmail.split('@').first : sEmail;
+    final rHandle = rEmail.contains('@') ? rEmail.split('@').first : rEmail;
+    final curHandle = curEmail.contains('@') ? curEmail.split('@').first : curEmail;
+
+    final isSender = curEmail.isNotEmpty && (curEmail == sEmail || (curHandle.isNotEmpty && curHandle == sHandle));
+    final isReceiver = curEmail.isNotEmpty && (curEmail == rEmail || (curHandle.isNotEmpty && curHandle == rHandle));
+
+    final senderArchivedVal = json['senderArchived'] ?? json['sender_archived'];
+    final receiverArchivedVal = json['receiverArchived'] ?? json['receiver_archived'];
+    final hasSenderArchived = senderArchivedVal != null;
+    final hasReceiverArchived = receiverArchivedVal != null;
 
     final bool isArchivedMsg;
-    if (json.containsKey('isArchived') && json['isArchived'] != null) {
+    if (isSender && hasSenderArchived) {
+      isArchivedMsg = toBool(senderArchivedVal);
+    } else if (isReceiver && hasReceiverArchived) {
+      isArchivedMsg = toBool(receiverArchivedVal);
+    } else if (curEmail.isNotEmpty && (hasSenderArchived || hasReceiverArchived)) {
+      if (json.containsKey('isArchived') && json['isArchived'] != null) {
+        isArchivedMsg = toBool(json['isArchived']);
+      } else if (json.containsKey('is_archived') && json['is_archived'] != null) {
+        isArchivedMsg = toBool(json['is_archived']);
+      } else {
+        isArchivedMsg = toBool(senderArchivedVal) || toBool(receiverArchivedVal);
+      }
+    } else if (hasSenderArchived && hasReceiverArchived) {
+      if (toBool(senderArchivedVal) && toBool(receiverArchivedVal)) {
+        isArchivedMsg = true;
+      } else if (json.containsKey('isArchived') && json['isArchived'] != null) {
+        isArchivedMsg = toBool(json['isArchived']);
+      } else if (json.containsKey('is_archived') && json['is_archived'] != null) {
+        isArchivedMsg = toBool(json['is_archived']);
+      } else {
+        isArchivedMsg = toBool(senderArchivedVal) || toBool(receiverArchivedVal);
+      }
+    } else if (json.containsKey('isArchived') && json['isArchived'] != null) {
       isArchivedMsg = toBool(json['isArchived']);
+    } else if (json.containsKey('is_archived') && json['is_archived'] != null) {
+      isArchivedMsg = toBool(json['is_archived']);
     } else if (json.containsKey('archived') && json['archived'] != null) {
       isArchivedMsg = toBool(json['archived']);
-    } else if (json.containsKey('senderArchived') || json.containsKey('receiverArchived')) {
-      final senderArchived = toBool(json['senderArchived']);
-      final receiverArchived = toBool(json['receiverArchived']);
-      final curEmail = (json['currentUserEmail'] ?? json['currentEmail'])?.toString().toLowerCase().trim() ?? '';
-      if (curEmail.isNotEmpty && curEmail == sEmail) {
-        isArchivedMsg = senderArchived;
-      } else if (curEmail.isNotEmpty && curEmail == rEmail) {
-        isArchivedMsg = receiverArchived;
-      } else {
-        isArchivedMsg = senderArchived && receiverArchived;
-      }
     } else {
       isArchivedMsg = false;
     }
@@ -792,14 +907,16 @@ class CasboxMessagesNotifier extends StateNotifier<List<CasboxMessage>> {
   Future<void> fetchMessages([List<EmailModel>? mailboxEmails]) async {
     isLoading = true;
     CasboxRepository.markAllDelivered();
+    final userEmail = await TokenService.getUserEmail() ?? '';
     final acceptedIds = await TokenService.getAcceptedCasboxIds();
     final rejectedIds = await TokenService.getRejectedCasboxIds();
     final acceptedSenders = await TokenService.getAcceptedCasboxSenders();
     final rejectedSenders = await TokenService.getRejectedCasboxSenders();
     final readIds = await TokenService.getReadCasboxIds();
-    await TokenService.clearCasboxArchivePersistence();
+    final persistentArchivedIds = await TokenService.getArchivedCasboxIds(userEmail);
+    final persistentUnarchivedIds = await TokenService.getUnarchivedCasboxIds(userEmail);
 
-    final fetched = await CasboxRepository.fetchCasbox();
+    final fetched = await CasboxRepository.fetchCasbox(userEmail);
     print('[DIAGNOSTIC] fetchMessages() retrieved ${fetched.length} messages from server.');
 
     final Set<String> allAcceptedSenders = {...acceptedSenders};
@@ -884,9 +1001,9 @@ class CasboxMessagesNotifier extends StateNotifier<List<CasboxMessage>> {
               _readIds.contains(m.id);
 
           bool isArchived = m.isArchived;
-          if (_explicitlyUnarchivedIds.contains(m.id)) {
+          if (_explicitlyUnarchivedIds.contains(m.id) || persistentUnarchivedIds.contains(m.id)) {
             isArchived = false;
-          } else if (_explicitlyArchivedIds.contains(m.id)) {
+          } else if (_explicitlyArchivedIds.contains(m.id) || persistentArchivedIds.contains(m.id)) {
             isArchived = true;
           }
 
@@ -899,7 +1016,10 @@ class CasboxMessagesNotifier extends StateNotifier<List<CasboxMessage>> {
   }
 
   Future<void> fetchThreadMessages(String contactEmail) async {
-    final threadMsgs = await CasboxRepository.fetchThread(contactEmail);
+    final userEmail = await TokenService.getUserEmail() ?? '';
+    final threadMsgs = await CasboxRepository.fetchThread(contactEmail, userEmail);
+    final persistentArchived = await TokenService.getArchivedCasboxIds(userEmail);
+    final persistentUnarchived = await TokenService.getUnarchivedCasboxIds(userEmail);
     print('[DIAGNOSTIC] fetchThreadMessages($contactEmail) retrieved ${threadMsgs.length} messages.');
     
     final merged = <String, CasboxMessage>{};
@@ -907,16 +1027,24 @@ class CasboxMessagesNotifier extends StateNotifier<List<CasboxMessage>> {
       merged[m.id] = m;
     }
     
-    for (final m in threadMsgs) {
+    for (final rawM in threadMsgs) {
       final matchedLocal = state.firstWhere(
         (local) => local.id.startsWith('local_') && 
-                   local.body == m.body && 
-                   local.to.toLowerCase().trim() == m.to.toLowerCase().trim(),
-        orElse: () => m,
+                   local.body == rawM.body && 
+                   local.to.toLowerCase().trim() == rawM.to.toLowerCase().trim(),
+        orElse: () => rawM,
       );
       if (matchedLocal.id.startsWith('local_')) {
         merged.remove(matchedLocal.id);
       }
+
+      bool isArchived = rawM.isArchived;
+      if (_explicitlyUnarchivedIds.contains(rawM.id) || persistentUnarchived.contains(rawM.id)) {
+        isArchived = false;
+      } else if (_explicitlyArchivedIds.contains(rawM.id) || persistentArchived.contains(rawM.id) || (merged[rawM.id]?.isArchived ?? false)) {
+        isArchived = true;
+      }
+      final m = rawM.copyWith(isArchived: isArchived);
       merged[m.id] = m;
     }
     
@@ -1147,12 +1275,15 @@ class CasboxMessagesNotifier extends StateNotifier<List<CasboxMessage>> {
 
   Future<void> archiveMessage(dynamic messageId, [bool archived = true]) async {
     final strId = messageId.toString();
+    final userEmail = await TokenService.getUserEmail() ?? '';
     if (archived) {
       _explicitlyArchivedIds.add(strId);
       _explicitlyUnarchivedIds.remove(strId);
+      await TokenService.saveArchivedCasboxId(strId, userEmail);
     } else {
       _explicitlyUnarchivedIds.add(strId);
       _explicitlyArchivedIds.remove(strId);
+      await TokenService.removeArchivedCasboxId(strId, userEmail);
     }
 
     // 1. Optimistic update
@@ -1178,12 +1309,19 @@ class CasboxMessagesNotifier extends StateNotifier<List<CasboxMessage>> {
   Future<void> batchArchiveMessages(List<dynamic> messageIds, [bool archived = true]) async {
     if (messageIds.isEmpty) return;
     final strIds = messageIds.map((id) => id.toString()).toSet();
+    final userEmail = await TokenService.getUserEmail() ?? '';
     if (archived) {
       _explicitlyArchivedIds.addAll(strIds);
       _explicitlyUnarchivedIds.removeAll(strIds);
+      for (final id in strIds) {
+        await TokenService.saveArchivedCasboxId(id, userEmail);
+      }
     } else {
       _explicitlyUnarchivedIds.addAll(strIds);
       _explicitlyArchivedIds.removeAll(strIds);
+      for (final id in strIds) {
+        await TokenService.removeArchivedCasboxId(id, userEmail);
+      }
     }
 
     // 1. Optimistic update

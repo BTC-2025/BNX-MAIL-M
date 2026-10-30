@@ -154,5 +154,66 @@ void main() {
         debugDefaultTargetPlatformOverride = null;
       }
     });
+
+    testWidgets('On /colab, clicking Archive under Colab in sidebar opens Archive page and does not revert to Casbox', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      try {
+        tester.view.physicalSize = const Size(1280, 800);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final container = ProviderContainer(
+          overrides: [
+            activeAccountProvider.overrideWithValue(
+              const AccountModel(
+                id: '1',
+                name: 'Ravi Kumar',
+                email: 'ravinew2004@bnxmail.com',
+                avatarColor: Color(0xFF195BAC),
+                isActive: true,
+              ),
+            ),
+          ],
+        );
+        try {
+          await tester.pumpWidget(
+            UncontrolledProviderScope(
+              container: container,
+              child: MaterialApp.router(
+                routerConfig: goRouter,
+              ),
+            ),
+          );
+
+          goRouter.go('/colab');
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+
+          // Ensure Archive tile is visible in sidebar under Colab
+          expect(find.text('Archive'), findsWidgets);
+
+          // Click Archive under Colab
+          await tester.tap(find.text('Archive').first);
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+
+          // Active folder must be ColabArchive (not reverted to Casbox)
+          expect(container.read(appUiProvider).activeFolder, equals('ColabArchive'));
+
+          // The Archive page content must be rendered
+          expect(
+            find.text('View and manage your archived messages and colab conversations'),
+            findsOneWidget,
+          );
+        } finally {
+          container.dispose();
+        }
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
   });
 }

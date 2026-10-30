@@ -104,6 +104,8 @@ class DashboardShell extends ConsumerWidget {
         (uiState.activeFolder == 'Casbox' ||
             uiState.activeFolder == 'Chat' ||
             uiState.activeFolder == 'Colab' ||
+            uiState.activeFolder == 'ColabArchive' ||
+            uiState.activeFolder == 'ColabStar' ||
             uiState.activeFolder.trim().isEmpty)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (context.mounted) {
@@ -113,7 +115,11 @@ class DashboardShell extends ConsumerWidget {
     } else if (currentRoute == '/colab' &&
         uiState.activeFolder != 'Casbox' &&
         uiState.activeFolder != 'Chat' &&
-        uiState.activeFolder != 'Colab') {
+        uiState.activeFolder != 'Colab' &&
+        uiState.activeFolder != 'ColabArchive' &&
+        uiState.activeFolder != 'ColabStar' &&
+        uiState.activeFolder != 'Archive' &&
+        uiState.activeFolder != 'Star') {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (context.mounted) {
           ref.read(appUiProvider.notifier).selectFolder('Casbox');
@@ -688,12 +694,15 @@ class DashboardShell extends ConsumerWidget {
                 Expanded(
                   child: TextField(
                     style: const TextStyle(color: Colors.white, fontSize: 13),
-                    decoration: const InputDecoration(
-                      hintText: 'Search mail...',
-                      hintStyle: TextStyle(color: Colors.white60, fontSize: 13),
+                    decoration: InputDecoration(
+                      hintText: isColab
+                          ? 'Search mail... Colab Chat...'
+                          : 'Search mail...',
+                      hintStyle:
+                          const TextStyle(color: Colors.white60, fontSize: 13),
                       border: InputBorder.none,
                       isDense: true,
-                      contentPadding: EdgeInsets.symmetric(vertical: 6),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 6),
                     ),
                     onChanged: (val) {
                       ref.read(appUiProvider.notifier).setSearchQuery(val);

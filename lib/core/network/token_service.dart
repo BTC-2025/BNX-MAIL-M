@@ -574,35 +574,123 @@ class TokenService {
 
   // ── Casbox Archive / Unarchive Persistence ─────────────────────────────────
 
-  static String _kArchivedCasboxIds(String email) => 'bnx_archived_casbox_ids_${email.trim().toLowerCase()}';
-  static String _kUnarchivedCasboxIds(String email) => 'bnx_unarchived_casbox_ids_${email.trim().toLowerCase()}';
+  static List<String> _casboxArchivedKeys(String? userEmail) {
+    final email = userEmail?.trim().toLowerCase() ?? '';
+    final handle = email.contains('@') ? email.split('@').first : email;
+    return [
+      if (email.isNotEmpty) 'bnx_casbox_archived_message_ids_$email',
+      if (handle.isNotEmpty && handle != email) 'bnx_casbox_archived_message_ids_$handle',
+      'bnx_casbox_archived_message_ids',
+      if (email.isNotEmpty) 'bnx_archived_casbox_ids_$email',
+      if (handle.isNotEmpty && handle != email) 'bnx_archived_casbox_ids_$handle',
+      'bnx_archived_casbox_ids',
+    ];
+  }
+
+  static List<String> _casboxUnarchivedKeys(String? userEmail) {
+    final email = userEmail?.trim().toLowerCase() ?? '';
+    final handle = email.contains('@') ? email.split('@').first : email;
+    return [
+      if (email.isNotEmpty) 'bnx_casbox_unarchived_message_ids_$email',
+      if (handle.isNotEmpty && handle != email) 'bnx_casbox_unarchived_message_ids_$handle',
+      'bnx_casbox_unarchived_message_ids',
+      if (email.isNotEmpty) 'bnx_unarchived_casbox_ids_$email',
+      if (handle.isNotEmpty && handle != email) 'bnx_unarchived_casbox_ids_$handle',
+      'bnx_unarchived_casbox_ids',
+    ];
+  }
 
   static Future<void> clearCasboxArchivePersistence() async {
     final email = await getUserEmail() ?? '';
     try {
-      await _safeWrite(key: _kArchivedCasboxIds(email), value: '');
-      await _safeWrite(key: _kUnarchivedCasboxIds(email), value: '');
+      for (final key in _casboxArchivedKeys(email)) {
+        await _safeWrite(key: key, value: '[]');
+      }
+      for (final key in _casboxUnarchivedKeys(email)) {
+        await _safeWrite(key: key, value: '[]');
+      }
     } catch (_) {}
   }
 
-  static Future<Set<String>> getArchivedCasboxIds() async {
+  static Future<Set<String>> getArchivedCasboxIds([String? userEmail]) async {
+    final email = (userEmail != null && userEmail.trim().isNotEmpty)
+        ? userEmail.trim().toLowerCase()
+        : (await getUserEmail() ?? '').trim().toLowerCase();
+    for (final key in _casboxArchivedKeys(email)) {
+      final raw = await _safeRead(key: key);
+      if (raw != null && raw.trim().isNotEmpty) {
+        try {
+          final decoded = jsonDecode(raw.trim());
+          if (decoded is List) {
+            return decoded.map((e) => e.toString()).toSet();
+          }
+        } catch (_) {}
+      }
+    }
     return {};
   }
 
-  static Future<void> saveArchivedCasboxId(String id) async {
-    // No-op: archive state is retrieved directly from backend API
+  static Future<void> saveArchivedCasboxId(String id, [String? userEmail]) async {
+    final email = (userEmail != null && userEmail.trim().isNotEmpty)
+        ? userEmail.trim().toLowerCase()
+        : (await getUserEmail() ?? '').trim().toLowerCase();
+    if (email.isEmpty) return;
+    final current = await getArchivedCasboxIds(email);
+    current.add(id);
+    final val = jsonEncode(current.toList());
+    for (final key in _casboxArchivedKeys(email)) {
+      await _safeWrite(key: key, value: val);
+    }
+
+    final unarchived = await getUnarchivedCasboxIds(email);
+    if (unarchived.remove(id)) {
+      final unVal = jsonEncode(unarchived.toList());
+      for (final key in _casboxUnarchivedKeys(email)) {
+        await _safeWrite(key: key, value: unVal);
+      }
+    }
   }
 
-  static Future<void> removeArchivedCasboxId(String id) async {
-    // No-op
+  static Future<void> removeArchivedCasboxId(String id, [String? userEmail]) async {
+    final email = (userEmail != null && userEmail.trim().isNotEmpty)
+        ? userEmail.trim().toLowerCase()
+        : (await getUserEmail() ?? '').trim().toLowerCase();
+    if (email.isEmpty) return;
+    final current = await getArchivedCasboxIds(email);
+    if (current.remove(id)) {
+      final val = jsonEncode(current.toList());
+      for (final key in _casboxArchivedKeys(email)) {
+        await _safeWrite(key: key, value: val);
+      }
+    }
+    final unarchived = await getUnarchivedCasboxIds(email);
+    unarchived.add(id);
+    final unVal = jsonEncode(unarchived.toList());
+    for (final key in _casboxUnarchivedKeys(email)) {
+      await _safeWrite(key: key, value: unVal);
+    }
   }
 
-  static Future<Set<String>> getUnarchivedCasboxIds() async {
+  static Future<Set<String>> getUnarchivedCasboxIds([String? userEmail]) async {
+    final email = (userEmail != null && userEmail.trim().isNotEmpty)
+        ? userEmail.trim().toLowerCase()
+        : (await getUserEmail() ?? '').trim().toLowerCase();
+    for (final key in _casboxUnarchivedKeys(email)) {
+      final raw = await _safeRead(key: key);
+      if (raw != null && raw.trim().isNotEmpty) {
+        try {
+          final decoded = jsonDecode(raw.trim());
+          if (decoded is List) {
+            return decoded.map((e) => e.toString()).toSet();
+          }
+        } catch (_) {}
+      }
+    }
     return {};
   }
 
-  static Future<void> saveUnarchivedCasboxId(String id) async {
-    // No-op: archive state is retrieved directly from backend API
+  static Future<void> saveUnarchivedCasboxId(String id, [String? userEmail]) async {
+    await removeArchivedCasboxId(id, userEmail);
   }
 
   static Future<void> removeUnarchivedCasboxId(String id) async {
@@ -701,6 +789,88 @@ class TokenService {
 
   static Future<String?> loadLocalColabGroupsRaw() async {
     return await _safeRead(key: 'bnx_local_colab_groups');
+  }
+
+  static List<String> _colabArchiveKeys(String? userEmail) {
+    final email = userEmail?.trim().toLowerCase() ?? '';
+    final handle = email.contains('@') ? email.split('@').first : email;
+    return [
+      if (email.isNotEmpty) 'bnx_colab_archived_group_ids_$email',
+      if (handle.isNotEmpty && handle != email) 'bnx_colab_archived_group_ids_$handle',
+      'bnx_colab_archived_group_ids',
+      if (email.isNotEmpty) 'bnx_archived_colab_group_ids_$email',
+      if (handle.isNotEmpty && handle != email) 'bnx_archived_colab_group_ids_$handle',
+      'bnx_archived_colab_group_ids',
+    ];
+  }
+
+  static List<String> _colabStarKeys(String? userEmail) {
+    final email = userEmail?.trim().toLowerCase() ?? '';
+    final handle = email.contains('@') ? email.split('@').first : email;
+    return [
+      if (email.isNotEmpty) 'bnx_colab_starred_group_ids_$email',
+      if (handle.isNotEmpty && handle != email) 'bnx_colab_starred_group_ids_$handle',
+      'bnx_colab_starred_group_ids',
+      if (email.isNotEmpty) 'bnx_starred_colab_group_ids_$email',
+      if (handle.isNotEmpty && handle != email) 'bnx_starred_colab_group_ids_$handle',
+      'bnx_starred_colab_group_ids',
+    ];
+  }
+
+  static Future<Set<String>> getArchivedColabGroupIds([String? userEmail]) async {
+    final email = (userEmail != null && userEmail.trim().isNotEmpty)
+        ? userEmail.trim().toLowerCase()
+        : (await getUserEmail() ?? '').trim().toLowerCase();
+    for (final key in _colabArchiveKeys(email)) {
+      final raw = await _safeRead(key: key);
+      if (raw != null && raw.trim().isNotEmpty) {
+        try {
+          final decoded = jsonDecode(raw.trim());
+          if (decoded is List) {
+            return decoded.map((e) => e.toString()).toSet();
+          }
+        } catch (_) {}
+      }
+    }
+    return {};
+  }
+
+  static Future<void> saveArchivedColabGroupIds(Set<String> ids, [String? userEmail]) async {
+    final email = (userEmail != null && userEmail.trim().isNotEmpty)
+        ? userEmail.trim().toLowerCase()
+        : (await getUserEmail() ?? '').trim().toLowerCase();
+    final jsonVal = jsonEncode(ids.toList());
+    for (final key in _colabArchiveKeys(email)) {
+      await _safeWrite(key: key, value: jsonVal);
+    }
+  }
+
+  static Future<Set<String>> getStarredColabGroupIds([String? userEmail]) async {
+    final email = (userEmail != null && userEmail.trim().isNotEmpty)
+        ? userEmail.trim().toLowerCase()
+        : (await getUserEmail() ?? '').trim().toLowerCase();
+    for (final key in _colabStarKeys(email)) {
+      final raw = await _safeRead(key: key);
+      if (raw != null && raw.trim().isNotEmpty) {
+        try {
+          final decoded = jsonDecode(raw.trim());
+          if (decoded is List) {
+            return decoded.map((e) => e.toString()).toSet();
+          }
+        } catch (_) {}
+      }
+    }
+    return {};
+  }
+
+  static Future<void> saveStarredColabGroupIds(Set<String> ids, [String? userEmail]) async {
+    final email = (userEmail != null && userEmail.trim().isNotEmpty)
+        ? userEmail.trim().toLowerCase()
+        : (await getUserEmail() ?? '').trim().toLowerCase();
+    final jsonVal = jsonEncode(ids.toList());
+    for (final key in _colabStarKeys(email)) {
+      await _safeWrite(key: key, value: jsonVal);
+    }
   }
 
   // ── Business Onboarding Persistence ──────────────────────────────────────

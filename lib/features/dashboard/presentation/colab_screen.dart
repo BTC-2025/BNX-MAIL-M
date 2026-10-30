@@ -1,12 +1,12 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../core/widgets/ui_components.dart';
 import '../../../core/theme/colors.dart';
-import '../../../core/theme/neumorphic.dart';
 import '../../../data/app_state_provider.dart';
 import '../../../data/account_provider.dart';
 import '../../../models/account_model.dart';
@@ -16,7 +16,60 @@ import '../../../data/repositories/casbox_repository.dart';
 import '../../../models/attachment_model.dart';
 import '../../../models/email_model.dart';
 import '../../../core/widgets/avatar_widget.dart';
+import '../../../core/widgets/email_body.dart';
 import 'package:file_picker/file_picker.dart';
+
+bool checkCasboxMessageSentByMe(
+  CasboxMessage m,
+  String currentUserEmail,
+  List<EmailModel> mailboxEmails,
+) {
+  final s = m.sender.toLowerCase().trim();
+  if (s == 'me' || m.id.startsWith('local_')) return true;
+  if (currentUserEmail.isNotEmpty) {
+    if (s == currentUserEmail) return true;
+    final sHandle = s.contains('@') ? s.split('@').first : s;
+    final meHandle = currentUserEmail.contains('@')
+        ? currentUserEmail.split('@').first
+        : currentUserEmail;
+    if (sHandle.isNotEmpty && sHandle == meHandle) return true;
+  }
+  for (final emailModel in mailboxEmails) {
+    for (final clean in [
+      emailModel.senderEmail.toLowerCase().trim(),
+      emailModel.recipient.toLowerCase().trim(),
+    ]) {
+      if (clean.isNotEmpty) {
+        if (s == clean) return true;
+        final sHandle = s.contains('@') ? s.split('@').first : s;
+        final mbHandle =
+            clean.contains('@') ? clean.split('@').first : clean;
+        if (sHandle.isNotEmpty && sHandle == mbHandle) return true;
+      }
+    }
+  }
+  return false;
+}
+
+(Color, Color) _getCasboxAvatarColors(String name, bool isDark) {
+  if (isDark) {
+    return (const Color(0xFF1E293B), const Color(0xFF93C5FD));
+  }
+  final code = name.toLowerCase().hashCode.abs() % 4;
+  switch (code) {
+    case 0:
+      return (
+        const Color(0xFFFEF3C7),
+        const Color(0xFFD97706),
+      ); // amber / orange
+    case 1:
+      return (const Color(0xFFEDE9FE), const Color(0xFF7C3AED)); // purple
+    case 2:
+      return (const Color(0xFFEFF6FF), const Color(0xFF2563EB)); // blue
+    default:
+      return (const Color(0xFFF0FDF4), const Color(0xFF16A34A)); // green
+  }
+}
 
 class ColabScreen extends ConsumerStatefulWidget {
   const ColabScreen({super.key});
@@ -28,6 +81,13 @@ class ColabScreen extends ConsumerStatefulWidget {
 class _ColabScreenState extends ConsumerState<ColabScreen> {
   bool _isSearching = false;
   final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _colabSearchController = TextEditingController();
+  String _colabSearchQuery = '';
+  final TextEditingController _archiveSearchController = TextEditingController();
+  String _archiveSearchQuery = '';
+  final TextEditingController _starSearchController = TextEditingController();
+  String _starSearchQuery = '';
+  String _archiveFilterTab = 'All';
   Timer? _activeGroupSyncTimer;
 
   @override
@@ -52,6 +112,9 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
   void dispose() {
     _activeGroupSyncTimer?.cancel();
     _searchController.dispose();
+    _colabSearchController.dispose();
+    _archiveSearchController.dispose();
+    _starSearchController.dispose();
     super.dispose();
   }
 
@@ -99,9 +162,7 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
 
     Widget content;
     final selectedGroupId = ref.watch(selectedColabIdProvider);
-    if (uiState.activeFolder == 'Casbox') {
-      content = _buildCasboxView(context, ref, isDark, isMobile);
-    } else if (selectedGroupId != null) {
+    if (selectedGroupId != null) {
       content = _buildColabDetailView(
         context,
         ref,
@@ -109,328 +170,17 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
         isDark,
         isMobile,
       );
+    } else if (uiState.activeFolder == 'Casbox') {
+      content = _buildCasboxView(context, ref, isDark, isMobile);
+    } else if (uiState.activeFolder == 'ColabArchive' ||
+        uiState.activeFolder == 'Archive') {
+      content = _buildColabArchiveView(context, ref, isDark, isMobile);
+    } else if (uiState.activeFolder == 'ColabStar' ||
+        uiState.activeFolder == 'Star' ||
+        uiState.activeFolder == 'Starred') {
+      content = _buildColabStarView(context, ref, isDark, isMobile);
     } else {
-      final groups = ref.watch(colabListProvider);
-      final searchQuery = uiState.searchQuery.toLowerCase();
-      final filteredGroups = groups.where((g) {
-        return g.name.toLowerCase().contains(searchQuery) ||
-            g.desc.toLowerCase().contains(searchQuery);
-      }).toList();
-
-      content = Scaffold(
-        backgroundColor: isDark
-            ? BNXColors.darkSurface
-            : const Color(0xFFE9F4FF),
-        body: RefreshIndicator(
-          onRefresh: () async {
-            await ref.read(colabListProvider.notifier).loadGroups();
-            await ref.read(colabInvitationsProvider.notifier).loadInvitations();
-          },
-          child: CustomScrollView(
-            physics: const BouncingScrollPhysics(
-              parent: AlwaysScrollableScrollPhysics(),
-            ),
-            slivers: [
-              // 1. Header - clean consistent layout with expandable search
-              SliverToBoxAdapter(
-                child: Container(
-                  color: isDark ? BNXColors.darkSurface : Colors.white,
-                  padding: const EdgeInsets.fromLTRB(8, 16, 16, 16),
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 250),
-                    child: _isSearching
-                        ? Row(
-                            key: const ValueKey('searching_mode'),
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.arrow_back_rounded),
-                                onPressed: () {
-                                  setState(() {
-                                    _isSearching = false;
-                                    _searchController.clear();
-                                  });
-                                  ref
-                                      .read(appUiProvider.notifier)
-                                      .setSearchQuery('');
-                                },
-                              ),
-                              Expanded(
-                                child: Container(
-                                  height: 40,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: isDark
-                                        ? BNXColors.darkBg
-                                        : const Color(0xFFE9F4FF),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: TextField(
-                                    controller: _searchController,
-                                    autofocus: true,
-                                    decoration: const InputDecoration(
-                                      hintText: 'Search groups...',
-                                      border: InputBorder.none,
-                                      isDense: true,
-                                      contentPadding: EdgeInsets.symmetric(
-                                        vertical: 10,
-                                      ),
-                                    ),
-                                    style: TextStyle(
-                                      color: isDark
-                                          ? Colors.white
-                                          : BNXColors.lightTextPrimary,
-                                    ),
-                                    onChanged: (val) {
-                                      ref
-                                          .read(appUiProvider.notifier)
-                                          .setSearchQuery(val);
-                                    },
-                                  ),
-                                ),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.close_rounded),
-                                onPressed: () {
-                                  _searchController.clear();
-                                  ref
-                                      .read(appUiProvider.notifier)
-                                      .setSearchQuery('');
-                                },
-                              ),
-                            ],
-                          )
-                        : Column(
-                            key: const ValueKey('normal_mode'),
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.menu_rounded),
-                                    onPressed: () =>
-                                        Scaffold.of(context).openDrawer(),
-                                    padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints(),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color: BNXColors.lightPrimary.withValues(
-                                        alpha: 0.1,
-                                      ),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: const Icon(
-                                      Icons.people_alt_rounded,
-                                      color: BNXColors.lightPrimary,
-                                      size: 24,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Casbox',
-                                          style: TextStyle(
-                                            fontSize: 20,
-                                            fontWeight: FontWeight.bold,
-                                            color: isDark
-                                                ? Colors.white
-                                                : BNXColors.lightTextPrimary,
-                                          ),
-                                        ),
-                                        const Text(
-                                          'Collaborate with your teams',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.grey,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.search_rounded),
-                                    onPressed: () {
-                                      setState(() {
-                                        _isSearching = true;
-                                      });
-                                    },
-                                  ),
-                                  const SizedBox(width: 4),
-                                  PrimaryButton(
-                                    label: isMobile ? 'New' : 'New Colab',
-                                    icon: Icons.group_add_rounded,
-                                    onPressed: () => _showCreateColabDialog(
-                                      context,
-                                      ref,
-                                      isDark,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 20),
-                              Padding(
-                                padding: const EdgeInsets.only(left: 12.0),
-                                child: Text(
-                                  'ACTIVE DISCUSSIONS',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: isDark
-                                        ? Colors.white30
-                                        : Colors.grey.shade700,
-                                    letterSpacing: 1.0,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                  ),
-                ),
-              ),
-
-              const SliverToBoxAdapter(child: Divider(height: 1, thickness: 1)),
-
-              // Invitation banner
-              SliverToBoxAdapter(
-                child: _buildInvitationBanner(context, ref, isDark),
-              ),
-
-              // 3. Center Section / Colab Content List
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 6.0),
-                sliver: SliverList(
-                  delegate: SliverChildListDelegate([
-                    const SizedBox(height: 2),
-
-                    // Grouped chat groups in a single card-like container
-                    Container(
-                      decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF1E293B) : Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.1)
-                              : Colors.grey.shade300,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(
-                              alpha: isDark ? 0.2 : 0.04,
-                            ),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      clipBehavior: Clip.antiAlias,
-                      child: filteredGroups.isEmpty
-                          ? Center(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 32.0,
-                                ),
-                                child: Text(
-                                  'No Colab groups found.',
-                                  style: TextStyle(
-                                    color: isDark
-                                        ? Colors.white30
-                                        : Colors.grey,
-                                  ),
-                                ),
-                              ),
-                            )
-                          : Column(
-                              children: filteredGroups.asMap().entries.map((
-                                entry,
-                              ) {
-                                final index = entry.key;
-                                final group = entry.value;
-                                final isLast =
-                                    index == filteredGroups.length - 1;
-
-                                return Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    _buildGroupCard(
-                                      context,
-                                      ref,
-                                      group,
-                                      isDark,
-                                    ),
-                                    if (!isLast)
-                                      Divider(
-                                        height: 1,
-                                        thickness: 1.0,
-                                        color: isDark
-                                            ? Colors.white.withValues(
-                                                alpha: 0.08,
-                                              )
-                                            : const Color(0xFFE9F4FF),
-                                        indent: 0,
-                                        endIndent: 0,
-                                      ),
-                                  ],
-                                );
-                              }).toList(),
-                            ),
-                    ),
-
-                    const SizedBox(height: 40),
-
-                    // Bottom Graphic Mock
-                    Center(
-                      child: Column(
-                        children: [
-                          NeumorphicContainer(
-                            width: 80,
-                            height: 80,
-                            boxShape: BoxShape.circle,
-                            shape: NeumorphicShape.pressed,
-                            color: isDark
-                                ? const Color(0xFF0F172A)
-                                : const Color(0xFFF4F7FB),
-                            child: const Icon(
-                              Icons.question_answer_outlined,
-                              size: 32,
-                              color: Colors.grey,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'Need to set up a new workgroup?',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          const Text(
-                            'Create groups to collaborate in real-time, share files,\nand edit code assets concurrently.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.grey, fontSize: 12),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-                  ]),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
+      content = _buildColabGroupsView(context, ref, isDark, isMobile);
     }
 
     return PopScope(
@@ -443,135 +193,1396 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
     );
   }
 
-  Widget _buildGroupCard(
+  Widget _buildColabGroupsView(
     BuildContext context,
     WidgetRef ref,
-    ColabGroup group,
     bool isDark,
+    bool isMobile,
   ) {
-    final bool hasUnread = group.unread;
+    final allGroups = ref.watch(colabListProvider);
+    final activeGroups = allGroups.where((g) => !g.isArchived).toList();
 
-    final avatar = Container(
-      width: 48,
-      height: 48,
-      decoration: BoxDecoration(
-        color: BNXColors.lightPrimary.withValues(alpha: 0.1),
-        shape: BoxShape.circle,
-      ),
-      child: const Icon(
-        Icons.groups_rounded,
-        color: BNXColors.lightPrimary,
-        size: 24,
-      ),
-    );
+    final query = _colabSearchQuery.trim().toLowerCase();
+    final displayedGroups = query.isEmpty
+        ? activeGroups
+        : activeGroups.where((g) {
+            return g.name.toLowerCase().contains(query) ||
+                g.desc.toLowerCase().contains(query) ||
+                g.lastMessage.toLowerCase().contains(query);
+          }).toList();
 
-    final details = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                group.name,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 15,
-                  color: isDark ? Colors.white : BNXColors.lightTextPrimary,
+    return Scaffold(
+      backgroundColor: isDark ? BNXColors.darkBg : const Color(0xFFE9F4FF),
+      body: SafeArea(
+        child: Padding(
+          padding: EdgeInsets.all(isMobile ? 12 : 20),
+          child: Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1E293B) : Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.04),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
+              ],
             ),
-            if (hasUnread) ...[
-              const SizedBox(width: 8),
-              Container(
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(
-                  color: Colors.redAccent,
-                  shape: BoxShape.circle,
+            padding: EdgeInsets.all(isMobile ? 16 : 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Top Header: 👥 Colab + Collaborate with your teams + [+ New Colab]
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Row(
+                        children: [
+                          if (isMobile) ...[
+                            IconButton(
+                              icon: const Icon(Icons.menu_rounded),
+                              onPressed: () =>
+                                  Scaffold.of(context).openDrawer(),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                          const Icon(
+                            Icons.people_alt_rounded,
+                            color: Color(0xFF195BAC),
+                            size: 24,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Colab',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark
+                                        ? Colors.white
+                                        : const Color(0xFF0F172A),
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Collaborate with your teams',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: isDark
+                                        ? Colors.white60
+                                        : const Color(0xFF64748B),
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      onPressed: () => _showCreateColabDialog(
+                        context,
+                        ref,
+                        isDark,
+                      ),
+                      icon: const Icon(
+                        Icons.person_add_alt_1_rounded,
+                        size: 17,
+                        color: Colors.white,
+                      ),
+                      label: const Text(
+                        'New Colab',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF195BAC),
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 11,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ],
-        ),
-        const SizedBox(height: 4),
-        Text(
-          group.desc,
-          style: TextStyle(
-            fontSize: 12,
-            color: isDark
-                ? BNXColors.darkTextSecondary
-                : BNXColors.lightTextSecondary,
-          ),
-          maxLines: 3,
-          overflow: TextOverflow.ellipsis,
-        ),
-        const SizedBox(height: 12),
-        Wrap(
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            const Text(
-              'Active: ',
-              style: TextStyle(fontSize: 11, color: Colors.grey),
-            ),
-            const SizedBox(width: 4),
-            Wrap(
-              spacing: 4,
-              runSpacing: 4,
-              children: group.members.map((m) {
-                return Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
+                const SizedBox(height: 18),
+
+                // Search Bar: 🔍 Search colab groups...
+                Container(
+                  height: 42,
                   decoration: BoxDecoration(
-                    color: isDark ? Colors.white10 : Colors.white,
+                    color: isDark
+                        ? const Color(0xFF0F172A)
+                        : const Color(0xFFF8FAFC),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
                       color: isDark
-                          ? BNXColors.darkBorder
-                          : BNXColors.lightBorder,
-                      width: 0.8,
+                          ? const Color(0xFF334155)
+                          : const Color(0xFFE2E8F0),
                     ),
                   ),
-                  child: Text(
-                    m,
-                    style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.search_rounded,
+                        size: 19,
+                        color: Color(0xFF94A3B8),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: _colabSearchController,
+                          decoration: const InputDecoration(
+                            hintText: 'Search colab groups...',
+                            hintStyle: TextStyle(
+                              fontSize: 13,
+                              color: Color(0xFF94A3B8),
+                            ),
+                            border: InputBorder.none,
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(vertical: 10),
+                          ),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isDark
+                                ? Colors.white
+                                : const Color(0xFF0F172A),
+                          ),
+                          onChanged: (val) =>
+                              setState(() => _colabSearchQuery = val),
+                        ),
+                      ),
+                      if (_colabSearchQuery.isNotEmpty)
+                        GestureDetector(
+                          onTap: () {
+                            _colabSearchController.clear();
+                            setState(() => _colabSearchQuery = '');
+                          },
+                          child: const Icon(
+                            Icons.close_rounded,
+                            size: 16,
+                            color: Color(0xFF94A3B8),
+                          ),
+                        ),
+                    ],
                   ),
-                );
-              }).toList(),
-            ),
-          ],
-        ),
-      ],
-    );
+                ),
+                const SizedBox(height: 18),
 
-    return InkWell(
-      onTap: () {
-        ref.read(selectedColabIdProvider.notifier).state = group.id;
-        ref.read(colabListProvider.notifier).markAsRead(group.id);
-        ref.read(colabListProvider.notifier).fetchMessagesForGroup(group.id);
-        ref.read(colabListProvider.notifier).fetchBroadcastsForGroup(group.id);
-        ref.read(colabListProvider.notifier).fetchMembersForGroup(group.id);
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        color: isDark ? Colors.transparent : Colors.white,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              avatar,
-              const SizedBox(width: 12),
-              Expanded(child: details),
-            ],
+                // Invitation banner if any
+                _buildInvitationBanner(context, ref, isDark),
+
+                // Group list or Empty state
+                Expanded(
+                  child: displayedGroups.isEmpty
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 40),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.people_alt_rounded,
+                                  size: 60,
+                                  color: Color(0xFF64748B),
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'No colab groups found',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark
+                                        ? Colors.white
+                                        : const Color(0xFF334155),
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Create a colab group to start collaborating',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: isDark
+                                        ? Colors.white60
+                                        : const Color(0xFF64748B),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : RefreshIndicator(
+                          onRefresh: () async {
+                            await ref
+                                .read(colabListProvider.notifier)
+                                .loadGroups();
+                            await ref
+                                .read(colabInvitationsProvider.notifier)
+                                .loadInvitations();
+                          },
+                          child: SingleChildScrollView(
+                            physics: const BouncingScrollPhysics(
+                              parent: AlwaysScrollableScrollPhysics(),
+                            ),
+                            child: Align(
+                              alignment: Alignment.topLeft,
+                              child: Wrap(
+                                spacing: 16,
+                                runSpacing: 16,
+                                children: displayedGroups.map((group) {
+                                  return _buildColabGroupCard(
+                                    context,
+                                    ref,
+                                    group,
+                                    isDark,
+                                    isMobile: isMobile,
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+                          ),
+                        ),
+                ),
+              ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildColabArchiveView(
+    BuildContext context,
+    WidgetRef ref,
+    bool isDark,
+    bool isMobile,
+  ) {
+    final allGroups = ref.watch(colabListProvider);
+    final archivedGroups = allGroups.where((g) => g.isArchived).toList();
+
+    final allCasboxMsgs = ref.watch(casboxMessagesProvider);
+    final archivedMsgs = allCasboxMsgs.where((m) => m.isArchived).toList();
+
+    final query = _archiveSearchQuery.trim().toLowerCase();
+    final filteredGroups = query.isEmpty
+        ? archivedGroups
+        : archivedGroups.where((g) {
+            return g.name.toLowerCase().contains(query) ||
+                g.desc.toLowerCase().contains(query) ||
+                g.lastMessage.toLowerCase().contains(query);
+          }).toList();
+
+    final filteredMsgs = query.isEmpty
+        ? archivedMsgs
+        : archivedMsgs.where((m) {
+            return m.sender.toLowerCase().contains(query) ||
+                m.subject.toLowerCase().contains(query) ||
+                m.body.toLowerCase().contains(query);
+          }).toList();
+
+    final totalCount = filteredGroups.length + filteredMsgs.length;
+    final bool showGroups =
+        _archiveFilterTab == 'All' || _archiveFilterTab == 'Colab';
+    final bool showMsgs =
+        _archiveFilterTab == 'All' || _archiveFilterTab == 'Messages';
+
+    return Scaffold(
+      backgroundColor: isDark ? BNXColors.darkBg : const Color(0xFFE9F4FF),
+      body: SafeArea(
+        child: Padding(
+          padding: EdgeInsets.all(isMobile ? 12 : 20),
+          child: Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1E293B) : Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.04),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            padding: EdgeInsets.all(isMobile ? 16 : 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Top Header: 📥 Archive + View and manage your archived messages and colab conversations
+                Row(
+                  children: [
+                    if (isMobile) ...[
+                      IconButton(
+                        icon: const Icon(Icons.menu_rounded),
+                        onPressed: () => Scaffold.of(context).openDrawer(),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    const Icon(
+                      Icons.archive_outlined,
+                      color: Color(0xFF195BAC),
+                      size: 24,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Archive',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: isDark
+                                  ? Colors.white
+                                  : const Color(0xFF0F172A),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'View and manage your archived messages and colab conversations',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark
+                                  ? Colors.white60
+                                  : const Color(0xFF64748B),
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+
+                // Search Bar: 🔍 Search archived items...
+                Container(
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFF0F172A)
+                        : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isDark
+                          ? const Color(0xFF334155)
+                          : const Color(0xFFE2E8F0),
+                    ),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.search_rounded,
+                        size: 19,
+                        color: Color(0xFF94A3B8),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: _archiveSearchController,
+                          decoration: const InputDecoration(
+                            hintText: 'Search archived items...',
+                            hintStyle: TextStyle(
+                              fontSize: 13,
+                              color: Color(0xFF94A3B8),
+                            ),
+                            border: InputBorder.none,
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(vertical: 10),
+                          ),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isDark
+                                ? Colors.white
+                                : const Color(0xFF0F172A),
+                          ),
+                          onChanged: (val) =>
+                              setState(() => _archiveSearchQuery = val),
+                        ),
+                      ),
+                      if (_archiveSearchQuery.isNotEmpty)
+                        GestureDetector(
+                          onTap: () {
+                            _archiveSearchController.clear();
+                            setState(() => _archiveSearchQuery = '');
+                          },
+                          child: const Icon(
+                            Icons.close_rounded,
+                            size: 16,
+                            color: Color(0xFF94A3B8),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Filter tabs: All ({count}) | Colab Conversations ({count}) | Messages ({count})
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _buildArchiveFilterChip(
+                        label: 'All ($totalCount)',
+                        isActive: _archiveFilterTab == 'All',
+                        onTap: () => setState(() => _archiveFilterTab = 'All'),
+                        isDark: isDark,
+                      ),
+                      const SizedBox(width: 8),
+                      _buildArchiveFilterChip(
+                        label:
+                            'Colab Conversations (${filteredGroups.length})',
+                        isActive: _archiveFilterTab == 'Colab',
+                        onTap: () => setState(() => _archiveFilterTab = 'Colab'),
+                        isDark: isDark,
+                      ),
+                      const SizedBox(width: 8),
+                      _buildArchiveFilterChip(
+                        label: 'Messages (${filteredMsgs.length})',
+                        isActive: _archiveFilterTab == 'Messages',
+                        onTap: () =>
+                            setState(() => _archiveFilterTab = 'Messages'),
+                        isDark: isDark,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+
+                // Content list or empty state
+                Expanded(
+                  child: totalCount == 0
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 40),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.archive_outlined,
+                                  size: 60,
+                                  color: Color(0xFF64748B),
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'No archived items found',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark
+                                        ? Colors.white
+                                        : const Color(0xFF334155),
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Archived colab conversations and messages will appear here',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: isDark
+                                        ? Colors.white60
+                                        : const Color(0xFF64748B),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : ListView(
+                          physics: const BouncingScrollPhysics(),
+                          children: [
+                            if (showGroups && filteredGroups.isNotEmpty) ...[
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: Text(
+                                  'COLAB CONVERSATIONS (${filteredGroups.length})',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF64748B),
+                                    letterSpacing: 0.8,
+                                  ),
+                                ),
+                              ),
+                              Align(
+                                alignment: Alignment.topLeft,
+                                child: Wrap(
+                                  spacing: 16,
+                                  runSpacing: 16,
+                                  children: filteredGroups.map(
+                                    (g) => _buildColabGroupCard(
+                                      context,
+                                      ref,
+                                      g,
+                                      isDark,
+                                      isMobile: isMobile,
+                                      isArchiveView: true,
+                                    ),
+                                  ).toList(),
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                            ],
+                            if (showMsgs && filteredMsgs.isNotEmpty) ...[
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: Text(
+                                  'MESSAGES (${filteredMsgs.length})',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF64748B),
+                                    letterSpacing: 0.8,
+                                  ),
+                                ),
+                              ),
+                              Align(
+                                alignment: Alignment.topLeft,
+                                child: Wrap(
+                                  spacing: 16,
+                                  runSpacing: 16,
+                                  children: filteredMsgs.map(
+                                    (m) => _buildCasboxArchiveMessageCard(
+                                      context,
+                                      ref,
+                                      m,
+                                      isDark,
+                                      isMobile: isMobile,
+                                    ),
+                                  ).toList(),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildColabStarView(
+    BuildContext context,
+    WidgetRef ref,
+    bool isDark,
+    bool isMobile,
+  ) {
+    final allGroups = ref.watch(colabListProvider);
+    final starredGroups =
+        allGroups.where((g) => g.isStarred && !g.isArchived).toList();
+
+    final query = _starSearchQuery.trim().toLowerCase();
+    final displayedGroups = query.isEmpty
+        ? starredGroups
+        : starredGroups.where((g) {
+            return g.name.toLowerCase().contains(query) ||
+                g.desc.toLowerCase().contains(query) ||
+                g.lastMessage.toLowerCase().contains(query);
+          }).toList();
+
+    return Scaffold(
+      backgroundColor: isDark ? BNXColors.darkBg : const Color(0xFFE9F4FF),
+      body: SafeArea(
+        child: Padding(
+          padding: EdgeInsets.all(isMobile ? 12 : 20),
+          child: Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1E293B) : Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.04),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            padding: EdgeInsets.all(isMobile ? 16 : 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Top Header: ⭐ Starred Colab Groups + View your starred colab groups
+                Row(
+                  children: [
+                    if (isMobile) ...[
+                      IconButton(
+                        icon: const Icon(Icons.menu_rounded),
+                        onPressed: () => Scaffold.of(context).openDrawer(),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    const Icon(
+                      Icons.star_rounded,
+                      color: Color(0xFFF59E0B),
+                      size: 24,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Starred Colab Groups',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: isDark
+                                  ? Colors.white
+                                  : const Color(0xFF0F172A),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'View your starred colab groups',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark
+                                  ? Colors.white60
+                                  : const Color(0xFF64748B),
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+
+                // Search Bar: 🔍 Search starred colab groups...
+                Container(
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFF0F172A)
+                        : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isDark
+                          ? const Color(0xFF334155)
+                          : const Color(0xFFE2E8F0),
+                    ),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.search_rounded,
+                        size: 19,
+                        color: Color(0xFF94A3B8),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: _starSearchController,
+                          decoration: const InputDecoration(
+                            hintText: 'Search starred colab groups...',
+                            hintStyle: TextStyle(
+                              fontSize: 13,
+                              color: Color(0xFF94A3B8),
+                            ),
+                            border: InputBorder.none,
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(vertical: 10),
+                          ),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isDark
+                                ? Colors.white
+                                : const Color(0xFF0F172A),
+                          ),
+                          onChanged: (val) =>
+                              setState(() => _starSearchQuery = val),
+                        ),
+                      ),
+                      if (_starSearchQuery.isNotEmpty)
+                        GestureDetector(
+                          onTap: () {
+                            _starSearchController.clear();
+                            setState(() => _starSearchQuery = '');
+                          },
+                          child: const Icon(
+                            Icons.close_rounded,
+                            size: 16,
+                            color: Color(0xFF94A3B8),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+
+                // Group list or Empty state
+                Expanded(
+                  child: displayedGroups.isEmpty
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 40),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.star_border_rounded,
+                                  size: 64,
+                                  color: Color(0xFFF59E0B),
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'No starred colab groups',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark
+                                        ? Colors.white
+                                        : const Color(0xFF334155),
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Click the three-dot menu on any group card and select Star to add it here',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: isDark
+                                        ? Colors.white60
+                                        : const Color(0xFF64748B),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : SingleChildScrollView(
+                          physics: const BouncingScrollPhysics(),
+                          child: Align(
+                            alignment: Alignment.topLeft,
+                            child: Wrap(
+                              spacing: 16,
+                              runSpacing: 16,
+                              children: displayedGroups.map((group) {
+                                return _buildColabGroupCard(
+                                  context,
+                                  ref,
+                                  group,
+                                  isDark,
+                                  isMobile: isMobile,
+                                  isStarView: true,
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildArchiveFilterChip({
+    required String label,
+    required bool isActive,
+    required VoidCallback onTap,
+    required bool isDark,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: isActive
+              ? const Color(0xFF195BAC)
+              : (isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9)),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isActive
+                ? const Color(0xFF195BAC)
+                : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
+            color: isActive
+                ? Colors.white
+                : (isDark ? Colors.white70 : const Color(0xFF475569)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatGroupDate(String rawDate) {
+    if (rawDate.isEmpty) {
+      final now = DateTime.now();
+      return '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}';
+    }
+    try {
+      final parsed = DateTime.tryParse(rawDate);
+      if (parsed != null) {
+        final d = parsed.day.toString().padLeft(2, '0');
+        final m = parsed.month.toString().padLeft(2, '0');
+        return '$d/$m/${parsed.year}';
+      }
+    } catch (_) {}
+    if (rawDate.contains('T')) {
+      final datePart = rawDate.split('T').first;
+      final parts = datePart.split('-');
+      if (parts.length == 3) {
+        return '${parts[2]}/${parts[1]}/${parts[0]}';
+      }
+    }
+    return rawDate;
+  }
+
+  Widget _buildColabGroupCard(
+    BuildContext context,
+    WidgetRef ref,
+    ColabGroup group,
+    bool isDark, {
+    bool isArchiveView = false,
+    bool isStarView = false,
+    bool isMobile = false,
+  }) {
+    final String initial =
+        group.name.isNotEmpty ? group.name[0].toUpperCase() : 'A';
+    final String dateText = _formatGroupDate(group.lastMessageTime);
+
+    return Container(
+      width: isMobile ? double.infinity : 330,
+      margin: EdgeInsets.only(bottom: isMobile ? 12 : 0),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.02),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Top row: Avatar + Name + GROUP badge + 3 dots menu
+          Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF6366F1),
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  initial,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Flexible(
+                child: Text(
+                  group.name,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 7,
+                  vertical: 2.5,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFDBEAFE),
+                  borderRadius: BorderRadius.circular(5),
+                ),
+                child: const Text(
+                  'GROUP',
+                  style: TextStyle(
+                    color: Color(0xFF1E40AF),
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+              const Spacer(),
+              if (group.isArchived) ...[
+                Tooltip(
+                  message: 'Unarchive group',
+                  child: InkWell(
+                    onTap: () async {
+                      await ref
+                          .read(colabListProvider.notifier)
+                          .toggleArchiveGroup(group.id);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Colab group "${group.name}" restored to Colab.'),
+                            duration: const Duration(seconds: 2),
+                          ),
+                        );
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(6),
+                    child: Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF195BAC),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Icon(
+                        Icons.unarchive_rounded,
+                        color: Colors.white,
+                        size: 15,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+              ],
+              PopupMenuButton<String>(
+                icon: Icon(
+                  Icons.more_vert_rounded,
+                  size: 18,
+                  color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                itemBuilder: (ctx) => [
+                  PopupMenuItem<String>(
+                    value: group.isArchived ? 'unarchive' : 'archive',
+                    child: Row(
+                      children: [
+                        Icon(
+                          group.isArchived
+                              ? Icons.unarchive_outlined
+                              : Icons.archive_outlined,
+                          size: 16,
+                          color: const Color(0xFF64748B),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(group.isArchived ? 'Unarchive' : 'Archive'),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem<String>(
+                    value: group.isStarred ? 'unstar' : 'star',
+                    child: Row(
+                      children: [
+                        Icon(
+                          group.isStarred
+                              ? Icons.star_rounded
+                              : Icons.star_border_rounded,
+                          size: 16,
+                          color: group.isStarred
+                              ? const Color(0xFFF59E0B)
+                              : const Color(0xFF64748B),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(group.isStarred ? 'Unstar' : 'Star'),
+                      ],
+                    ),
+                  ),
+                ],
+                onSelected: (val) async {
+                  if (val == 'archive' || val == 'unarchive') {
+                    final wasArchived = group.isArchived;
+                    await ref
+                        .read(colabListProvider.notifier)
+                        .toggleArchiveGroup(group.id);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            wasArchived
+                                ? 'Colab group "${group.name}" restored to Colab.'
+                                : 'Colab group "${group.name}" archived.',
+                          ),
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  } else if (val == 'star' || val == 'unstar') {
+                    final wasStarred = group.isStarred;
+                    await ref
+                        .read(colabListProvider.notifier)
+                        .toggleStarGroup(group.id);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            wasStarred
+                                ? 'Removed "${group.name}" from starred.'
+                                : 'Starred "${group.name}".',
+                          ),
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  }
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Middle row: Last message
+          Text(
+            group.lastMessage.isNotEmpty
+                ? group.lastMessage
+                : 'No messages yet',
+            style: TextStyle(
+              fontSize: 13,
+              color: isDark ? Colors.white60 : const Color(0xFF64748B),
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 14),
+
+          // Bottom row: Date + Open chat ->
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                dateText,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark ? Colors.white38 : const Color(0xFF94A3B8),
+                ),
+              ),
+              InkWell(
+                borderRadius: BorderRadius.circular(4),
+                onTap: () {
+                  ref.read(selectedColabIdProvider.notifier).state = group.id;
+                  ref.read(colabListProvider.notifier).markAsRead(group.id);
+                  ref
+                      .read(colabListProvider.notifier)
+                      .fetchMessagesForGroup(group.id);
+                  ref
+                      .read(colabListProvider.notifier)
+                      .fetchBroadcastsForGroup(group.id);
+                  ref
+                      .read(colabListProvider.notifier)
+                      .fetchMembersForGroup(group.id);
+                },
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Open chat',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF195BAC),
+                      ),
+                    ),
+                    SizedBox(width: 4),
+                    Icon(
+                      Icons.arrow_forward_rounded,
+                      size: 14,
+                      color: Color(0xFF195BAC),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCasboxArchiveMessageCard(
+    BuildContext context,
+    WidgetRef ref,
+    CasboxMessage msg,
+    bool isDark, {
+    bool isMobile = false,
+  }) {
+    final activeAccount = ref.read(activeAccountProvider);
+    final currentUserEmail = activeAccount.email.toLowerCase().trim();
+    final mailboxEmails = ref.read(emailProvider).emails;
+    final aliases = ref.watch(casboxAliasesProvider);
+
+    final sentByMe = checkCasboxMessageSentByMe(msg, currentUserEmail, mailboxEmails);
+    final contactEmail = (sentByMe ? msg.to : msg.sender).trim();
+    final rawHandle = contactEmail.contains('@')
+        ? contactEmail.split('@').first
+        : (contactEmail.isNotEmpty ? contactEmail : 'Unknown');
+    final contactName = aliases[rawHandle] ??
+        aliases[contactEmail] ??
+        (msg.contactDisplayName != null &&
+                msg.contactDisplayName!.trim().isNotEmpty
+            ? msg.contactDisplayName!.trim()
+            : (msg.contactUsername != null &&
+                    msg.contactUsername!.trim().isNotEmpty
+                ? msg.contactUsername!.trim()
+                : rawHandle));
+
+    final initial = contactName.isNotEmpty ? contactName[0].toUpperCase() : 'C';
+    final (avatarBg, avatarFg) = _getCasboxAvatarColors(contactName, isDark);
+    final dateText = _formatGroupDate(
+        '${msg.timestamp.day.toString().padLeft(2, '0')}/${msg.timestamp.month.toString().padLeft(2, '0')}/${msg.timestamp.year}');
+
+    return Container(
+      width: isMobile ? double.infinity : 330,
+      margin: EdgeInsets.only(bottom: isMobile ? 12 : 0),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.02),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: avatarBg,
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  initial,
+                  style: TextStyle(
+                    color: avatarFg,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Flexible(
+                child: Text(
+                  contactName,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 7,
+                  vertical: 2.5,
+                ),
+                decoration: BoxDecoration(
+                  color: sentByMe
+                      ? const Color(0xFFDCFCE7)
+                      : const Color(0xFFDBEAFE),
+                  borderRadius: BorderRadius.circular(5),
+                ),
+                child: Text(
+                  sentByMe ? 'SENT' : 'RECEIVED',
+                  style: TextStyle(
+                    color: sentByMe
+                        ? const Color(0xFF15803D)
+                        : const Color(0xFF1E40AF),
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+              const Spacer(),
+              Tooltip(
+                message: 'Unarchive message',
+                child: InkWell(
+                  onTap: () async {
+                    await ref
+                        .read(casboxMessagesProvider.notifier)
+                        .archiveMessage(msg.id, false);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Message restored to Casbox.'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(6),
+                  child: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF195BAC),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Icon(
+                      Icons.unarchive_rounded,
+                      color: Colors.white,
+                      size: 15,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              PopupMenuButton<String>(
+                icon: Icon(
+                  Icons.more_vert_rounded,
+                  size: 18,
+                  color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                itemBuilder: (ctx) => [
+                  const PopupMenuItem<String>(
+                    value: 'unarchive',
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.unarchive_outlined,
+                          size: 16,
+                          color: Color(0xFF64748B),
+                        ),
+                        SizedBox(width: 8),
+                        Text('Unarchive'),
+                      ],
+                    ),
+                  ),
+                ],
+                onSelected: (val) async {
+                  if (val == 'unarchive') {
+                    await ref
+                        .read(casboxMessagesProvider.notifier)
+                        .archiveMessage(msg.id, false);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Message restored to Casbox.'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  }
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            msg.body.isNotEmpty
+                ? msg.body
+                : (msg.subject.isNotEmpty ? msg.subject : 'No content'),
+            style: TextStyle(
+              fontSize: 13,
+              color: isDark ? Colors.white60 : const Color(0xFF64748B),
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 14),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                dateText,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark ? Colors.white38 : const Color(0xFF94A3B8),
+                ),
+              ),
+              InkWell(
+                borderRadius: BorderRadius.circular(4),
+                onTap: () {
+                  ref.read(selectedCasboxThreadProvider.notifier).state = msg.id;
+                  ref.read(appUiProvider.notifier).selectFolder('Casbox');
+                },
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Open chat',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF195BAC),
+                      ),
+                    ),
+                    SizedBox(width: 4),
+                    Icon(
+                      Icons.arrow_forward_rounded,
+                      size: 14,
+                      color: Color(0xFF195BAC),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -1219,20 +2230,23 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                 ref.read(selectedColabIdProvider.notifier).state = null,
           ),
           const SizedBox(width: 8),
-          Container(
-            width: 40,
-            height: 40,
-            decoration: const BoxDecoration(
-              color: Colors.purple,
-              shape: BoxShape.circle,
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              group.name.isNotEmpty ? group.name[0].toUpperCase() : 'P',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
+          GestureDetector(
+            onTap: () => _showGroupInfoDialog(context, group, isDark),
+            child: Container(
+              width: 38,
+              height: 38,
+              decoration: const BoxDecoration(
+                color: Color(0xFF6366F1),
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                group.name.isNotEmpty ? group.name[0].toLowerCase() : 'a',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
               ),
             ),
           ),
@@ -1242,8 +2256,12 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Flexible(
+                    InkWell(
+                      onTap: () =>
+                          _showGroupInfoDialog(context, group, isDark),
+                      borderRadius: BorderRadius.circular(4),
                       child: Text(
                         group.name,
                         style: TextStyle(
@@ -1260,36 +2278,93 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                     IconButton(
                       icon: Icon(
                         Icons.info_outline_rounded,
-                        size: 18,
-                        color: isDark ? Colors.white38 : Colors.grey,
+                        size: 16,
+                        color: isDark
+                            ? Colors.white54
+                            : const Color(0xFF64748B),
                       ),
                       onPressed: () =>
                           _showGroupInfoDialog(context, group, isDark),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
+                      tooltip: 'Colab Channel Info',
                     ),
                   ],
                 ),
                 const SizedBox(height: 2),
-                Text(
+                const Text(
                   'GROUP • ONLINE',
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
-                    color: isDark
-                        ? BNXColors.darkPrimary
-                        : BNXColors.lightPrimary,
+                    color: Color(0xFF2563EB),
                     letterSpacing: 0.5,
                   ),
                 ),
               ],
             ),
           ),
+          IconButton(
+            icon: Icon(
+              Icons.print_outlined,
+              size: 20,
+              color: isDark ? Colors.white70 : const Color(0xFF64748B),
+            ),
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Colab summary ready for print / export.'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            },
+            tooltip: 'Print',
+          ),
           PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert_rounded),
+            icon: Icon(
+              Icons.more_vert_rounded,
+              color: isDark ? Colors.white70 : const Color(0xFF64748B),
+            ),
             onSelected: (value) async {
               if (value == 'info') {
                 _showGroupInfoDialog(context, group, isDark);
+              } else if (value == 'archive' || value == 'unarchive') {
+                final wasArchived = group.isArchived;
+                await ref
+                    .read(colabListProvider.notifier)
+                    .toggleArchiveGroup(group.id);
+                if (!wasArchived) {
+                  ref.read(selectedColabIdProvider.notifier).state = null;
+                }
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        wasArchived
+                            ? 'Group "${group.name}" restored from archive.'
+                            : 'Group "${group.name}" archived.',
+                      ),
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                }
+              } else if (value == 'star' || value == 'unstar') {
+                final wasStarred = group.isStarred;
+                await ref
+                    .read(colabListProvider.notifier)
+                    .toggleStarGroup(group.id);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        wasStarred
+                            ? 'Removed "${group.name}" from starred.'
+                            : 'Starred "${group.name}".',
+                      ),
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                }
               } else if (value == 'leave') {
                 final confirm = await showDialog<bool>(
                   context: context,
@@ -1391,6 +2466,40 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                   ],
                 ),
               ),
+              PopupMenuItem<String>(
+                value: group.isArchived ? 'unarchive' : 'archive',
+                child: Row(
+                  children: [
+                    Icon(
+                      group.isArchived
+                          ? Icons.unarchive_outlined
+                          : Icons.archive_outlined,
+                      size: 18,
+                      color: const Color(0xFF64748B),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(group.isArchived ? 'Unarchive' : 'Archive'),
+                  ],
+                ),
+              ),
+              PopupMenuItem<String>(
+                value: group.isStarred ? 'unstar' : 'star',
+                child: Row(
+                  children: [
+                    Icon(
+                      group.isStarred
+                          ? Icons.star_rounded
+                          : Icons.star_border_rounded,
+                      size: 18,
+                      color: group.isStarred
+                          ? const Color(0xFFF59E0B)
+                          : const Color(0xFF64748B),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(group.isStarred ? 'Unstar' : 'Star'),
+                  ],
+                ),
+              ),
               const PopupMenuItem<String>(
                 value: 'leave',
                 child: Row(
@@ -1431,7 +2540,7 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
           resizeToAvoidBottomInset: true,
           backgroundColor: isDark
               ? BNXColors.darkSurface
-              : const Color(0xFFE9F4FF),
+              : const Color(0xFFF8FAFC),
           body: SafeArea(
             bottom: true,
             child: Column(
@@ -1507,7 +2616,7 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
     }
 
     return Scaffold(
-      backgroundColor: isDark ? BNXColors.darkSurface : const Color(0xFFE9F4FF),
+      backgroundColor: isDark ? BNXColors.darkSurface : const Color(0xFFF8FAFC),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1560,65 +2669,307 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
     ColabGroup group,
     bool isDark,
   ) {
+    final active = ref.read(activeAccountProvider);
+    final activeEmail = active.email.toLowerCase().trim();
+
     showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
+      builder: (ctx) {
+        return Dialog(
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(20),
           ),
-          backgroundColor: isDark ? BNXColors.darkSurface : Colors.white,
-          title: Text(
-            group.name,
-            style: TextStyle(
-              color: isDark ? Colors.white : BNXColors.lightTextPrimary,
+          backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Header Row: icon + title + close
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.people_alt_rounded,
+                            color: Color(0xFF195BAC),
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Colab Channel Info',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? Colors.white : const Color(0xFF0F172A),
+                            ),
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, size: 20),
+                        onPressed: () => Navigator.of(ctx).pop(),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Channel identity: Large circle avatar + name + description
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF195BAC),
+                          shape: BoxShape.circle,
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          group.name.isNotEmpty ? group.name[0].toUpperCase() : 'A',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 22,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              group.name,
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: isDark ? Colors.white : const Color(0xFF0F172A),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              group.desc.isNotEmpty
+                                  ? group.desc
+                                  : 'A collaboration channel for team messaging and email broadcasting.',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: isDark ? Colors.white70 : const Color(0xFF64748B),
+                                height: 1.3,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Group Members Section
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.group_outlined,
+                        size: 16,
+                        color: Color(0xFF195BAC),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Group Members (${group.members.length})',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+
+                  // Member list container
+                  Container(
+                    constraints: const BoxConstraints(maxHeight: 240),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                      ),
+                    ),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                      itemCount: group.members.length,
+                      separatorBuilder: (context, index) => const Divider(height: 12),
+                      itemBuilder: (context, index) {
+                        final m = group.members[index];
+                        final isMe = activeEmail.isNotEmpty && m.toLowerCase().trim() == activeEmail;
+                        final isAdmin = m == group.creatorEmail ||
+                            (group.creatorEmail.isEmpty && index == 0);
+
+                        final avatarColors = [
+                          const Color(0xFF2563EB),
+                          const Color(0xFF7C3AED),
+                          const Color(0xFF0891B2),
+                          const Color(0xFF9333EA),
+                        ];
+                        final circleColor = avatarColors[index % avatarColors.length];
+
+                        return Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 14,
+                              backgroundColor: circleColor,
+                              child: Text(
+                                m.isNotEmpty ? m[0].toUpperCase() : '?',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                m,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: isDark ? Colors.white : const Color(0xFF1E293B),
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (isMe) ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFE0F2FE),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Text(
+                                  'Me',
+                                  style: TextStyle(
+                                    color: Color(0xFF0369A1),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                            ],
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: isAdmin
+                                    ? const Color(0xFFFEF3C7)
+                                    : (isDark ? Colors.white10 : const Color(0xFFF1F5F9)),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: isAdmin
+                                      ? const Color(0xFFFDE68A)
+                                      : (isDark ? Colors.white24 : const Color(0xFFE2E8F0)),
+                                ),
+                              ),
+                              child: Text(
+                                isAdmin ? 'Admin' : 'Member',
+                                style: TextStyle(
+                                  color: isAdmin ? const Color(0xFFD97706) : const Color(0xFF64748B),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Bottom action: Leave Colab
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFFDC2626),
+                          side: const BorderSide(color: Color(0xFFEF4444)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+                        ),
+                        onPressed: () async {
+                          Navigator.of(ctx).pop();
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (dialogCtx) => AlertDialog(
+                              title: const Text('Leave Colab'),
+                              content: Text('Are you sure you want to leave "${group.name}"?'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(dialogCtx, false),
+                                  child: const Text('Cancel'),
+                                ),
+                                TextButton(
+                                  onPressed: () => Navigator.pop(dialogCtx, true),
+                                  child: const Text('Leave', style: TextStyle(color: Colors.redAccent)),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirm != true || !context.mounted) return;
+                          try {
+                            await ref.read(colabListProvider.notifier).leaveGroup(group.id);
+                            ref.read(selectedColabIdProvider.notifier).state = null;
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('You left "${group.name}".')),
+                              );
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Failed to leave: $e')),
+                              );
+                            }
+                          }
+                        },
+                        child: const Text(
+                          'Leave Colab',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Description:',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white70 : BNXColors.lightTextPrimary,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(group.desc, style: const TextStyle(color: Colors.grey)),
-              const SizedBox(height: 16),
-              Text(
-                'Active Members (${group.members.length}):',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white70 : BNXColors.lightTextPrimary,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: group.members.map((m) {
-                  return Chip(
-                    label: Text(m, style: const TextStyle(fontSize: 12)),
-                    backgroundColor: isDark ? Colors.white10 : Colors.grey[200],
-                    padding: EdgeInsets.zero,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  );
-                }).toList(),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Close'),
-            ),
-          ],
         );
       },
     );
+  }
+
+  String _formatBroadcastDate(DateTime dt) {
+    final day = dt.day.toString().padLeft(2, '0');
+    final month = dt.month.toString().padLeft(2, '0');
+    final year = dt.year.toString();
+    final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
+    final minute = dt.minute.toString().padLeft(2, '0');
+    final period = dt.hour >= 12 ? 'PM' : 'AM';
+    return '$day/$month/$year, ${hour.toString().padLeft(2, '0')}:$minute $period';
   }
 
   Widget _buildBroadcastsPanel(
@@ -1629,10 +2980,10 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
   ) {
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? BNXColors.darkSurface : Colors.white,
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isDark ? BNXColors.darkBorder : BNXColors.lightBorder,
+          color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
         ),
       ),
       child: Column(
@@ -1640,7 +2991,7 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
         children: [
           InkWell(
             onTap: () =>
-                _showComposeBroadcastDialog(context, ref, group.id, isDark),
+                _showComposeBroadcastDialog(context, ref, group, isDark),
             borderRadius: const BorderRadius.only(
               topLeft: Radius.circular(16),
               topRight: Radius.circular(16),
@@ -1650,27 +3001,22 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
               child: Row(
                 children: [
                   const Icon(
-                    Icons.email_outlined,
+                    Icons.mark_email_read_outlined,
                     color: Color(0xFF195BAC),
-                    size: 20,
+                    size: 18,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Professional Broadcasts (${group.broadcasts.length})',
+                      'Professional Broadcasts',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        fontSize: 15,
+                        fontSize: 14,
                         color: isDark
                             ? Colors.white
-                            : BNXColors.lightTextPrimary,
+                            : const Color(0xFF0F172A),
                       ),
                     ),
-                  ),
-                  Icon(
-                    Icons.add_comment_outlined,
-                    size: 16,
-                    color: isDark ? Colors.white38 : Colors.grey,
                   ),
                 ],
               ),
@@ -1764,16 +3110,16 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                     itemBuilder: (context, index) {
                       final b = group.broadcasts[index];
                       return Container(
-                        padding: const EdgeInsets.all(14),
+                        padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
                           color: isDark
-                              ? Colors.white.withValues(alpha: 0.04)
-                              : Colors.grey[50],
+                              ? const Color(0xFF0F172A)
+                              : Colors.white,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: isDark
-                                ? BNXColors.darkBorder
-                                : BNXColors.lightBorder,
+                                ? const Color(0xFF334155)
+                                : const Color(0xFFE2E8F0),
                           ),
                         ),
                         child: Column(
@@ -1782,70 +3128,47 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.campaign_rounded,
-                                      size: 16,
-                                      color: Color(0xFF195BAC),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      'Broadcast #${index + 1}',
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
-                                    'By: ${b.sender}',
-                                    textAlign: TextAlign.end,
+                                    'From: ${b.sender}',
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      color: isDark
-                                          ? Colors.white70
-                                          : Colors.black54,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFF64748B),
                                     ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  _formatBroadcastDate(b.timestamp),
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Color(0xFF64748B),
                                   ),
                                 ),
                               ],
                             ),
-                            const Divider(height: 16),
-                            const Text(
-                              'To: All Members',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.grey,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
+                            const SizedBox(height: 8),
                             Text(
-                              'Subject: ${b.subject}',
+                              b.subject,
                               style: TextStyle(
-                                fontSize: 13,
+                                fontSize: 14,
                                 fontWeight: FontWeight.bold,
                                 color: isDark
                                     ? Colors.white
-                                    : BNXColors.lightTextPrimary,
+                                    : const Color(0xFF0F172A),
                               ),
                             ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 6),
                             Text(
                               b.body,
                               style: TextStyle(
                                 fontSize: 13,
                                 color: isDark
-                                    ? Colors.white.withValues(alpha: 0.9)
-                                    : BNXColors.lightTextPrimary,
+                                    ? Colors.white70
+                                    : const Color(0xFF334155),
+                                height: 1.35,
                               ),
                             ),
                             if (b.attachments.isNotEmpty) ...[
@@ -1861,17 +3184,22 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                                     ),
                                     decoration: BoxDecoration(
                                       color: isDark
-                                          ? Colors.white12
-                                          : Colors.grey[200],
+                                          ? Colors.white10
+                                          : const Color(0xFFF1F5F9),
                                       borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: isDark
+                                            ? Colors.white12
+                                            : const Color(0xFFE2E8F0),
+                                      ),
                                     ),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         const Icon(
-                                          Icons.insert_drive_file_rounded,
+                                          Icons.attach_file_rounded,
                                           size: 14,
-                                          color: Color(0xFF195BAC),
+                                          color: Color(0xFF64748B),
                                         ),
                                         const SizedBox(width: 4),
                                         Flexible(
@@ -1881,7 +3209,7 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                                             overflow: TextOverflow.ellipsis,
                                             style: const TextStyle(
                                               fontSize: 11,
-                                              fontWeight: FontWeight.w600,
+                                              color: Color(0xFF64748B),
                                             ),
                                           ),
                                         ),
@@ -1889,11 +3217,9 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                                           const SizedBox(width: 4),
                                           Text(
                                             '(${att.fileSize})',
-                                            style: TextStyle(
+                                            style: const TextStyle(
                                               fontSize: 10,
-                                              color: isDark
-                                                  ? Colors.white60
-                                                  : Colors.black54,
+                                              color: Color(0xFF94A3B8),
                                             ),
                                           ),
                                         ],
@@ -1913,19 +3239,16 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
             padding: const EdgeInsets.all(16.0),
             child: SizedBox(
               width: double.infinity,
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: isDark
-                      ? BNXColors.darkPrimary
-                      : BNXColors.lightPrimary,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+              height: 44,
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF195BAC),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  elevation: 0,
                 ),
                 onPressed: () =>
-                    _showComposeBroadcastDialog(context, ref, group.id, isDark),
+                    _showComposeBroadcastDialog(context, ref, group, isDark),
                 icon: const Icon(
                   Icons.mail_outline_rounded,
                   color: Colors.white,
@@ -1936,6 +3259,7 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                   style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
+                    fontSize: 14,
                   ),
                 ),
               ),
@@ -1949,248 +3273,504 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
   void _showComposeBroadcastDialog(
     BuildContext context,
     WidgetRef ref,
-    String groupId,
+    ColabGroup group,
     bool isDark,
   ) {
     final subjectController = TextEditingController();
     final bodyController = TextEditingController();
     List<AttachmentModel> attachedFiles = [];
+    String? selectedTemplate;
+
+    final templates = [
+      {
+        'title': 'Meeting Request',
+        'subject': 'Meeting Request: [Topic/Project Name]',
+        'body':
+            'Hi Team,\n\nI would like to schedule a brief meeting to discuss [Topic/Project Name].\n\nPlease let me know your availability for this week.\n\nBest regards,',
+      },
+      {
+        'title': 'Follow-Up Discussion',
+        'subject': 'Follow-Up: Discussion on [Topic]',
+        'body':
+            'Hi everyone,\n\nFollowing up on our recent conversation regarding [Topic]. Here are the summary points and next steps:\n- Point 1:\n- Point 2:\n\nPlease review and let me know if you have questions.\n\nThanks,',
+      },
+      {
+        'title': 'Out of Office',
+        'subject': 'Out of Office: [Your Name] - [Start Date] to [End Date]',
+        'body':
+            'Hello,\n\nThank you for your email. I am currently out of the office with limited access to my email. I will return on [Date].\n\nFor urgent matters, please contact team@bnxmail.com.\n\nBest regards,',
+      },
+      {
+        'title': 'Thank You Note',
+        'subject': 'Thank You - Great Job on [Milestone/Project]',
+        'body':
+            'Hi Team,\n\nI wanted to take a moment to thank everyone for their hard work and dedication on [Milestone/Project]. The progress we made is fantastic.\n\nKeep up the great work!\n\nBest,',
+      },
+      {
+        'title': 'Request for Feedback',
+        'subject': 'Feedback Request: [Document/Proposal Name]',
+        'body':
+            'Hi All,\n\nCould you please take a few minutes to review the latest update for [Document/Proposal Name] and share your feedback?\n\nPlease submit your notes by [Date].\n\nThank you,',
+      },
+    ];
 
     showDialog(
       context: context,
-      builder: (BuildContext context) {
+      builder: (BuildContext ctx) {
         return StatefulBuilder(
-          builder: (context, setState) {
+          builder: (dialogCtx, setState) {
             return Dialog(
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20.0),
               ),
-              backgroundColor: isDark ? BNXColors.darkSurface : Colors.white,
-              child: Container(
-                constraints: const BoxConstraints(maxWidth: 480),
-                padding: const EdgeInsets.all(24.0),
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Compose New Broadcast',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: isDark
-                              ? Colors.white
-                              : BNXColors.lightTextPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Subject',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: isDark
-                              ? BNXColors.darkTextSecondary
-                              : BNXColors.lightTextSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      TextField(
-                        controller: subjectController,
-                        decoration: InputDecoration(
-                          hintText: 'Enter subject...',
-                          hintStyle: const TextStyle(
-                            color: Colors.grey,
-                            fontSize: 13,
-                          ),
-                          contentPadding: const EdgeInsets.all(12),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: BorderSide(
-                              color: isDark
-                                  ? BNXColors.darkBorder
-                                  : BNXColors.lightBorder,
-                            ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: const BorderSide(
-                              color: BNXColors.lightPrimary,
-                              width: 2,
-                            ),
-                          ),
-                        ),
-                        style: TextStyle(
-                          color: isDark
-                              ? Colors.white
-                              : BNXColors.lightTextPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Broadcast Message',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: isDark
-                              ? BNXColors.darkTextSecondary
-                              : BNXColors.lightTextSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      TextField(
-                        controller: bodyController,
-                        maxLines: 4,
-                        decoration: InputDecoration(
-                          hintText:
-                              'Enter broadcast update for all group members...',
-                          hintStyle: const TextStyle(
-                            color: Colors.grey,
-                            fontSize: 13,
-                          ),
-                          contentPadding: const EdgeInsets.all(12),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: BorderSide(
-                              color: isDark
-                                  ? BNXColors.darkBorder
-                                  : BNXColors.lightBorder,
-                            ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: const BorderSide(
-                              color: BNXColors.lightPrimary,
-                              width: 2,
-                            ),
-                          ),
-                        ),
-                        style: TextStyle(
-                          color: isDark
-                              ? Colors.white
-                              : BNXColors.lightTextPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      // Attachments Section
-                      OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF195BAC),
-                          side: const BorderSide(color: Color(0xFF195BAC)),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                        onPressed: () async {
-                          try {
-                            final result = await FilePicker.platform.pickFiles(
-                              allowMultiple: true,
-                            );
-                            if (result != null && result.files.isNotEmpty) {
-                              setState(() {
-                                for (final file in result.files) {
-                                  attachedFiles.add(
-                                    AttachmentModel(
-                                      fileName: file.name,
-                                      fileType:
-                                          file.extension?.toUpperCase() ??
-                                          'FILE',
-                                      fileSize: file.size > 1024 * 1024
-                                          ? '${(file.size / (1024 * 1024)).toStringAsFixed(1)} MB'
-                                          : '${(file.size / 1024).toStringAsFixed(0)} KB',
-                                      filePath: file.path,
-                                    ),
-                                  );
-                                }
-                              });
-                            }
-                          } catch (e) {
-                            print('[FILE PICKER ERROR] $e');
-                          }
-                        },
-                        icon: const Icon(Icons.attach_file_rounded, size: 18),
-                        label: const Text('Attach Document / File'),
-                      ),
-                      if (attachedFiles.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          children: attachedFiles.asMap().entries.map((entry) {
-                            final idx = entry.key;
-                            final att = entry.value;
-                            return Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? Colors.white12
-                                    : Colors.grey[200],
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: isDark
-                                      ? Colors.white24
-                                      : Colors.grey[300]!,
+              backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+              insetPadding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 540),
+                child: Padding(
+                  padding: const EdgeInsets.all(26.0),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Header
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.mail_outline_rounded,
+                                  color: Color(0xFF195BAC),
+                                  size: 22,
                                 ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
+                                const SizedBox(width: 8),
+                                Text(
+                                  'New Colab Broadcast',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark
+                                        ? Colors.white
+                                        : const Color(0xFF0F172A),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close_rounded, size: 20),
+                              onPressed: () => Navigator.of(ctx).pop(),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Send a broadcast announcement to all members of this Colab group',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isDark
+                                ? Colors.white70
+                                : const Color(0xFF64748B),
+                            height: 1.35,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+
+                        // Section 1: QUICK TEMPLATES (OPTIONAL)
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? const Color(0xFF0F172A)
+                                : const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isDark
+                                  ? const Color(0xFF334155)
+                                  : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
                                 children: [
                                   const Icon(
-                                    Icons.insert_drive_file_rounded,
+                                    Icons.folder_copy_outlined,
                                     size: 14,
                                     color: Color(0xFF195BAC),
                                   ),
-                                  const SizedBox(width: 4),
-                                  Flexible(
-                                    child: Text(
-                                      att.fileName,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                        color: isDark
-                                            ? Colors.white
-                                            : Colors.black87,
-                                      ),
-                                    ),
-                                  ),
                                   const SizedBox(width: 6),
-                                  GestureDetector(
-                                    onTap: () {
-                                      setState(() {
-                                        attachedFiles.removeAt(idx);
-                                      });
-                                    },
-                                    child: const Icon(
-                                      Icons.close_rounded,
-                                      size: 14,
-                                      color: Colors.redAccent,
+                                  Text(
+                                    'QUICK TEMPLATES (OPTIONAL)',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.5,
+                                      color: isDark
+                                          ? Colors.white70
+                                          : const Color(0xFF0F172A),
                                     ),
                                   ),
                                 ],
                               ),
-                            );
-                          }).toList(),
-                        ),
-                      ],
-                      const SizedBox(height: 20),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          TextButton(
-                            onPressed: () => Navigator.of(context).pop(),
-                            child: const Text('Cancel'),
+                              const SizedBox(height: 8),
+                              Container(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 12),
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? const Color(0xFF1E293B)
+                                      : Colors.white,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: isDark
+                                        ? const Color(0xFF334155)
+                                        : const Color(0xFFCBD5E1),
+                                  ),
+                                ),
+                                child: DropdownButtonHideUnderline(
+                                  child: DropdownButton<String>(
+                                    value: selectedTemplate,
+                                    isExpanded: true,
+                                    hint: const Text(
+                                      '✓ -- Choose a template to load --',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: Color(0xFF64748B),
+                                      ),
+                                    ),
+                                    icon: const Icon(
+                                      Icons.keyboard_arrow_down_rounded,
+                                      size: 20,
+                                    ),
+                                    items: [
+                                      const DropdownMenuItem<String>(
+                                        value: '',
+                                        child: Text(
+                                          '✓ -- Choose a template to load --',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            color: Color(0xFF64748B),
+                                          ),
+                                        ),
+                                      ),
+                                      ...templates.map((tmpl) {
+                                        return DropdownMenuItem<String>(
+                                          value: tmpl['title'],
+                                          child: Text(
+                                            tmpl['title']!,
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              color: isDark
+                                                  ? Colors.white
+                                                  : const Color(0xFF0F172A),
+                                            ),
+                                          ),
+                                        );
+                                      }),
+                                    ],
+                                    onChanged: (val) {
+                                      if (val == null || val.isEmpty) {
+                                        setState(() {
+                                          selectedTemplate = null;
+                                          subjectController.clear();
+                                          bodyController.clear();
+                                        });
+                                        return;
+                                      }
+                                      final match = templates.firstWhere(
+                                        (t) => t['title'] == val,
+                                      );
+                                      setState(() {
+                                        selectedTemplate = val;
+                                        subjectController.text =
+                                            match['subject']!;
+                                        bodyController.text = match['body']!;
+                                      });
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: BNXColors.lightPrimary,
+                        ),
+                        const SizedBox(height: 18),
+
+                        // Section 2: SUBJECT *
+                        Text(
+                          'SUBJECT *',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
+                            color: isDark
+                                ? Colors.white70
+                                : const Color(0xFF0F172A),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: subjectController,
+                          decoration: InputDecoration(
+                            hintText: 'e.g. Q4 Planning Kickoff',
+                            hintStyle: const TextStyle(
+                              fontSize: 13,
+                              color: Color(0xFF94A3B8),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 12,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(
+                                color: isDark
+                                    ? const Color(0xFF334155)
+                                    : const Color(0xFFE2E8F0),
+                              ),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(
+                                color: isDark
+                                    ? const Color(0xFF334155)
+                                    : const Color(0xFFE2E8F0),
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: const BorderSide(
+                                color: Color(0xFF195BAC),
+                                width: 1.5,
+                              ),
+                            ),
+                          ),
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: isDark
+                                ? Colors.white
+                                : const Color(0xFF0F172A),
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+
+                        // Section 3: MESSAGE BODY *
+                        Text(
+                          'MESSAGE BODY *',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
+                            color: isDark
+                                ? Colors.white70
+                                : const Color(0xFF0F172A),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: isDark
+                                  ? const Color(0xFF334155)
+                                  : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              TextField(
+                                controller: bodyController,
+                                minLines: 5,
+                                maxLines: 8,
+                                decoration: const InputDecoration(
+                                  hintText: 'Write email content here...',
+                                  hintStyle: TextStyle(
+                                    fontSize: 13,
+                                    color: Color(0xFF94A3B8),
+                                  ),
+                                  contentPadding: EdgeInsets.all(14),
+                                  border: InputBorder.none,
+                                ),
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: isDark
+                                      ? Colors.white
+                                      : const Color(0xFF0F172A),
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                child: Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.attach_file_rounded,
+                                        size: 20,
+                                        color: Color(0xFF64748B),
+                                      ),
+                                      onPressed: () async {
+                                        try {
+                                          final result = await FilePicker
+                                              .platform
+                                              .pickFiles(
+                                            allowMultiple: true,
+                                          );
+                                          if (result != null &&
+                                              result.files.isNotEmpty) {
+                                            for (final file in result.files) {
+                                              String? dataUri;
+                                              Uint8List? fileBytes = file.bytes;
+                                              if (fileBytes == null &&
+                                                  file.path != null) {
+                                                try {
+                                                  final f = File(file.path!);
+                                                  if (f.existsSync()) {
+                                                    fileBytes =
+                                                        await f.readAsBytes();
+                                                  }
+                                                } catch (_) {}
+                                              }
+                                              final ext = (file.extension ?? '')
+                                                  .toLowerCase();
+                                              final isImg = [
+                                                'png',
+                                                'jpg',
+                                                'jpeg',
+                                                'gif',
+                                                'webp',
+                                              ].contains(ext);
+                                              if (isImg && fileBytes != null) {
+                                                final mimeExt =
+                                                    (ext == 'jpg' ||
+                                                            ext == 'jpeg')
+                                                        ? 'jpeg'
+                                                        : ext;
+                                                dataUri =
+                                                    'data:image/$mimeExt;base64,${base64Encode(fileBytes)}';
+                                              }
+                                              setState(() {
+                                                attachedFiles.add(
+                                                  AttachmentModel(
+                                                    fileName: file.name,
+                                                    fileType:
+                                                        file.extension
+                                                            ?.toUpperCase() ??
+                                                        'FILE',
+                                                    fileSize: file.size >
+                                                            1024 * 1024
+                                                        ? '${(file.size / (1024 * 1024)).toStringAsFixed(1)} MB'
+                                                        : '${(file.size / 1024).toStringAsFixed(0)} KB',
+                                                    filePath:
+                                                        dataUri ?? file.path,
+                                                  ),
+                                                );
+                                              });
+                                            }
+                                          }
+                                        } catch (e) {
+                                          print('[BROADCAST FILE PICKER] $e');
+                                        }
+                                      },
+                                      tooltip: 'Attach file',
+                                    ),
+                                    const Text(
+                                      'Max 5MB per file',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Color(0xFF94A3B8),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Attached chips if any
+                        if (attachedFiles.isNotEmpty) ...[
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: attachedFiles
+                                .asMap()
+                                .entries
+                                .map((entry) {
+                                  final idx = entry.key;
+                                  final att = entry.value;
+                                  return Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 5,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: isDark
+                                          ? Colors.white10
+                                          : const Color(0xFFF1F5F9),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: const Color(0xFFE2E8F0),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(
+                                          Icons.attach_file_rounded,
+                                          size: 14,
+                                          color: Color(0xFF195BAC),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          att.fileName,
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        GestureDetector(
+                                          onTap: () {
+                                            setState(() {
+                                              attachedFiles.removeAt(idx);
+                                            });
+                                          },
+                                          child: const Icon(
+                                            Icons.close_rounded,
+                                            size: 14,
+                                            color: Colors.redAccent,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                })
+                                .toList(),
+                          ),
+                        ],
+                        const SizedBox(height: 24),
+
+                        // Action button: Send Broadcast ➤
+                        SizedBox(
+                          height: 48,
+                          child: FilledButton(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF195BAC),
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
+                                borderRadius: BorderRadius.circular(10),
                               ),
                             ),
                             onPressed: () async {
@@ -2199,7 +3779,9 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                               if (subjectText.isEmpty || bodyText.isEmpty) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
-                                    content: Text('Please fill all fields'),
+                                    content: Text(
+                                      'Please enter subject and message body.',
+                                    ),
                                   ),
                                 );
                                 return;
@@ -2212,14 +3794,14 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                                 await ref
                                     .read(colabListProvider.notifier)
                                     .addBroadcast(
-                                      groupId,
+                                      group.id,
                                       sender: senderName,
                                       subject: subjectText,
                                       body: bodyText,
                                       attachments: attachedFiles,
                                     );
                                 if (context.mounted) {
-                                  Navigator.of(context).pop();
+                                  Navigator.of(ctx).pop();
                                 }
                               } catch (e) {
                                 if (context.mounted) {
@@ -2233,14 +3815,29 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                                 }
                               }
                             },
-                            child: const Text(
-                              'Send Broadcast',
-                              style: TextStyle(color: Colors.white),
+                            child: const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  'Send Broadcast',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                SizedBox(width: 8),
+                                Icon(
+                                  Icons.near_me_rounded,
+                                  size: 16,
+                                  color: Colors.white,
+                                ),
+                              ],
                             ),
                           ),
-                        ],
-                      ),
-                    ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -2303,17 +3900,7 @@ class _CasboxInteractiveWidgetState
     String currentUserEmail,
     List<EmailModel> mailboxEmails,
   ) {
-    final s = m.sender.toLowerCase().trim();
-    if (s == 'me' || m.id.startsWith('local_')) return true;
-    if (currentUserEmail.isNotEmpty) {
-      if (s == currentUserEmail) return true;
-      final sHandle = s.contains('@') ? s.split('@').first : s;
-      final meHandle = currentUserEmail.contains('@')
-          ? currentUserEmail.split('@').first
-          : currentUserEmail;
-      if (sHandle.isNotEmpty && sHandle == meHandle) return true;
-    }
-    return false;
+    return checkCasboxMessageSentByMe(m, currentUserEmail, mailboxEmails);
   }
 
   void _showEditContactNameDialog(String contactId, String currentName) {
@@ -2444,23 +4031,7 @@ class _CasboxInteractiveWidgetState
   }
 
   (Color, Color) _getAvatarColors(String name, bool isDark) {
-    if (isDark) {
-      return (const Color(0xFF1E293B), const Color(0xFF93C5FD));
-    }
-    final code = name.toLowerCase().hashCode.abs() % 4;
-    switch (code) {
-      case 0:
-        return (
-          const Color(0xFFFEF3C7),
-          const Color(0xFFD97706),
-        ); // amber / orange
-      case 1:
-        return (const Color(0xFFEDE9FE), const Color(0xFF7C3AED)); // purple
-      case 2:
-        return (const Color(0xFFEFF6FF), const Color(0xFF2563EB)); // blue
-      default:
-        return (const Color(0xFFF0FDF4), const Color(0xFF16A34A)); // green
-    }
+    return _getCasboxAvatarColors(name, isDark);
   }
 
   @override
@@ -3380,23 +4951,35 @@ class _CasboxInteractiveWidgetState
               InkWell(
                 onTap: () async {
                   final ids = _selectedIds.toList();
+                  if (ids.isEmpty) return;
                   final archiveTarget = !isArchiveTab;
-                  setState(() {
-                    _selectedIds.clear();
-                  });
-                  await ref
-                      .read(casboxMessagesProvider.notifier)
-                      .batchArchiveMessages(ids, archiveTarget);
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          archiveTarget
-                              ? '${ids.length} messages archived'
-                              : '${ids.length} messages unarchived',
+                  try {
+                    await ref
+                        .read(casboxMessagesProvider.notifier)
+                        .batchArchiveMessages(ids, archiveTarget);
+                    if (mounted) {
+                      setState(() {
+                        _selectedIds.clear();
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            archiveTarget
+                                ? '${ids.length} messages archived'
+                                : '${ids.length} messages unarchived',
+                          ),
                         ),
-                      ),
-                    );
+                      );
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Failed to update archive status: $e'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
                   }
                 },
                 borderRadius: BorderRadius.circular(16),
@@ -5105,10 +6688,16 @@ class _CasboxInteractiveWidgetState
                 tooltip: isArchivedMsg ? 'Unarchive' : 'Archive',
                 onPressed: () async {
                   final newArchiveState = !isArchivedMsg;
-                  final threadIds = threadMessages.map((m) => m.id).toList();
-                  if (threadIds.isEmpty) {
-                    threadIds.add(selectedMsg.id);
-                  }
+                  final subjectMatches = threadMessages
+                      .where((m) =>
+                          selectedMsg.subject.trim().isEmpty ||
+                          m.subject.trim().toLowerCase() ==
+                              selectedMsg.subject.trim().toLowerCase())
+                      .map((m) => m.id)
+                      .toList();
+                  final threadIds = subjectMatches.isNotEmpty
+                      ? subjectMatches
+                      : [selectedMsg.id];
                   setState(() {
                     _selectedDesktopMessage = null;
                   });
@@ -5811,10 +7400,16 @@ class _CasboxInteractiveWidgetState
                 tooltip: selectedMsg.isArchived ? 'Unarchive' : 'Archive',
                 onPressed: () async {
                   final newArchiveState = !selectedMsg.isArchived;
-                  final threadIds = threadMessages.map((m) => m.id).toList();
-                  if (threadIds.isEmpty) {
-                    threadIds.add(selectedMsg.id);
-                  }
+                  final subjectMatches = threadMessages
+                      .where((m) =>
+                          selectedMsg.subject.trim().isEmpty ||
+                          m.subject.trim().toLowerCase() ==
+                              selectedMsg.subject.trim().toLowerCase())
+                      .map((m) => m.id)
+                      .toList();
+                  final threadIds = subjectMatches.isNotEmpty
+                      ? subjectMatches
+                      : [selectedMsg.id];
                   setState(() => _selectedDesktopMessage = null);
                   ref.read(selectedCasboxThreadProvider.notifier).state = null;
                   await ref
@@ -6433,6 +8028,627 @@ class _CommentsSectionState extends State<CommentsSection> {
     super.dispose();
   }
 
+  bool _isImageAttachment(AttachmentModel att) {
+    final ext = att.fileName.split('.').last.toLowerCase();
+    final type = att.fileType.toLowerCase();
+    final path = att.filePath?.toLowerCase() ?? '';
+    return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'].contains(ext) ||
+        ['image', 'png', 'jpg', 'jpeg', 'gif', 'webp'].contains(type) ||
+        path.startsWith('data:image/');
+  }
+
+  String _formatDateHeader(DateTime dt) {
+    final now = DateTime.now();
+    final isToday =
+        dt.year == now.year && dt.month == now.month && dt.day == now.day;
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    final monthStr = months[dt.month - 1];
+    final period = dt.hour >= 12 ? 'PM' : 'AM';
+    final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+    final min = dt.minute.toString().padLeft(2, '0');
+    if (isToday) {
+      return 'Today, $hour:$min $period';
+    }
+    return '$monthStr ${dt.day}, $hour:$min $period';
+  }
+
+  String _formatTimeOnly(DateTime dt) {
+    final period = dt.hour >= 12 ? 'PM' : 'AM';
+    final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+    final min = dt.minute.toString().padLeft(2, '0');
+    return '$hour:$min $period';
+  }
+
+  Future<void> _pickAttachment() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        allowMultiple: true,
+        withData: true,
+      );
+      if (result != null && result.files.isNotEmpty) {
+        for (final file in result.files) {
+          Uint8List? bytes = file.bytes;
+          if (bytes == null && file.path != null && file.path!.isNotEmpty) {
+            try {
+              final f = File(file.path!);
+              if (await f.exists()) {
+                bytes = await f.readAsBytes();
+              }
+            } catch (_) {}
+          }
+
+          String? pathOrDataUri = file.path;
+          final ext = file.extension?.toLowerCase() ?? '';
+          final isImg = [
+            'png',
+            'jpg',
+            'jpeg',
+            'gif',
+            'webp',
+            'bmp',
+            'svg',
+          ].contains(ext);
+
+          if (bytes != null && bytes.isNotEmpty) {
+            if (isImg) {
+              final mime = ext == 'jpg' ? 'jpeg' : ext;
+              pathOrDataUri = 'data:image/$mime;base64,${base64Encode(bytes)}';
+            } else if (bytes.length < 3 * 1024 * 1024) {
+              pathOrDataUri =
+                  'data:application/octet-stream;base64,${base64Encode(bytes)}';
+            }
+          }
+
+          _pendingAttachments.add(
+            AttachmentModel(
+              fileName: file.name,
+              fileType: file.extension?.toUpperCase() ?? 'FILE',
+              fileSize: file.size > 1024 * 1024
+                  ? '${(file.size / (1024 * 1024)).toStringAsFixed(1)} MB'
+                  : '${(file.size / 1024).toStringAsFixed(0)} KB',
+              filePath: pathOrDataUri,
+            ),
+          );
+        }
+        setState(() {});
+      }
+    } catch (e) {
+      debugPrint('[FILE PICKER ERROR] $e');
+    }
+  }
+
+  Future<void> _downloadAttachment(
+    AttachmentModel att,
+  ) async {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Downloading ${att.fileName}...'),
+        duration: const Duration(seconds: 1),
+      ),
+    );
+    try {
+      final savedPath = await AttachmentDownloader.downloadAndSave(att);
+      if (!mounted) return;
+      if (savedPath != null) {
+        final displayName = savedPath.split(Platform.pathSeparator).last;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFF195BAC),
+            content: Text('File saved to: $displayName'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.redAccent,
+            content: Text('Failed to download ${att.fileName}'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.redAccent,
+          content: Text('Download error: $e'),
+        ),
+      );
+    }
+  }
+
+  void _openImagePreviewDialog(BuildContext context, AttachmentModel att) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.all(16),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 800, maxHeight: 700),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F172A),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: const [
+                BoxShadow(
+                  color: Colors.black54,
+                  blurRadius: 20,
+                  offset: Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Top Header
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.image_outlined,
+                        color: Colors.white70,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          att.fileName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      if (att.fileSize.isNotEmpty) ...[
+                        Text(
+                          att.fileSize,
+                          style: const TextStyle(
+                            color: Colors.white60,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      IconButton(
+                        icon: const Icon(
+                          Icons.download_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                        tooltip: 'Download',
+                        onPressed: () => _downloadAttachment(att),
+                      ),
+                      IconButton(
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                        tooltip: 'Close',
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(color: Colors.white12, height: 1),
+
+                // Interactive zoomable image
+                Expanded(
+                  child: InteractiveViewer(
+                    minScale: 0.5,
+                    maxScale: 5.0,
+                    child: Center(
+                      child: SmartImageWidget(
+                        attachment: att,
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showEmojiPicker(BuildContext context) {
+    final emojis = [
+      '😀',
+      '😃',
+      '😄',
+      '😁',
+      '😆',
+      '😅',
+      '😂',
+      '🤣',
+      '😊',
+      '😇',
+      '🙂',
+      '🙃',
+      '😉',
+      '😌',
+      '😍',
+      '🥰',
+      '😘',
+      '😋',
+      '😜',
+      '🤪',
+      '😎',
+      '🥳',
+      '😏',
+      '🤔',
+      '🤐',
+      '🤨',
+      '😐',
+      '😑',
+      '😶',
+      '😏',
+      '👍',
+      '👎',
+      '👏',
+      '🙌',
+      '👐',
+      '🤝',
+      '🙏',
+      '✌️',
+      '🤞',
+      '💪',
+      '🎉',
+      '🔥',
+      '✨',
+      '💯',
+      '❤️',
+      '💙',
+      '⭐',
+      '🚀',
+      '💡',
+      '📌',
+      '✉️',
+      '📎',
+      '📞',
+      '📅',
+      '⏳',
+      '✅',
+      '❌',
+      '⚠️',
+      '👀',
+      '🎯',
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: widget.isDark ? BNXColors.darkSurface : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            height: 280,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Reactions & Emojis',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        color: widget.isDark
+                            ? Colors.white
+                            : BNXColors.lightTextPrimary,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 20),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: GridView.builder(
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 7,
+                          mainAxisSpacing: 10,
+                          crossAxisSpacing: 10,
+                        ),
+                    itemCount: emojis.length,
+                    itemBuilder: (context, i) {
+                      final em = emojis[i];
+                      return InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: () {
+                          _commentController.text += em;
+                          _commentController.selection =
+                              TextSelection.fromPosition(
+                                TextPosition(
+                                  offset: _commentController.text.length,
+                                ),
+                              );
+                          Navigator.pop(ctx);
+                        },
+                        child: Center(
+                          child: Text(em, style: const TextStyle(fontSize: 24)),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildAttachmentBubbleItem(
+    BuildContext context,
+    AttachmentModel att,
+    bool isMe,
+  ) {
+    final isImg = _isImageAttachment(att);
+
+    if (isImg) {
+      return Container(
+        margin: const EdgeInsets.only(top: 6),
+        width: 240,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: widget.isDark ? Colors.white24 : Colors.grey[300]!,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(9),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              GestureDetector(
+                onTap: () => _openImagePreviewDialog(context, att),
+                child: SizedBox(
+                  height: 140,
+                  width: 240,
+                  child: SmartImageWidget(
+                    attachment: att,
+                    height: 140,
+                    width: 240,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
+                decoration: const BoxDecoration(color: Color(0xFF1E293B)),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            att.fileName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text(
+                            att.fileSize.isNotEmpty
+                                ? att.fileSize
+                                : 'Image File',
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.visibility_outlined,
+                        color: Colors.white,
+                        size: 16,
+                      ),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 26,
+                        minHeight: 26,
+                      ),
+                      tooltip: 'View image',
+                      onPressed: () => _openImagePreviewDialog(context, att),
+                    ),
+                    const SizedBox(width: 4),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.download_rounded,
+                        color: Colors.white,
+                        size: 16,
+                      ),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 26,
+                        minHeight: 26,
+                      ),
+                      tooltip: 'Download',
+                      onPressed: () => _downloadAttachment(att),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Non-image file card
+    return Container(
+      margin: const EdgeInsets.only(top: 6),
+      width: 240,
+      decoration: BoxDecoration(
+        color: widget.isDark ? Colors.white10 : const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: widget.isDark ? Colors.white24 : Colors.grey[300]!,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 20),
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.06),
+                        blurRadius: 4,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.attach_file_rounded,
+                    size: 26,
+                    color: Color(0xFF64748B),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    att.fileType.isNotEmpty ? att.fileType : 'FILE',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF64748B),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: const BoxDecoration(
+              color: Color(0xFF1E293B),
+              borderRadius: BorderRadius.only(
+                bottomLeft: Radius.circular(9),
+                bottomRight: Radius.circular(9),
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        att.fileName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        att.fileSize.isNotEmpty ? att.fileSize : 'File',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(
+                    Icons.download_rounded,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 26,
+                    minHeight: 26,
+                  ),
+                  tooltip: 'Download file',
+                  onPressed: () => _downloadAttachment(att),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _sendComment() async {
     final text = _commentController.text.trim();
     if (text.isEmpty && _pendingAttachments.isEmpty) return;
@@ -6459,12 +8675,16 @@ class _CommentsSectionState extends State<CommentsSection> {
           );
       _scrollToBottom();
     } catch (e) {
-      print('[COMMENT ERROR] Failed to send message: $e');
+      debugPrint('[COMMENT ERROR] Failed to send message: $e');
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final active = widget.ref.read(activeAccountProvider);
+    final myEmail = active.email.toLowerCase().trim();
+    final myName = active.name.toLowerCase().trim();
+
     return Container(
       decoration: BoxDecoration(
         color: widget.isDark ? BNXColors.darkSurface : Colors.white,
@@ -6476,7 +8696,7 @@ class _CommentsSectionState extends State<CommentsSection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
+          // Header: matching image (chat bubble icon, "Comments", chevron >)
           InkWell(
             onTap: () {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -6493,7 +8713,10 @@ class _CommentsSectionState extends State<CommentsSection> {
               topRight: Radius.circular(16),
             ),
             child: Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16.0,
+                vertical: 14.0,
+              ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -6517,7 +8740,11 @@ class _CommentsSectionState extends State<CommentsSection> {
                       ),
                     ],
                   ),
-                  const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: Colors.grey,
+                    size: 20,
+                  ),
                 ],
               ),
             ),
@@ -6608,200 +8835,191 @@ class _CommentsSectionState extends State<CommentsSection> {
                   )
                 : ListView.builder(
                     controller: _scrollController,
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
                     itemCount: widget.group.comments.length,
                     itemBuilder: (context, index) {
                       final c = widget.group.comments[index];
-                      final active = widget.ref.read(activeAccountProvider);
+                      final s = c.sender.toLowerCase().trim();
                       final isMe =
-                          c.sender.toLowerCase() == 'me' ||
-                          (active.name.isNotEmpty &&
-                              c.sender.toLowerCase() ==
-                                  active.name.toLowerCase()) ||
-                          (active.email.isNotEmpty &&
-                              c.sender.toLowerCase() ==
-                                  active.email.toLowerCase());
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12.0),
-                        child: Row(
-                          mainAxisAlignment: isMe
-                              ? MainAxisAlignment.end
-                              : MainAxisAlignment.start,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (!isMe) ...[
-                              CircleAvatar(
-                                radius: 14,
-                                backgroundColor: BNXColors.lightPrimary
-                                    .withValues(alpha: 0.2),
+                          s == 'me' ||
+                          (myEmail.isNotEmpty && s == myEmail) ||
+                          (myName.isNotEmpty && s == myName);
+
+                      // Determine if we should show date separator above this item
+                      bool showDateHeader = false;
+                      if (index == 0) {
+                        showDateHeader = true;
+                      } else {
+                        final prev = widget.group.comments[index - 1];
+                        if (c.timestamp
+                                    .difference(prev.timestamp)
+                                    .inMinutes
+                                    .abs() >
+                                30 ||
+                            c.timestamp.day != prev.timestamp.day) {
+                          showDateHeader = true;
+                        }
+                      }
+
+                      final initial = c.sender.isNotEmpty
+                          ? c.sender[0].toLowerCase()
+                          : '?';
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (showDateHeader)
+                            Center(
+                              child: Container(
+                                margin: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 4,
+                                ),
                                 child: Text(
-                                  c.sender.isNotEmpty
-                                      ? c.sender[0].toUpperCase()
-                                      : '?',
+                                  _formatDateHeader(c.timestamp),
                                   style: TextStyle(
                                     fontSize: 11,
-                                    fontWeight: FontWeight.bold,
+                                    fontWeight: FontWeight.w500,
                                     color: widget.isDark
-                                        ? Colors.white
-                                        : BNXColors.lightPrimary,
+                                        ? Colors.white54
+                                        : const Color(0xFF64748B),
                                   ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                            ],
-                            Flexible(
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 10,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: isMe
-                                      ? BNXColors.lightPrimary
-                                      : (widget.isDark
-                                            ? Colors.white.withValues(
-                                                alpha: 0.08,
-                                              )
-                                            : Colors.grey[100]),
-                                  borderRadius: BorderRadius.only(
-                                    topLeft: const Radius.circular(14),
-                                    topRight: const Radius.circular(14),
-                                    bottomLeft: Radius.circular(isMe ? 14 : 0),
-                                    bottomRight: Radius.circular(isMe ? 0 : 14),
-                                  ),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: isMe
-                                      ? CrossAxisAlignment.end
-                                      : CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      isMe ? '${c.sender} (Me)' : c.sender,
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 11,
-                                        color: isMe
-                                            ? Colors.white.withValues(
-                                                alpha: 0.8,
-                                              )
-                                            : (widget.isDark
-                                                  ? Colors.white60
-                                                  : Colors.black54),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    if (c.message.isNotEmpty)
-                                      Text(
-                                        c.message,
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: isMe
-                                              ? Colors.white
-                                              : (widget.isDark
-                                                    ? Colors.white
-                                                    : BNXColors
-                                                          .lightTextPrimary),
-                                        ),
-                                      ),
-                                    if (c.attachments.isNotEmpty) ...[
-                                      const SizedBox(height: 6),
-                                      Column(
-                                        crossAxisAlignment: isMe
-                                            ? CrossAxisAlignment.end
-                                            : CrossAxisAlignment.start,
-                                        children: c.attachments.map((att) {
-                                          return ConstrainedBox(
-                                            constraints: BoxConstraints(
-                                              maxWidth:
-                                                  MediaQuery.of(
-                                                    context,
-                                                  ).size.width *
-                                                  0.65,
-                                            ),
-                                            child: Container(
-                                              margin: const EdgeInsets.only(
-                                                top: 4,
-                                              ),
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 10,
-                                                    vertical: 6,
-                                                  ),
-                                              decoration: BoxDecoration(
-                                                color: isMe
-                                                    ? Colors.white.withValues(
-                                                        alpha: 0.2,
-                                                      )
-                                                    : (widget.isDark
-                                                          ? Colors.white12
-                                                          : Colors.grey[300]),
-                                                borderRadius:
-                                                    BorderRadius.circular(8),
-                                              ),
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Icon(
-                                                    Icons
-                                                        .insert_drive_file_rounded,
-                                                    size: 14,
-                                                    color: isMe
-                                                        ? Colors.white
-                                                        : const Color(
-                                                            0xFF195BAC,
-                                                          ),
-                                                  ),
-                                                  const SizedBox(width: 6),
-                                                  Flexible(
-                                                    child: Text(
-                                                      att.fileName,
-                                                      maxLines: 1,
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                      style: TextStyle(
-                                                        fontSize: 12,
-                                                        fontWeight:
-                                                            FontWeight.w600,
-                                                        color: isMe
-                                                            ? Colors.white
-                                                            : (widget.isDark
-                                                                  ? Colors.white
-                                                                  : Colors
-                                                                        .black87),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  if (att
-                                                      .fileSize
-                                                      .isNotEmpty) ...[
-                                                    const SizedBox(width: 4),
-                                                    Text(
-                                                      '(${att.fileSize})',
-                                                      style: TextStyle(
-                                                        fontSize: 10,
-                                                        color: isMe
-                                                            ? Colors.white70
-                                                            : (widget.isDark
-                                                                  ? Colors
-                                                                        .white60
-                                                                  : Colors
-                                                                        .black54),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ],
-                                              ),
-                                            ),
-                                          );
-                                        }).toList(),
-                                      ),
-                                    ],
-                                  ],
                                 ),
                               ),
                             ),
-                          ],
-                        ),
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 14.0),
+                            child: Row(
+                              mainAxisAlignment: isMe
+                                  ? MainAxisAlignment.end
+                                  : MainAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (!isMe) ...[
+                                  CircleAvatar(
+                                    radius: 13,
+                                    backgroundColor: const Color(0xFFDBEAFE),
+                                    child: Text(
+                                      initial,
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF1E40AF),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                ],
+                                Flexible(
+                                  child: Column(
+                                    crossAxisAlignment: isMe
+                                        ? CrossAxisAlignment.end
+                                        : CrossAxisAlignment.start,
+                                    children: [
+                                      // Sender name above bubble
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                          left: 4,
+                                          right: 4,
+                                          bottom: 4,
+                                        ),
+                                        child: Text(
+                                          isMe ? '${c.sender} (Me)' : c.sender,
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w500,
+                                            color: widget.isDark
+                                                ? Colors.white60
+                                                : const Color(0xFF64748B),
+                                          ),
+                                        ),
+                                      ),
+                                      // Message bubble (if text present)
+                                      if (c.message.isNotEmpty)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 14,
+                                            vertical: 10,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: isMe
+                                                ? const Color(0xFF195BAC)
+                                                : (widget.isDark
+                                                      ? Colors.white12
+                                                      : const Color(
+                                                          0xFFF1F5F9,
+                                                        )),
+                                            borderRadius: BorderRadius.only(
+                                              topLeft: const Radius.circular(
+                                                12,
+                                              ),
+                                              topRight: const Radius.circular(
+                                                12,
+                                              ),
+                                              bottomLeft: Radius.circular(
+                                                isMe ? 12 : 2,
+                                              ),
+                                              bottomRight: Radius.circular(
+                                                isMe ? 2 : 12,
+                                              ),
+                                            ),
+                                          ),
+                                          child: Text(
+                                            c.message,
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              height: 1.35,
+                                              color: isMe
+                                                  ? Colors.white
+                                                  : (widget.isDark
+                                                        ? Colors.white
+                                                        : const Color(
+                                                            0xFF1E293B,
+                                                          )),
+                                            ),
+                                          ),
+                                        ),
+
+                                      // Attachments (Image cards / File cards)
+                                      if (c.attachments.isNotEmpty)
+                                        ...c.attachments.map(
+                                          (att) => _buildAttachmentBubbleItem(
+                                            context,
+                                            att,
+                                            isMe,
+                                          ),
+                                        ),
+
+                                      // Timestamp below bubble
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                          left: 4,
+                                          right: 4,
+                                          top: 4,
+                                        ),
+                                        child: Text(
+                                          _formatTimeOnly(c.timestamp),
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: widget.isDark
+                                                ? Colors.white38
+                                                : const Color(0xFF94A3B8),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       );
                     },
                   ),
@@ -6811,141 +9029,177 @@ class _CommentsSectionState extends State<CommentsSection> {
           // Pending attachments bar
           if (_pendingAttachments.isNotEmpty)
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              color: widget.isDark ? Colors.white10 : Colors.grey[100],
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              color: widget.isDark ? Colors.white10 : const Color(0xFFF8FAFC),
               child: Wrap(
-                spacing: 6,
+                spacing: 8,
                 runSpacing: 6,
                 children: _pendingAttachments.asMap().entries.map((entry) {
                   final idx = entry.key;
                   final att = entry.value;
-                  return ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxWidth: MediaQuery.of(context).size.width * 0.45,
+                  final isImg = _isImageAttachment(att);
+
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
                     ),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
+                    decoration: BoxDecoration(
+                      color: widget.isDark ? Colors.white12 : Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: widget.isDark
+                            ? Colors.white24
+                            : const Color(0xFFE2E8F0),
                       ),
-                      decoration: BoxDecoration(
-                        color: widget.isDark ? Colors.white12 : Colors.white,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: widget.isDark
-                              ? Colors.white24
-                              : Colors.grey[300]!,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.04),
+                          blurRadius: 4,
+                          offset: const Offset(0, 1),
                         ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.insert_drive_file_rounded,
-                            size: 14,
-                            color: Color(0xFF195BAC),
-                          ),
-                          const SizedBox(width: 4),
-                          Flexible(
-                            child: Text(
-                              att.fileName,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                              ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          isImg
+                              ? Icons.image_rounded
+                              : Icons.attach_file_rounded,
+                          size: 16,
+                          color: const Color(0xFF195BAC),
+                        ),
+                        const SizedBox(width: 6),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 160),
+                          child: Text(
+                            att.fileName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: widget.isDark
+                                  ? Colors.white
+                                  : const Color(0xFF1E293B),
                             ),
                           ),
-                          const SizedBox(width: 4),
-                          GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                _pendingAttachments.removeAt(idx);
-                              });
-                            },
-                            child: const Icon(
-                              Icons.close_rounded,
-                              size: 14,
-                              color: Colors.redAccent,
-                            ),
+                        ),
+                        const SizedBox(width: 6),
+                        GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _pendingAttachments.removeAt(idx);
+                            });
+                          },
+                          child: const Icon(
+                            Icons.close_rounded,
+                            size: 16,
+                            color: Colors.redAccent,
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   );
                 }).toList(),
               ),
             ),
 
-          // Input bar
-          Padding(
-            padding: const EdgeInsets.all(12.0),
+          // Bottom Input bar matching Image 2 & 3:
+          // Paperclip 📎, Emoji 😊, rounded "Type a message..." pill, circular send button ➤
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 12.0,
+              vertical: 10.0,
+            ),
+            color: widget.isDark ? BNXColors.darkSurface : Colors.white,
             child: Row(
               children: [
+                // Paperclip icon
                 IconButton(
                   icon: const Icon(
                     Icons.attach_file_rounded,
-                    color: Color(0xFF195BAC),
+                    color: Color(0xFF64748B),
+                    size: 22,
                   ),
-                  onPressed: () async {
-                    try {
-                      final result = await FilePicker.platform.pickFiles(
-                        allowMultiple: true,
-                      );
-                      if (result != null && result.files.isNotEmpty) {
-                        setState(() {
-                          for (final file in result.files) {
-                            _pendingAttachments.add(
-                              AttachmentModel(
-                                fileName: file.name,
-                                fileType:
-                                    file.extension?.toUpperCase() ?? 'FILE',
-                                fileSize: file.size > 1024 * 1024
-                                    ? '${(file.size / (1024 * 1024)).toStringAsFixed(1)} MB'
-                                    : '${(file.size / 1024).toStringAsFixed(0)} KB',
-                                filePath: file.path,
-                              ),
-                            );
-                          }
-                        });
-                      }
-                    } catch (e) {
-                      print('[FILE PICKER ERROR] $e');
-                    }
-                  },
+                  tooltip: 'Attach file or image',
+                  onPressed: _pickAttachment,
                 ),
+
+                // Emoji icon
+                IconButton(
+                  icon: const Icon(
+                    Icons.sentiment_satisfied_alt_outlined,
+                    color: Color(0xFF64748B),
+                    size: 22,
+                  ),
+                  tooltip: 'Add emoji',
+                  onPressed: () => _showEmojiPicker(context),
+                ),
+
+                // Rounded input pill
                 Expanded(
-                  child: TextField(
-                    controller: _commentController,
-                    onSubmitted: (_) => _sendComment(),
-                    decoration: const InputDecoration(
-                      hintText: 'Type a message...',
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
+                  child: Container(
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: widget.isDark
+                          ? Colors.white10
+                          : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    child: TextField(
+                      controller: _commentController,
+                      onSubmitted: (_) => _sendComment(),
+                      decoration: const InputDecoration(
+                        hintText: 'Type a message...',
+                        hintStyle: TextStyle(
+                          color: Color(0xFF94A3B8),
+                          fontSize: 13,
+                        ),
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(vertical: 11),
+                      ),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: widget.isDark
+                            ? Colors.white
+                            : const Color(0xFF1E293B),
                       ),
                     ),
-                    style: TextStyle(
-                      color: widget.isDark
-                          ? Colors.white
-                          : BNXColors.lightTextPrimary,
-                    ),
                   ),
                 ),
-                GestureDetector(
-                  onTap: _sendComment,
-                  child: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: const BoxDecoration(
-                      color: BNXColors.lightPrimary,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.send_rounded,
-                      color: Colors.white,
-                      size: 18,
+                const SizedBox(width: 8),
+
+                // Circular blue send button
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: _sendComment,
+                    borderRadius: BorderRadius.circular(20),
+                    child: Container(
+                      width: 38,
+                      height: 38,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF195BAC),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Color(0x33195BAC),
+                            blurRadius: 6,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: const Center(
+                        child: Icon(
+                          Icons.send_rounded,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                      ),
                     ),
                   ),
                 ),
