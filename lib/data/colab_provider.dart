@@ -4,6 +4,7 @@ import '../models/attachment_model.dart';
 import '../models/email_model.dart';
 import 'repositories/casbox_repository.dart';
 import 'repositories/group_repository.dart';
+import 'repositories/mail_repository.dart';
 import '../core/network/token_service.dart';
 import '../core/network/api_client.dart';
 
@@ -145,6 +146,10 @@ class ColabListNotifier extends StateNotifier<List<ColabGroup>> {
   final Map<String, List<ColabGroup>> _accountCaches = {};
   String _currentAccountId = 'default';
 
+  void setGroupsForTesting(List<ColabGroup> groups) {
+    state = groups;
+  }
+
   void clear() {
     state = [];
     broadcastsLoadedIds.clear();
@@ -168,8 +173,10 @@ class ColabListNotifier extends StateNotifier<List<ColabGroup>> {
     }
   }
 
-  Set<String> _archivedGroupIds = {};
-  Set<String> _starredGroupIds = {};
+  final Set<String> _archivedGroupIds = {};
+  final Set<String> _unarchivedGroupIds = {};
+  final Set<String> _starredGroupIds = {};
+  final Set<String> _unstarredGroupIds = {};
 
   /// Fetch all groups from GET /api/chat/user/{email}
   Future<void> loadGroups([String? userEmail]) async {
@@ -180,8 +187,16 @@ class ColabListNotifier extends StateNotifier<List<ColabGroup>> {
       final email = (userEmail != null && userEmail.trim().isNotEmpty)
           ? userEmail.trim()
           : (await TokenService.getUserEmail() ?? '');
-      _archivedGroupIds = await TokenService.getArchivedColabGroupIds(email);
-      _starredGroupIds = await TokenService.getStarredColabGroupIds(email);
+      final persistentArchived = await TokenService.getArchivedColabGroupIds(email);
+      final persistentUnarchived = await TokenService.getUnarchivedColabGroupIds(email);
+      final persistentStarred = await TokenService.getStarredColabGroupIds(email);
+      final persistentUnstarred = await TokenService.getUnstarredColabGroupIds(email);
+
+      _archivedGroupIds.addAll(persistentArchived);
+      _unarchivedGroupIds.addAll(persistentUnarchived);
+      _starredGroupIds.addAll(persistentStarred);
+      _unstarredGroupIds.addAll(persistentUnstarred);
+
       final fetchedGroups = await GroupRepository.fetchGroups(email);
 
       // Preserve existing comments & broadcasts for groups already in state to avoid message reset glitches
@@ -189,21 +204,62 @@ class ColabListNotifier extends StateNotifier<List<ColabGroup>> {
         for (final g in state) g.id: g
       };
 
-      final updatedGroups = fetchedGroups.map((newG) {
+      final updatedGroups = <ColabGroup>[];
+      final seenIds = <String>{};
+
+      for (final newG in fetchedGroups) {
+        seenIds.add(newG.id);
         final existing = existingMap[newG.id];
-        final isArchived = _archivedGroupIds.contains(newG.id);
-        final isStarred = _starredGroupIds.contains(newG.id);
+        
+        bool isArchived = newG.isArchived;
+        if (_unarchivedGroupIds.contains(newG.id)) {
+          isArchived = false;
+        } else if (_archivedGroupIds.contains(newG.id)) {
+          isArchived = true;
+        }
+
+        bool isStarred = newG.isStarred;
+        if (_unstarredGroupIds.contains(newG.id)) {
+          isStarred = false;
+        } else if (_starredGroupIds.contains(newG.id)) {
+          isStarred = true;
+        } else if (existing?.isStarred == true) {
+          isStarred = true;
+        }
+
         if (existing != null) {
-          return newG.copyWith(
+          updatedGroups.add(newG.copyWith(
             comments: existing.comments.isNotEmpty ? existing.comments : newG.comments,
             broadcasts: existing.broadcasts.isNotEmpty ? existing.broadcasts : newG.broadcasts,
             members: newG.members.isNotEmpty ? newG.members : existing.members,
             isArchived: isArchived,
             isStarred: isStarred,
-          );
+          ));
+        } else {
+          updatedGroups.add(newG.copyWith(isArchived: isArchived, isStarred: isStarred));
         }
-        return newG.copyWith(isArchived: isArchived, isStarred: isStarred);
-      }).toList();
+      }
+
+      // Preserve any groups currently in state that weren't returned by this fetch
+      for (final g in state) {
+        if (!seenIds.contains(g.id)) {
+          bool isArchived = g.isArchived;
+          if (_unarchivedGroupIds.contains(g.id)) {
+            isArchived = false;
+          } else if (_archivedGroupIds.contains(g.id)) {
+            isArchived = true;
+          }
+
+          bool isStarred = g.isStarred;
+          if (_unstarredGroupIds.contains(g.id)) {
+            isStarred = false;
+          } else if (_starredGroupIds.contains(g.id)) {
+            isStarred = true;
+          }
+
+          updatedGroups.add(g.copyWith(isArchived: isArchived, isStarred: isStarred));
+        }
+      }
 
       state = updatedGroups;
       print('[COLLAB PROVIDER] Groups loaded. Count: ${updatedGroups.length}');
@@ -216,70 +272,64 @@ class ColabListNotifier extends StateNotifier<List<ColabGroup>> {
 
   /// Toggle archive status for a Colab group
   Future<void> toggleArchiveGroup(String groupId) async {
+    final strId = groupId.toString();
     final currentGroup = state.firstWhere(
-      (g) => g.id == groupId,
-      orElse: () => ColabGroup(id: groupId, name: '', members: const []),
+      (g) => g.id == strId,
+      orElse: () => ColabGroup(id: strId, name: '', members: const []),
     );
     final willArchive = !currentGroup.isArchived;
     if (willArchive) {
-      _archivedGroupIds.add(groupId);
+      _archivedGroupIds.add(strId);
+      _unarchivedGroupIds.remove(strId);
     } else {
-      _archivedGroupIds.remove(groupId);
+      _archivedGroupIds.remove(strId);
+      _unarchivedGroupIds.add(strId);
     }
     state = state.map((g) {
-      if (g.id == groupId) {
+      if (g.id == strId) {
         return g.copyWith(isArchived: willArchive);
       }
       return g;
     }).toList();
     final userEmail = await TokenService.getUserEmail() ?? '';
     await TokenService.saveArchivedColabGroupIds(_archivedGroupIds, userEmail);
-    print('[COLAB ARCHIVE] Toggled archive for group $groupId, willArchive=$willArchive. Total archived groups: ${_archivedGroupIds.length}');
+    await TokenService.saveUnarchivedColabGroupIds(_unarchivedGroupIds, userEmail);
+    print('[COLAB ARCHIVE] Toggled archive for group $strId, willArchive=$willArchive. Total archived groups: ${_archivedGroupIds.length}');
   }
 
   /// Toggle star status for a Colab group
   Future<void> toggleStarGroup(String groupId) async {
+    final strId = groupId.toString();
     final currentGroup = state.firstWhere(
-      (g) => g.id == groupId,
-      orElse: () => ColabGroup(id: groupId, name: '', members: const []),
+      (g) => g.id == strId,
+      orElse: () => ColabGroup(id: strId, name: '', members: const []),
     );
     final willStar = !currentGroup.isStarred;
     if (willStar) {
-      _starredGroupIds.add(groupId);
+      _starredGroupIds.add(strId);
+      _unstarredGroupIds.remove(strId);
     } else {
-      _starredGroupIds.remove(groupId);
+      _starredGroupIds.remove(strId);
+      _unstarredGroupIds.add(strId);
     }
     state = state.map((g) {
-      if (g.id == groupId) {
+      if (g.id == strId) {
         return g.copyWith(isStarred: willStar);
       }
       return g;
     }).toList();
     final userEmail = await TokenService.getUserEmail() ?? '';
     await TokenService.saveStarredColabGroupIds(_starredGroupIds, userEmail);
+    await TokenService.saveUnstarredColabGroupIds(_unstarredGroupIds, userEmail);
+    print('[COLAB STAR] Toggled star for group $strId, willStar=$willStar. Total starred groups: ${_starredGroupIds.length}');
 
-    // Call Star APIs for backend sync
-    print('[COLAB STAR] Toggling star for group $groupId, willStar=$willStar');
+    // End-to-end API sync per COMPLETE_API_DOCUMENTATION.md Section 3.5 & casbox section
     try {
-      await ApiClient.patch('/api/casbox/$groupId/star', body: {'starred': willStar});
-    } catch (_) {
-      try {
-        await ApiClient.post('/api/casbox/$groupId/star', body: {'starred': willStar});
-      } catch (_) {
-        try {
-          await ApiClient.patch('/api/chat/$groupId/star', body: {'starred': willStar});
-          print('[COLAB STAR] PATCH /api/chat/$groupId/star succeeded');
-        } catch (e) {
-          print('[COLAB STAR] PATCH /api/chat/$groupId/star failed: $e, trying POST...');
-          try {
-            await ApiClient.post('/api/chat/$groupId/star', body: {'starred': willStar});
-            print('[COLAB STAR] POST /api/chat/$groupId/star succeeded');
-          } catch (e2) {
-            print('[COLAB STAR] POST also failed: $e2, relying on local persistence');
-          }
-        }
-      }
-    }
+      await MailRepository.toggleStar(strId, 'inbox', willStar);
+    } catch (_) {}
+    try {
+      await ApiClient.patch('/api/casbox/$strId/star', body: {'starred': willStar});
+    } catch (_) {}
   }
 
   /// Create a group via POST /api/chat/group
@@ -830,7 +880,7 @@ class CasboxMessage {
           json['text']?.toString() ??
           '',
       timestamp: date,
-      isStarred: toBool(json['isStarred']),
+      isStarred: toBool(json['isStarred'] ?? json['starred'] ?? json['is_starred']),
       isRead: isReadMsg,
       status: rawStatus,
       attachments: attachments,
@@ -874,6 +924,10 @@ class CasboxMessagesNotifier extends StateNotifier<List<CasboxMessage>> {
   final Map<String, List<CasboxMessage>> _accountCaches = {};
   String _currentAccountId = 'default';
 
+  void setMessagesForTesting(List<CasboxMessage> msgs) {
+    state = msgs;
+  }
+
   void clear() {
     state = const [];
     _readIds.clear();
@@ -915,6 +969,8 @@ class CasboxMessagesNotifier extends StateNotifier<List<CasboxMessage>> {
     final readIds = await TokenService.getReadCasboxIds();
     final persistentArchivedIds = await TokenService.getArchivedCasboxIds(userEmail);
     final persistentUnarchivedIds = await TokenService.getUnarchivedCasboxIds(userEmail);
+    final persistentStarredIds = await TokenService.getStarredCasboxIds(userEmail);
+    final persistentUnstarredIds = await TokenService.getUnstarredCasboxIds(userEmail);
 
     final fetched = await CasboxRepository.fetchCasbox(userEmail);
     print('[DIAGNOSTIC] fetchMessages() retrieved ${fetched.length} messages from server.');
@@ -958,6 +1014,13 @@ class CasboxMessagesNotifier extends StateNotifier<List<CasboxMessage>> {
       }
 
       merged[m.id] = m;
+    }
+
+    // Preserve any existing local/optimistic messages already in state
+    for (final m in state) {
+      if (!merged.containsKey(m.id)) {
+        merged[m.id] = m;
+      }
     }
 
     if (merged.isEmpty && mailboxEmails != null && mailboxEmails.isNotEmpty) {
@@ -1007,7 +1070,14 @@ class CasboxMessagesNotifier extends StateNotifier<List<CasboxMessage>> {
             isArchived = true;
           }
 
-          return m.copyWith(isRead: isRead, isArchived: isArchived);
+          bool isStarred = m.isStarred || (merged[m.id]?.isStarred ?? false);
+          if (persistentUnstarredIds.contains(m.id)) {
+            isStarred = false;
+          } else if (persistentStarredIds.contains(m.id)) {
+            isStarred = true;
+          }
+
+          return m.copyWith(isRead: isRead, isArchived: isArchived, isStarred: isStarred);
         })
         .toList()
       ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
@@ -1020,11 +1090,20 @@ class CasboxMessagesNotifier extends StateNotifier<List<CasboxMessage>> {
     final threadMsgs = await CasboxRepository.fetchThread(contactEmail, userEmail);
     final persistentArchived = await TokenService.getArchivedCasboxIds(userEmail);
     final persistentUnarchived = await TokenService.getUnarchivedCasboxIds(userEmail);
+    final persistentStarred = await TokenService.getStarredCasboxIds(userEmail);
+    final persistentUnstarred = await TokenService.getUnstarredCasboxIds(userEmail);
     print('[DIAGNOSTIC] fetchThreadMessages($contactEmail) retrieved ${threadMsgs.length} messages.');
     
     final merged = <String, CasboxMessage>{};
     for (final m in state) {
       merged[m.id] = m;
+    }
+
+    // Preserve any existing local/optimistic messages already in state
+    for (final m in state) {
+      if (!merged.containsKey(m.id)) {
+        merged[m.id] = m;
+      }
     }
     
     for (final rawM in threadMsgs) {
@@ -1044,8 +1123,23 @@ class CasboxMessagesNotifier extends StateNotifier<List<CasboxMessage>> {
       } else if (_explicitlyArchivedIds.contains(rawM.id) || persistentArchived.contains(rawM.id) || (merged[rawM.id]?.isArchived ?? false)) {
         isArchived = true;
       }
-      final m = rawM.copyWith(isArchived: isArchived);
+
+      bool isStarred = rawM.isStarred || (merged[rawM.id]?.isStarred ?? false);
+      if (persistentUnstarred.contains(rawM.id)) {
+        isStarred = false;
+      } else if (persistentStarred.contains(rawM.id)) {
+        isStarred = true;
+      }
+
+      final m = rawM.copyWith(isArchived: isArchived, isStarred: isStarred);
       merged[m.id] = m;
+    }
+
+    // Preserve any existing local/optimistic messages already in state
+    for (final m in state) {
+      if (!merged.containsKey(m.id)) {
+        merged[m.id] = m;
+      }
     }
     
     state = merged.values.toList()..sort((a, b) => b.timestamp.compareTo(a.timestamp));
@@ -1372,24 +1466,62 @@ class CasboxMessagesNotifier extends StateNotifier<List<CasboxMessage>> {
     }
   }
 
-  void toggleStar(String id) {
+  Future<void> toggleStar(String id) async {
+    final strId = id.toString();
+    final target = state.firstWhere(
+      (m) => m.id == strId,
+      orElse: () => CasboxMessage(
+        id: strId,
+        sender: '',
+        to: '',
+        subject: '',
+        body: '',
+        timestamp: DateTime.now(),
+      ),
+    );
+    final willStar = !target.isStarred;
+
+    // Collect all companion messages in the same conversation thread
+    final targetIds = state
+        .where((m) =>
+            m.id == strId ||
+            (target.subject.trim().isNotEmpty &&
+                m.subject.trim().toLowerCase() == target.subject.trim().toLowerCase()) ||
+            (target.sender.isNotEmpty &&
+                target.to.isNotEmpty &&
+                ((m.sender == target.sender && m.to == target.to) ||
+                    (m.sender == target.to && m.to == target.sender))))
+        .map((m) => m.id)
+        .toSet();
+    if (!targetIds.contains(strId)) {
+      targetIds.add(strId);
+    }
+
+    // 1. Optimistic update
     state = state.map((m) {
-      if (m.id == id) {
-        return CasboxMessage(
-          id: m.id,
-          sender: m.sender,
-          to: m.to,
-          subject: m.subject,
-          body: m.body,
-          timestamp: m.timestamp,
-          isStarred: !m.isStarred,
-          isRead: m.isRead,
-          status: m.status,
-          attachments: m.attachments,
-        );
+      if (targetIds.contains(m.id)) {
+        return m.copyWith(isStarred: willStar);
       }
       return m;
     }).toList();
+
+    // 2. Persist in TokenService
+    final userEmail = await TokenService.getUserEmail() ?? '';
+    for (final tid in targetIds) {
+      await TokenService.toggleStarredCasboxId(tid, willStar, userEmail);
+    }
+    print('[CASBOX STAR] Toggled star for messages $targetIds, willStar=$willStar');
+
+    // 3. Backend sync per COMPLETE_API_DOCUMENTATION.md Section 3.5 & Recent_cashbox_api_reference.md
+    for (final tid in targetIds) {
+      try {
+        await MailRepository.toggleStar(tid, 'inbox', willStar);
+      } catch (_) {
+        try {
+          await ApiClient.patch('/api/casbox/$tid/star', body: {'starred': willStar});
+        } catch (_) {}
+      }
+    }
   }
 }
 

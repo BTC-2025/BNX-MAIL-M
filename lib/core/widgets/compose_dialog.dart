@@ -5,9 +5,12 @@ import '../../data/account_provider.dart';
 import '../../data/app_state_provider.dart';
 import '../../data/colab_provider.dart';
 import '../../data/email_provider.dart';
+import '../../data/settings_provider.dart';
+import '../../data/repositories/settings_repository.dart';
 import '../../data/repositories/template_repository.dart';
 import '../../features/inbox/presentation/templates_view.dart';
 import '../../models/attachment_model.dart';
+import '../../models/signature_model.dart';
 import '../theme/colors.dart';
 import 'package:file_picker/file_picker.dart';
 
@@ -263,6 +266,8 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
   final List<AttachmentModel> _casboxFiles = [];
   final _fmt = _Fmt();
   String? _sig;
+  String? _sigHtml;
+  bool _sigRemovedByUser = false;
 
   /// Remembers the last non-collapsed selection so toolbar taps
   /// (which steal focus and collapse the selection) can still
@@ -273,6 +278,77 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
     final ctrl = _activeBodyCtrl;
     if (ctrl.selection.isValid && !ctrl.selection.isCollapsed) {
       _savedSelection = ctrl.selection;
+    }
+  }
+
+  String _cleanHtml(String html) {
+    if (html.isEmpty) return '';
+    String text = html
+        .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
+        .replaceAll(RegExp(r'</p>', caseSensitive: false), '\n')
+        .replaceAll(RegExp(r'<[^>]*>'), '')
+        .replaceAll('&nbsp;', ' ')
+        .replaceAll('&amp;', '&')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&#39;', "'");
+    return text.trim();
+  }
+
+  bool _isComposeRoute(BuildContext context) {
+    try {
+      return GoRouterState.of(context).uri.toString() == '/compose';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _loadDefaultSignature({bool userTriggered = false}) async {
+    try {
+      List<SignatureModel> sigs = ref.read(settingsProvider).signatures;
+      if (sigs.isEmpty) {
+        try {
+          sigs = await SettingsRepository.getSignatures();
+          if (sigs.isNotEmpty && mounted) {
+            ref.read(settingsProvider.notifier).loadAllSettings();
+          }
+        } catch (_) {}
+      }
+      if (sigs.isNotEmpty && mounted) {
+        final defaultSig = sigs.firstWhere(
+          (s) => s.isDefault,
+          orElse: () => sigs.first,
+        );
+        String cleaned = _cleanHtml(defaultSig.content);
+        if (cleaned.isEmpty &&
+            defaultSig.name.isNotEmpty &&
+            !defaultSig.name.startsWith('Signature')) {
+          cleaned = defaultSig.name;
+        }
+        if (cleaned.isNotEmpty && mounted) {
+          setState(() {
+            _sig = cleaned;
+            _sigHtml = defaultSig.content;
+            _sigRemovedByUser = false;
+          });
+          if (userTriggered) {
+            _snack('Default signature added');
+          }
+          return;
+        }
+      }
+      if (userTriggered && mounted) {
+        if (_sig != null && _sig!.trim().isNotEmpty) {
+          _snack('Default signature is already shown');
+        } else {
+          _snack('No signature found in Settings');
+        }
+      }
+    } catch (_) {
+      if (userTriggered && mounted) {
+        _snack('Unable to load signature from Settings');
+      }
     }
   }
 
@@ -295,6 +371,7 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
         _subCtrl.text = s.composeSubject;
         _bodyCtrl.text = s.composeBody;
       }
+      _loadDefaultSignature();
     });
   }
 
@@ -342,11 +419,13 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
     _cbToCtrl.clear();
     _cbSubCtrl.clear();
     _cbBodyCtrl.clear();
+    _sig = null;
+    _sigHtml = null;
+    _sigRemovedByUser = false;
     ref.read(appUiProvider.notifier).clearComposeDraft();
     ref.read(appUiProvider.notifier).setComposeStatus(ComposeStatus.closed);
     if (msg != null) _snack(msg);
-    final bool isComposeRoute =
-        GoRouterState.of(context).uri.toString() == '/compose';
+    final bool isComposeRoute = _isComposeRoute(context);
     if (isComposeRoute) {
       context.pop();
     }
@@ -367,9 +446,9 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
     }
 
     final String body;
-    if (_sig != null) {
+    if (_sig != null && _sig!.trim().isNotEmpty) {
       body = hasFormatting
-          ? '$bodyRaw<br><br>--<br>${_sig!.replaceAll('\n', '<br>')}'
+          ? '$bodyRaw<br><br>--<br>${_sigHtml ?? _sig!.replaceAll('\n', '<br>')}'
           : '$bodyRaw\n\n--\n$_sig';
     } else {
       body = bodyRaw;
@@ -429,15 +508,33 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
   Widget build(BuildContext context) {
     final ui = ref.watch(appUiProvider);
     final status = ui.composeStatus;
-    final bool isComposeRoute =
-        GoRouterState.of(context).uri.toString() == '/compose';
+    final bool isComposeRoute = _isComposeRoute(context);
 
     if (!isComposeRoute &&
         (status == ComposeStatus.closed || ui.activeFolder == 'Templates')) {
       return const SizedBox.shrink();
     }
 
+    final settings = ref.watch(settingsProvider);
+    if (_sig == null && !_sigRemovedByUser && settings.signatures.isNotEmpty) {
+      final defaultSig = settings.signatures.firstWhere(
+        (s) => s.isDefault,
+        orElse: () => settings.signatures.first,
+      );
+      String cleaned = _cleanHtml(defaultSig.content);
+      if (cleaned.isEmpty &&
+          defaultSig.name.isNotEmpty &&
+          !defaultSig.name.startsWith('Signature')) {
+        cleaned = defaultSig.name;
+      }
+      if (cleaned.isNotEmpty) {
+        _sig = cleaned;
+        _sigHtml = defaultSig.content;
+      }
+    }
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       if (isComposeRoute || status != ComposeStatus.closed) {
         if (_subCtrl.text != ui.composeSubject) {
           _subCtrl.text = ui.composeSubject;
@@ -448,6 +545,9 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
         }
         if (ui.composeTo.isNotEmpty && _cbToCtrl.text != ui.composeTo) {
           _cbToCtrl.text = ui.composeTo;
+        }
+        if (_sig == null && !_sigRemovedByUser) {
+          _loadDefaultSignature();
         }
       }
     });
@@ -566,8 +666,7 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
   // HEADER  (tabs + window controls)
   // ────────────────────────────────────────────────────────────
   Widget _header(bool isDark, ComposeStatus status) {
-    final bool isComposeRoute =
-        GoRouterState.of(context).uri.toString() == '/compose';
+    final bool isComposeRoute = _isComposeRoute(context);
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -879,55 +978,119 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
     final focusNode = ctrl == _bodyCtrl ? _bodyFocus : _cbBodyFocus;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14),
-      child: TextField(
-        controller: ctrl,
-        focusNode: focusNode,
-        maxLines: null,
-        expands: true,
-        onChanged: onChanged,
-        contextMenuBuilder: (context, editableTextState) {
-          final List<ContextMenuButtonItem> buttonItems =
-              editableTextState.contextMenuButtonItems;
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: TextField(
+              controller: ctrl,
+              focusNode: focusNode,
+              maxLines: null,
+              expands: true,
+              onChanged: onChanged,
+              contextMenuBuilder: (context, editableTextState) {
+                final List<ContextMenuButtonItem> buttonItems =
+                    editableTextState.contextMenuButtonItems;
 
-          buttonItems.insertAll(0, [
-            ContextMenuButtonItem(
-              label: 'Bold',
-              onPressed: () {
-                _applyFormat('bold');
-                editableTextState.hideToolbar();
-              },
-            ),
-            ContextMenuButtonItem(
-              label: 'Italic',
-              onPressed: () {
-                _applyFormat('italic');
-                editableTextState.hideToolbar();
-              },
-            ),
-            ContextMenuButtonItem(
-              label: 'Underline',
-              onPressed: () {
-                _applyFormat('underline');
-                editableTextState.hideToolbar();
-              },
-            ),
-          ]);
+                buttonItems.insertAll(0, [
+                  ContextMenuButtonItem(
+                    label: 'Bold',
+                    onPressed: () {
+                      _applyFormat('bold');
+                      editableTextState.hideToolbar();
+                    },
+                  ),
+                  ContextMenuButtonItem(
+                    label: 'Italic',
+                    onPressed: () {
+                      _applyFormat('italic');
+                      editableTextState.hideToolbar();
+                    },
+                  ),
+                  ContextMenuButtonItem(
+                    label: 'Underline',
+                    onPressed: () {
+                      _applyFormat('underline');
+                      editableTextState.hideToolbar();
+                    },
+                  ),
+                ]);
 
-          return AdaptiveTextSelectionToolbar.buttonItems(
-            anchors: editableTextState.contextMenuAnchors,
-            buttonItems: buttonItems,
-          );
-        },
-        style: TextStyle(
-          fontSize: 14.0,
-          color: isDark ? Colors.white : Colors.black87,
-        ),
-        decoration: InputDecoration(
-          hintText: 'Type your message here...',
-          hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.only(top: 10),
-        ),
+                return AdaptiveTextSelectionToolbar.buttonItems(
+                  anchors: editableTextState.contextMenuAnchors,
+                  buttonItems: buttonItems,
+                );
+              },
+              style: TextStyle(
+                fontSize: 14.0,
+                color: isDark ? Colors.white : Colors.black87,
+              ),
+              decoration: InputDecoration(
+                hintText: 'Type your message here...',
+                hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.only(top: 10),
+              ),
+            ),
+          ),
+          if (_sig != null && _sig!.trim().isNotEmpty) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              decoration: BoxDecoration(
+                border: Border(
+                  top: BorderSide(
+                    color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                    width: 1,
+                  ),
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '--',
+                          style: TextStyle(
+                            color:
+                                isDark ? Colors.white38 : Colors.grey.shade500,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _sig!,
+                          style: TextStyle(
+                            color: isDark ? Colors.white70 : Colors.black87,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  InkWell(
+                    onTap: () => setState(() {
+                      _sig = null;
+                      _sigHtml = null;
+                      _sigRemovedByUser = true;
+                    }),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Icon(
+                        Icons.close_rounded,
+                        size: 16,
+                        color: isDark ? Colors.white38 : Colors.grey.shade500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -1464,7 +1627,7 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
       tooltip: 'More options',
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       onSelected: (v) {
-        if (v == 'signature') _showSigDialog();
+        if (v == 'signature') _loadDefaultSignature(userTriggered: true);
         if (v == 'templates') _showTemplatesDialog(isDark);
       },
       itemBuilder: (_) => const [
@@ -1577,44 +1740,6 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
     );
   }
 
-  void _showSigDialog() {
-    final ctrl = TextEditingController(text: _sig ?? '');
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Signature'),
-        content: TextField(
-          controller: ctrl,
-          maxLines: 3,
-          decoration: const InputDecoration(
-            hintText: 'Your signature…',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              setState(() => _sig = null);
-              Navigator.pop(context);
-            },
-            child: const Text('Remove'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF195BAC),
-            ),
-            onPressed: () {
-              setState(() => _sig = ctrl.text.trim());
-              Navigator.pop(context);
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _showScheduleDialog() {
     if (_toCtrl.text.trim().isEmpty) {
       _snack('Please add a recipient before scheduling.');
@@ -1719,8 +1844,10 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
     ref
         .read(appUiProvider.notifier)
         .setComposeStatus(ComposeStatus.minimized);
-    final r = GoRouterState.of(context).uri.toString();
-    if (r != '/home') GoRouter.of(context).go('/home');
+    try {
+      final r = GoRouterState.of(context).uri.toString();
+      if (r != '/home') GoRouter.of(context).go('/home');
+    } catch (_) {}
     _snack('Compose minimized. Opening Templates folder.');
   }
 

@@ -352,6 +352,13 @@ class GroupRepository {
       }).toList();
     }
 
+    final isStarred = raw['isStarred'] == true ||
+        raw['starred'] == true ||
+        raw['is_starred'] == true;
+    final isArchived = raw['isArchived'] == true ||
+        raw['archived'] == true ||
+        raw['is_archived'] == true;
+
     return ColabGroup(
       id: id,
       name: name,
@@ -364,6 +371,8 @@ class GroupRepository {
       lastMessage: lastMessage,
       lastMessageTime: lastMessageTime,
       creatorEmail: creatorEmail,
+      isStarred: isStarred,
+      isArchived: isArchived,
     );
   }
 }

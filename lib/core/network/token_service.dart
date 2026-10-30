@@ -697,6 +697,87 @@ class TokenService {
     // No-op
   }
 
+  // ── Casbox Message Starring Persistence ───────────────────────────────────
+
+  static List<String> _casboxStarredKeys(String? userEmail) {
+    final email = userEmail?.trim().toLowerCase() ?? '';
+    final handle = email.contains('@') ? email.split('@').first : email;
+    return [
+      if (email.isNotEmpty) 'bnx_casbox_starred_messages_$email',
+      if (handle.isNotEmpty && handle != email) 'bnx_casbox_starred_messages_$handle',
+      'bnx_casbox_starred_messages',
+    ];
+  }
+
+  static List<String> _casboxUnstarredKeys(String? userEmail) {
+    final email = userEmail?.trim().toLowerCase() ?? '';
+    final handle = email.contains('@') ? email.split('@').first : email;
+    return [
+      if (email.isNotEmpty) 'bnx_casbox_unstarred_messages_$email',
+      if (handle.isNotEmpty && handle != email) 'bnx_casbox_unstarred_messages_$handle',
+      'bnx_casbox_unstarred_messages',
+    ];
+  }
+
+  static Future<Set<String>> getStarredCasboxIds([String? userEmail]) async {
+    final email = (userEmail != null && userEmail.trim().isNotEmpty)
+        ? userEmail.trim().toLowerCase()
+        : (await getUserEmail() ?? '').trim().toLowerCase();
+    for (final key in _casboxStarredKeys(email)) {
+      final raw = await _safeRead(key: key);
+      if (raw != null && raw.trim().isNotEmpty) {
+        try {
+          final decoded = jsonDecode(raw.trim());
+          if (decoded is List) {
+            return decoded.map((e) => e.toString()).toSet();
+          }
+        } catch (_) {}
+      }
+    }
+    return {};
+  }
+
+  static Future<Set<String>> getUnstarredCasboxIds([String? userEmail]) async {
+    final email = (userEmail != null && userEmail.trim().isNotEmpty)
+        ? userEmail.trim().toLowerCase()
+        : (await getUserEmail() ?? '').trim().toLowerCase();
+    for (final key in _casboxUnstarredKeys(email)) {
+      final raw = await _safeRead(key: key);
+      if (raw != null && raw.trim().isNotEmpty) {
+        try {
+          final decoded = jsonDecode(raw.trim());
+          if (decoded is List) {
+            return decoded.map((e) => e.toString()).toSet();
+          }
+        } catch (_) {}
+      }
+    }
+    return {};
+  }
+
+  static Future<void> toggleStarredCasboxId(String id, bool starred, [String? userEmail]) async {
+    final email = (userEmail != null && userEmail.trim().isNotEmpty)
+        ? userEmail.trim().toLowerCase()
+        : (await getUserEmail() ?? '').trim().toLowerCase();
+    final starredSet = await getStarredCasboxIds(email);
+    final unstarredSet = await getUnstarredCasboxIds(email);
+    if (starred) {
+      starredSet.add(id);
+      unstarredSet.remove(id);
+    } else {
+      starredSet.remove(id);
+      unstarredSet.add(id);
+    }
+    final starredVal = jsonEncode(starredSet.toList());
+    for (final key in _casboxStarredKeys(email)) {
+      await _safeWrite(key: key, value: starredVal);
+    }
+    final unstarredVal = jsonEncode(unstarredSet.toList());
+    for (final key in _casboxUnstarredKeys(email)) {
+      await _safeWrite(key: key, value: unstarredVal);
+    }
+  }
+
   // ── Persistent Label Storage ──────────────────────────────────────────────
 
   static const _kAssignedEmailLabels = 'bnx_assigned_email_labels';
@@ -804,6 +885,19 @@ class TokenService {
     ];
   }
 
+  static List<String> _colabUnarchiveKeys(String? userEmail) {
+    final email = userEmail?.trim().toLowerCase() ?? '';
+    final handle = email.contains('@') ? email.split('@').first : email;
+    return [
+      if (email.isNotEmpty) 'bnx_colab_unarchived_group_ids_$email',
+      if (handle.isNotEmpty && handle != email) 'bnx_colab_unarchived_group_ids_$handle',
+      'bnx_colab_unarchived_group_ids',
+      if (email.isNotEmpty) 'bnx_unarchived_colab_group_ids_$email',
+      if (handle.isNotEmpty && handle != email) 'bnx_unarchived_colab_group_ids_$handle',
+      'bnx_unarchived_colab_group_ids',
+    ];
+  }
+
   static List<String> _colabStarKeys(String? userEmail) {
     final email = userEmail?.trim().toLowerCase() ?? '';
     final handle = email.contains('@') ? email.split('@').first : email;
@@ -817,22 +911,36 @@ class TokenService {
     ];
   }
 
+  static List<String> _colabUnstarKeys(String? userEmail) {
+    final email = userEmail?.trim().toLowerCase() ?? '';
+    final handle = email.contains('@') ? email.split('@').first : email;
+    return [
+      if (email.isNotEmpty) 'bnx_colab_unstarred_group_ids_$email',
+      if (handle.isNotEmpty && handle != email) 'bnx_colab_unstarred_group_ids_$handle',
+      'bnx_colab_unstarred_group_ids',
+      if (email.isNotEmpty) 'bnx_unstarred_colab_group_ids_$email',
+      if (handle.isNotEmpty && handle != email) 'bnx_unstarred_colab_group_ids_$handle',
+      'bnx_unstarred_colab_group_ids',
+    ];
+  }
+
   static Future<Set<String>> getArchivedColabGroupIds([String? userEmail]) async {
     final email = (userEmail != null && userEmail.trim().isNotEmpty)
         ? userEmail.trim().toLowerCase()
         : (await getUserEmail() ?? '').trim().toLowerCase();
+    final result = <String>{};
     for (final key in _colabArchiveKeys(email)) {
       final raw = await _safeRead(key: key);
       if (raw != null && raw.trim().isNotEmpty) {
         try {
           final decoded = jsonDecode(raw.trim());
           if (decoded is List) {
-            return decoded.map((e) => e.toString()).toSet();
+            result.addAll(decoded.map((e) => e.toString()));
           }
         } catch (_) {}
       }
     }
-    return {};
+    return result;
   }
 
   static Future<void> saveArchivedColabGroupIds(Set<String> ids, [String? userEmail]) async {
@@ -845,22 +953,52 @@ class TokenService {
     }
   }
 
+  static Future<Set<String>> getUnarchivedColabGroupIds([String? userEmail]) async {
+    final email = (userEmail != null && userEmail.trim().isNotEmpty)
+        ? userEmail.trim().toLowerCase()
+        : (await getUserEmail() ?? '').trim().toLowerCase();
+    final result = <String>{};
+    for (final key in _colabUnarchiveKeys(email)) {
+      final raw = await _safeRead(key: key);
+      if (raw != null && raw.trim().isNotEmpty) {
+        try {
+          final decoded = jsonDecode(raw.trim());
+          if (decoded is List) {
+            result.addAll(decoded.map((e) => e.toString()));
+          }
+        } catch (_) {}
+      }
+    }
+    return result;
+  }
+
+  static Future<void> saveUnarchivedColabGroupIds(Set<String> ids, [String? userEmail]) async {
+    final email = (userEmail != null && userEmail.trim().isNotEmpty)
+        ? userEmail.trim().toLowerCase()
+        : (await getUserEmail() ?? '').trim().toLowerCase();
+    final jsonVal = jsonEncode(ids.toList());
+    for (final key in _colabUnarchiveKeys(email)) {
+      await _safeWrite(key: key, value: jsonVal);
+    }
+  }
+
   static Future<Set<String>> getStarredColabGroupIds([String? userEmail]) async {
     final email = (userEmail != null && userEmail.trim().isNotEmpty)
         ? userEmail.trim().toLowerCase()
         : (await getUserEmail() ?? '').trim().toLowerCase();
+    final result = <String>{};
     for (final key in _colabStarKeys(email)) {
       final raw = await _safeRead(key: key);
       if (raw != null && raw.trim().isNotEmpty) {
         try {
           final decoded = jsonDecode(raw.trim());
           if (decoded is List) {
-            return decoded.map((e) => e.toString()).toSet();
+            result.addAll(decoded.map((e) => e.toString()));
           }
         } catch (_) {}
       }
     }
-    return {};
+    return result;
   }
 
   static Future<void> saveStarredColabGroupIds(Set<String> ids, [String? userEmail]) async {
@@ -869,6 +1007,35 @@ class TokenService {
         : (await getUserEmail() ?? '').trim().toLowerCase();
     final jsonVal = jsonEncode(ids.toList());
     for (final key in _colabStarKeys(email)) {
+      await _safeWrite(key: key, value: jsonVal);
+    }
+  }
+
+  static Future<Set<String>> getUnstarredColabGroupIds([String? userEmail]) async {
+    final email = (userEmail != null && userEmail.trim().isNotEmpty)
+        ? userEmail.trim().toLowerCase()
+        : (await getUserEmail() ?? '').trim().toLowerCase();
+    final result = <String>{};
+    for (final key in _colabUnstarKeys(email)) {
+      final raw = await _safeRead(key: key);
+      if (raw != null && raw.trim().isNotEmpty) {
+        try {
+          final decoded = jsonDecode(raw.trim());
+          if (decoded is List) {
+            result.addAll(decoded.map((e) => e.toString()));
+          }
+        } catch (_) {}
+      }
+    }
+    return result;
+  }
+
+  static Future<void> saveUnstarredColabGroupIds(Set<String> ids, [String? userEmail]) async {
+    final email = (userEmail != null && userEmail.trim().isNotEmpty)
+        ? userEmail.trim().toLowerCase()
+        : (await getUserEmail() ?? '').trim().toLowerCase();
+    final jsonVal = jsonEncode(ids.toList());
+    for (final key in _colabUnstarKeys(email)) {
       await _safeWrite(key: key, value: jsonVal);
     }
   }

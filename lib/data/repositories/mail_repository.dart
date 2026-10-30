@@ -531,12 +531,44 @@ class MailRepository {
 
   // ── Star / Unstar ─────────────────────────────────────────────────────────
 
-  static Future<void> toggleStar(String uid, String folder) async {
+  /// API 3.5: Star / Unstar Email
+  /// Star Email: POST /api/mail/star/{uid}?folder={folder}
+  /// Unstar Email: POST /api/mail/unstar/{uid}?folder={folder}
+  static Future<void> toggleStar(String uid, String folder, [bool? isStarred]) async {
     final cleanId = cleanUid(uid);
-    await ApiClient.post(
-      '/api/mail/star/$cleanId',
-      queryParams: {'folder': folder},
-    );
+    if (isStarred == false) {
+      try {
+        await ApiClient.post(
+          '/api/mail/unstar/$cleanId',
+          queryParams: {'folder': folder},
+        );
+        print('[MAIL REPO] Unstarred email $cleanId via POST /api/mail/unstar/$cleanId?folder=$folder');
+        return;
+      } catch (e) {
+        print('[UNSTAR FALLBACK] POST /api/mail/unstar/$cleanId failed: $e, trying query param endpoint...');
+        try {
+          await ApiClient.post(
+            '/api/mail/unstar',
+            queryParams: {'uid': cleanId, 'folder': folder},
+          );
+          return;
+        } catch (_) {}
+      }
+    }
+
+    try {
+      await ApiClient.post(
+        '/api/mail/star/$cleanId',
+        queryParams: {'folder': folder},
+      );
+      print('[MAIL REPO] Starred email $cleanId via POST /api/mail/star/$cleanId?folder=$folder');
+    } catch (e) {
+      print('[STAR FALLBACK] POST /api/mail/star/$cleanId failed: $e, trying query param endpoint...');
+      await ApiClient.post(
+        '/api/mail/star',
+        queryParams: {'uid': cleanId, 'folder': folder},
+      );
+    }
   }
 
   // ── Trash / Restore ───────────────────────────────────────────────────────

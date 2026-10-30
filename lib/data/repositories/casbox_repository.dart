@@ -245,7 +245,19 @@ class CasboxRepository {
       return;
     }
 
-    // 1. Try batch endpoint (API 4) first as used by web frontend
+    // 1. Try single endpoint (API 5) with query parameter as specified
+    try {
+      await ApiClient.patch(
+        '/api/casbox/$parsedId/archive?archived=$archived',
+        body: {'archived': archived},
+      );
+      print('[CASBOX REPO] archiveMessage succeeded via PATCH /api/casbox/$parsedId/archive for id=$parsedId (archived=$archived)');
+      return;
+    } catch (e) {
+      print('[CASBOX REPO WARNING] PATCH /api/casbox/$parsedId/archive failed ($e), trying batch endpoint API 4...');
+    }
+
+    // 2. Try batch endpoint (API 4)
     try {
       await ApiClient.patch(
         '/api/casbox/archive',
@@ -256,20 +268,8 @@ class CasboxRepository {
       );
       print('[CASBOX REPO] archiveMessage succeeded via PATCH /api/casbox/archive for id=$parsedId (archived=$archived)');
       return;
-    } catch (e) {
-      print('[CASBOX REPO WARNING] PATCH /api/casbox/archive failed ($e), trying single endpoint API 5...');
-    }
-
-    // 2. Try single endpoint (API 5) with query parameter
-    try {
-      await ApiClient.patch(
-        '/api/casbox/$parsedId/archive?archived=$archived',
-        body: {'archived': archived},
-      );
-      print('[CASBOX REPO] archiveMessage succeeded via PATCH /api/casbox/$parsedId/archive for id=$parsedId (archived=$archived)');
-      return;
     } catch (e2) {
-      print('[CASBOX REPO WARNING] PATCH /api/casbox/$parsedId/archive failed: $e2, trying POST...');
+      print('[CASBOX REPO WARNING] PATCH /api/casbox/archive failed: $e2, trying POST...');
     }
 
     // 3. Try POST fallback for single endpoint

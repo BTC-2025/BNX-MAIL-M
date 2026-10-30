@@ -804,8 +804,10 @@ class EmailNotifier extends StateNotifier<EmailState> {
   }
 
   void toggleStar(String emailId, String folder) {
+    bool nextStarred = true;
     _updateLocal(emailId, (e) {
       final newStarred = !e.isStarred;
+      nextStarred = newStarred;
       final newFolders = Set<String>.from(e.memberOfFolders);
       if (newStarred) {
         newFolders.add('Starred');
@@ -817,7 +819,7 @@ class EmailNotifier extends StateNotifier<EmailState> {
         memberOfFolders: newFolders,
       );
     });
-    MailRepository.toggleStar(emailId, folder).catchError((_) {
+    MailRepository.toggleStar(emailId, folder, nextStarred).catchError((_) {
       // Rollback on failure
       _updateLocal(emailId, (e) {
         final revertedStarred = !e.isStarred;

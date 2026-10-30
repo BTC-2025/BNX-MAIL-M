@@ -1,0 +1,221 @@
+API Reference: Casbox & Collab (Archive, Unarchive, Starred)
+1. Casbox APIs
+1.1 Archive Message (Single)
+Archive a single Casbox message by ID.
+
+Method: PATCH
+URL: /api/casbox/{id}/archive?archived=true
+Headers:
+http
+Authorization: Bearer <jwt_token>
+Path Parameters:
+id (Long, required): The unique ID of the message.
+Query Parameters:
+archived (Boolean, optional, default: true): Pass true to archive.
+Request Body: None
+Success Response (200 OK):
+json
+{}
+1.2 Unarchive Message (Single)
+Restore a previously archived Casbox message.
+
+Method: PATCH
+URL: /api/casbox/{id}/archive?archived=false
+Headers:
+http
+Authorization: Bearer <jwt_token>
+Path Parameters:
+id (Long, required): The unique ID of the message.
+Query Parameters:
+archived (Boolean, required): Pass false to unarchive.
+Request Body: None
+Success Response (200 OK):
+json
+{}
+1.3 Batch Archive / Unarchive Messages
+Update archive status for multiple Casbox messages in bulk.
+
+Method: PATCH
+URL: /api/casbox/archive
+Headers:
+http
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+Request Body (Archive):
+json
+{
+  "messageIds": [101, 102, 103],
+  "archived": true
+}
+Request Body (Unarchive):
+json
+{
+  "messageIds": [101, 102, 103],
+  "archived": false
+}
+Success Response (200 OK):
+json
+{}
+1.4 Get All Messages (With Archive Status)
+Retrieve all Casbox messages for the authenticated user (each message contains isArchived: true/false).
+
+Method: GET
+URL: /api/casbox
+Headers:
+http
+Authorization: Bearer <jwt_token>
+Success Response (200 OK):
+json
+[
+  {
+    "id": 101,
+    "senderEmail": "user1@bnxmail.com",
+    "receiverEmail": "user2@bnxmail.com",
+    "subject": "Discussion",
+    "body": "Hello there",
+    "status": "SENT",
+    "timestamp": "2026-10-30T10:15:30",
+    "isArchived": false,
+    "isAccepted": true
+  }
+]
+2. Collab / Mail APIs
+2.1 Archive Email
+Move an email into the Archive folder.
+
+Method: POST
+URL: /api/mail/archive/{uid}
+Headers:
+http
+Authorization: Bearer <jwt_token>
+Path Parameters:
+uid (String, required): The unique message UID.
+Query Parameters:
+folder (String, optional, default: INBOX): Source folder of the message.
+Request Body: None
+Success Response (200 OK):
+json
+{
+  "success": true,
+  "message": "Email archived successfully",
+  "data": null,
+  "timestamp": 1712900000000
+}
+2.2 Unarchive Email
+Restore an email from the Archive back into the INBOX.
+
+Method: POST
+URL: /api/mail/unarchive/{uid}
+Headers:
+http
+Authorization: Bearer <jwt_token>
+Path Parameters:
+uid (String, required): The unique message UID.
+Request Body: None
+Success Response (200 OK):
+json
+{
+  "success": true,
+  "message": "Email restored to Inbox successfully",
+  "data": null,
+  "timestamp": 1712900000000
+}
+2.3 Get Archived Emails
+Retrieve paginated list of archived emails.
+
+Method: GET
+URL: /api/mail/archive?page=1&limit=50
+Headers:
+http
+Authorization: Bearer <jwt_token>
+Query Parameters:
+page (Integer, optional, default: 1)
+limit (Integer, optional, default: 50)
+Success Response (200 OK):
+json
+{
+  "success": true,
+  "message": "Archive fetched successfully",
+  "data": {
+    "email": "user@bnxmail.com",
+    "totalCount": 12,
+    "unreadCount": 0,
+    "emails": [
+      {
+        "uid": "1042",
+        "from": "partner@company.com",
+        "subject": "Q4 Project Collaboration",
+        "sentDate": "2026-10-28T09:30:00",
+        "isRead": true,
+        "isStarred": false
+      }
+    ]
+  },
+  "timestamp": 1712900000000
+}
+2.4 Toggle Starred Status (Star / Unstar)
+Toggles the star flag on an email. If currently unstarred, it stars the email; if already starred, it removes the star.
+
+Method: POST
+URL: /api/mail/star/{uid}
+Headers:
+http
+Authorization: Bearer <jwt_token>
+Path Parameters:
+uid (String, required): The unique message UID.
+Query Parameters:
+folder (String, optional, default: INBOX): Folder containing the message.
+Request Body: None
+Success Response (200 OK):
+json
+{
+  "success": true,
+  "message": "Star status toggled successfully",
+  "data": null,
+  "timestamp": 1712900000000
+}
+2.5 Get Starred Emails
+Retrieve paginated list of starred/flagged emails.
+
+Method: GET
+URL: /api/mail/starred?page=1&limit=50
+Headers:
+http
+Authorization: Bearer <jwt_token>
+Query Parameters:
+page (Integer, optional, default: 1)
+limit (Integer, optional, default: 50)
+Success Response (200 OK):
+json
+{
+  "success": true,
+  "message": "Starred emails fetched successfully",
+  "data": {
+    "email": "user@bnxmail.com",
+    "totalCount": 5,
+    "unreadCount": 0,
+    "emails": [
+      {
+        "uid": "1042",
+        "from": "lead@bnxmail.com",
+        "subject": "Important Collaboration Notes",
+        "sentDate": "2026-10-29T14:20:00",
+        "isRead": true,
+        "isStarred": true
+      }
+    ]
+  },
+  "timestamp": 1712900000000
+}
+3. Quick Reference Summary Table
+Scope	Action	Method	Endpoint	Query / Body
+Casbox	Archive (Single)	PATCH	/api/casbox/{id}/archive?archived=true	None
+Casbox	Unarchive (Single)	PATCH	/api/casbox/{id}/archive?archived=false	None
+Casbox	Archive (Batch)	PATCH	/api/casbox/archive	{"messageIds": [...], "archived": true}
+Casbox	Unarchive (Batch)	PATCH	/api/casbox/archive	{"messageIds": [...], "archived": false}
+Casbox	Get All Messages	GET	/api/casbox	Returns isArchived per message
+Collab / Mail	Archive	POST	/api/mail/archive/{uid}	?folder=INBOX
+Collab / Mail	Unarchive	POST	/api/mail/unarchive/{uid}	None
+Collab / Mail	Get Archive List	GET	/api/mail/archive	?page=1&limit=50
+Collab / Mail	Toggle Star	POST	/api/mail/star/{uid}	?folder=INBOX
+Collab / Mail	Get Starred List	GET	/api/mail/starred	?page=1&limit=50

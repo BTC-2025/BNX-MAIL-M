@@ -161,6 +161,114 @@ void main() {
       expect(unarchived.contains('35'), isFalse);
       expect(unarchived.isEmpty, isTrue);
     });
+
+    test('TokenService preserves and toggles starred Colab groups', () async {
+      final testEmail = 'chandran123@bnxmail.com';
+
+      // 1. Star group 35
+      await TokenService.saveStarredColabGroupIds({'35'}, testEmail);
+      final starred = await TokenService.getStarredColabGroupIds(testEmail);
+      expect(starred.contains('35'), isTrue);
+
+      // 2. Unstar group 35
+      await TokenService.saveStarredColabGroupIds({}, testEmail);
+      final unstarred = await TokenService.getStarredColabGroupIds(testEmail);
+      expect(unstarred.contains('35'), isFalse);
+    });
+
+    test('TokenService preserves and toggles starred Casbox messages', () async {
+      final testEmail = 'chandran123@bnxmail.com';
+
+      // 1. Star message 1050
+      await TokenService.toggleStarredCasboxId('1050', true, testEmail);
+      var starredMsgs = await TokenService.getStarredCasboxIds(testEmail);
+      var unstarredMsgs = await TokenService.getUnstarredCasboxIds(testEmail);
+      expect(starredMsgs.contains('1050'), isTrue);
+      expect(unstarredMsgs.contains('1050'), isFalse);
+
+      // 2. Unstar message 1050
+      await TokenService.toggleStarredCasboxId('1050', false, testEmail);
+      starredMsgs = await TokenService.getStarredCasboxIds(testEmail);
+      unstarredMsgs = await TokenService.getUnstarredCasboxIds(testEmail);
+      expect(starredMsgs.contains('1050'), isFalse);
+      expect(unstarredMsgs.contains('1050'), isTrue);
+    });
+
+    test('CasboxMessage parses star status from isStarred, starred, or is_starred', () {
+      final m1 = CasboxMessage.fromJson({'id': 1, 'isStarred': true, 'sender': 'a@b.c'});
+      expect(m1.isStarred, isTrue);
+
+      final m2 = CasboxMessage.fromJson({'id': 2, 'starred': true, 'sender': 'a@b.c'});
+      expect(m2.isStarred, isTrue);
+
+      final m3 = CasboxMessage.fromJson({'id': 3, 'is_starred': true, 'sender': 'a@b.c'});
+      expect(m3.isStarred, isTrue);
+
+      final m4 = CasboxMessage.fromJson({'id': 4, 'isStarred': false, 'sender': 'a@b.c'});
+      expect(m4.isStarred, isFalse);
+    });
+
+    test('ColabListNotifier toggles star and archive cleanly', () async {
+      final notifier = ColabListNotifier();
+      final g1 = ColabGroup(id: '35', name: 'alpha ok', members: ['chandran123@bnxmail.com']);
+      notifier.setGroupsForTesting([g1]);
+
+      expect(notifier.state.first.isStarred, isFalse);
+      expect(notifier.state.first.isArchived, isFalse);
+
+      // Star group
+      await notifier.toggleStarGroup('35');
+      expect(notifier.state.first.isStarred, isTrue);
+
+      // Archive group
+      await notifier.toggleArchiveGroup('35');
+      expect(notifier.state.first.isArchived, isTrue);
+      expect(notifier.state.first.isStarred, isTrue);
+
+      // Unarchive group
+      await notifier.toggleArchiveGroup('35');
+      expect(notifier.state.first.isArchived, isFalse);
+      expect(notifier.state.first.isStarred, isTrue);
+
+      // Unstar group
+      await notifier.toggleStarGroup('35');
+      expect(notifier.state.first.isStarred, isFalse);
+    });
+
+    test('CasboxMessagesNotifier stars and unstars thread messages seamlessly', () async {
+      final notifier = CasboxMessagesNotifier();
+      while (notifier.isLoading) {
+        await Future.delayed(const Duration(milliseconds: 50));
+      }
+      final m1 = CasboxMessage(
+        id: '402',
+        sender: 'ravinew2004@bnxmail.com',
+        to: 'chandran123@bnxmail.com',
+        subject: 'Thread A',
+        body: 'Message 1',
+        timestamp: DateTime.now(),
+      );
+      final m2 = CasboxMessage(
+        id: '403',
+        sender: 'ravinew2004@bnxmail.com',
+        to: 'chandran123@bnxmail.com',
+        subject: 'Thread A',
+        body: 'Message 2',
+        timestamp: DateTime.now(),
+      );
+      notifier.clear();
+      notifier.setMessagesForTesting([m1, m2]);
+
+      // Star message 402 - should star the conversation (both 402 and 403)
+      await notifier.toggleStar('402');
+      expect(notifier.state.firstWhere((m) => m.id == '402').isStarred, isTrue);
+      expect(notifier.state.firstWhere((m) => m.id == '403').isStarred, isTrue);
+
+      // Unstar message 403 - should unstar the conversation
+      await notifier.toggleStar('403');
+      expect(notifier.state.firstWhere((m) => m.id == '402').isStarred, isFalse);
+      expect(notifier.state.firstWhere((m) => m.id == '403').isStarred, isFalse);
+    });
   });
 }
 

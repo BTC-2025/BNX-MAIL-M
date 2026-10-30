@@ -88,6 +88,7 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
   final TextEditingController _starSearchController = TextEditingController();
   String _starSearchQuery = '';
   String _archiveFilterTab = 'All';
+  String _starFilterTab = 'All';
   Timer? _activeGroupSyncTimer;
 
   @override
@@ -792,17 +793,38 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
     bool isMobile,
   ) {
     final allGroups = ref.watch(colabListProvider);
+    final allCasboxMsgs = ref.watch(casboxMessagesProvider);
+
     final starredGroups =
-        allGroups.where((g) => g.isStarred && !g.isArchived).toList();
+        allGroups.where((g) => g.isStarred).toList();
+    final starredMsgs =
+        allCasboxMsgs.where((m) => m.isStarred).toList();
 
     final query = _starSearchQuery.trim().toLowerCase();
-    final displayedGroups = query.isEmpty
+    final filteredGroups = query.isEmpty
         ? starredGroups
         : starredGroups.where((g) {
             return g.name.toLowerCase().contains(query) ||
                 g.desc.toLowerCase().contains(query) ||
                 g.lastMessage.toLowerCase().contains(query);
           }).toList();
+
+    final filteredMsgs = query.isEmpty
+        ? starredMsgs
+        : starredMsgs.where((m) {
+            final body = m.body.toLowerCase();
+            final subject = m.subject.toLowerCase();
+            final sender = m.sender.toLowerCase();
+            final to = m.to.toLowerCase();
+            return body.contains(query) ||
+                subject.contains(query) ||
+                sender.contains(query) ||
+                to.contains(query);
+          }).toList();
+
+    final totalCount = filteredGroups.length + filteredMsgs.length;
+    final showGroups = _starFilterTab == 'All' || _starFilterTab == 'Colab';
+    final showMsgs = _starFilterTab == 'All' || _starFilterTab == 'Messages';
 
     return Scaffold(
       backgroundColor: isDark ? BNXColors.darkBg : const Color(0xFFE9F4FF),
@@ -826,7 +848,7 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Top Header: ⭐ Starred Colab Groups + View your starred colab groups
+                // Top Header: ⭐ Starred + View and manage your starred messages and colab conversations
                 Row(
                   children: [
                     if (isMobile) ...[
@@ -876,7 +898,7 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                 ),
                 const SizedBox(height: 18),
 
-                // Search Bar: 🔍 Search starred colab groups...
+                // Search Bar: 🔍 Search starred items...
                 Container(
                   height: 42,
                   decoration: BoxDecoration(
@@ -937,11 +959,43 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                     ],
                   ),
                 ),
+                const SizedBox(height: 16),
+
+                // Filter tabs: All ({count}) | Colab Conversations ({count}) | Messages ({count})
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _buildArchiveFilterChip(
+                        label: 'All ($totalCount)',
+                        isActive: _starFilterTab == 'All',
+                        onTap: () => setState(() => _starFilterTab = 'All'),
+                        isDark: isDark,
+                      ),
+                      const SizedBox(width: 8),
+                      _buildArchiveFilterChip(
+                        label:
+                            'Colab Conversations (${filteredGroups.length})',
+                        isActive: _starFilterTab == 'Colab',
+                        onTap: () => setState(() => _starFilterTab = 'Colab'),
+                        isDark: isDark,
+                      ),
+                      const SizedBox(width: 8),
+                      _buildArchiveFilterChip(
+                        label: 'Messages (${filteredMsgs.length})',
+                        isActive: _starFilterTab == 'Messages',
+                        onTap: () =>
+                            setState(() => _starFilterTab = 'Messages'),
+                        isDark: isDark,
+                      ),
+                    ],
+                  ),
+                ),
                 const SizedBox(height: 18),
 
-                // Group list or Empty state
+                // Content list or Empty state
                 Expanded(
-                  child: displayedGroups.isEmpty
+                  child: totalCount == 0
                       ? Center(
                           child: Padding(
                             padding: const EdgeInsets.symmetric(vertical: 40),
@@ -950,7 +1004,7 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                               children: [
                                 const Icon(
                                   Icons.star_border_rounded,
-                                  size: 64,
+                                  size: 60,
                                   color: Color(0xFFF59E0B),
                                 ),
                                 const SizedBox(height: 16),
@@ -978,25 +1032,72 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                             ),
                           ),
                         )
-                      : SingleChildScrollView(
+                      : ListView(
                           physics: const BouncingScrollPhysics(),
-                          child: Align(
-                            alignment: Alignment.topLeft,
-                            child: Wrap(
-                              spacing: 16,
-                              runSpacing: 16,
-                              children: displayedGroups.map((group) {
-                                return _buildColabGroupCard(
-                                  context,
-                                  ref,
-                                  group,
-                                  isDark,
-                                  isMobile: isMobile,
-                                  isStarView: true,
-                                );
-                              }).toList(),
-                            ),
-                          ),
+                          children: [
+                            if (showGroups && filteredGroups.isNotEmpty) ...[
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: Text(
+                                  'COLAB CONVERSATIONS (${filteredGroups.length})',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF64748B),
+                                    letterSpacing: 0.8,
+                                  ),
+                                ),
+                              ),
+                              Align(
+                                alignment: Alignment.topLeft,
+                                child: Wrap(
+                                  spacing: 16,
+                                  runSpacing: 16,
+                                  children: filteredGroups.map(
+                                    (g) => _buildColabGroupCard(
+                                      context,
+                                      ref,
+                                      g,
+                                      isDark,
+                                      isMobile: isMobile,
+                                      isStarView: true,
+                                    ),
+                                  ).toList(),
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                            ],
+                            if (showMsgs && filteredMsgs.isNotEmpty) ...[
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: Text(
+                                  'MESSAGES (${filteredMsgs.length})',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF64748B),
+                                    letterSpacing: 0.8,
+                                  ),
+                                ),
+                              ),
+                              Align(
+                                alignment: Alignment.topLeft,
+                                child: Wrap(
+                                  spacing: 16,
+                                  runSpacing: 16,
+                                  children: filteredMsgs.map(
+                                    (m) => _buildCasboxStarMessageCard(
+                                      context,
+                                      ref,
+                                      m,
+                                      isDark,
+                                      isMobile: isMobile,
+                                    ),
+                                  ).toList(),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                 ),
               ],
@@ -1189,6 +1290,52 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                 ),
                 const SizedBox(width: 4),
               ],
+              Tooltip(
+                message: group.isStarred ? 'Unstar group' : 'Star group',
+                child: InkWell(
+                  onTap: () async {
+                    final wasStarred = group.isStarred;
+                    await ref
+                        .read(colabListProvider.notifier)
+                        .toggleStarGroup(group.id);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            wasStarred
+                                ? 'Removed "${group.name}" from starred.'
+                                : 'Starred "${group.name}".',
+                          ),
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(6),
+                  child: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: group.isStarred
+                          ? const Color(0xFFFEF3C7)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Icon(
+                      group.isStarred
+                          ? Icons.star_rounded
+                          : Icons.star_border_rounded,
+                      color: group.isStarred
+                          ? const Color(0xFFF59E0B)
+                          : (isDark
+                              ? Colors.white60
+                              : const Color(0xFF64748B)),
+                      size: 17,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
               PopupMenuButton<String>(
                 icon: Icon(
                   Icons.more_vert_rounded,
@@ -1458,9 +1605,19 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                 message: 'Unarchive message',
                 child: InkWell(
                   onTap: () async {
+                    final allMsgs = ref.read(casboxMessagesProvider);
+                    final targetIds = allMsgs
+                        .where((m) =>
+                            (msg.subject.trim().isNotEmpty &&
+                                m.subject.trim().toLowerCase() ==
+                                    msg.subject.trim().toLowerCase()) ||
+                            (m.sender == msg.sender && m.to == msg.to) ||
+                            m.id == msg.id)
+                        .map((m) => m.id)
+                        .toList();
                     await ref
                         .read(casboxMessagesProvider.notifier)
-                        .archiveMessage(msg.id, false);
+                        .batchArchiveMessages(targetIds, false);
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
@@ -1515,13 +1672,266 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
                 ],
                 onSelected: (val) async {
                   if (val == 'unarchive') {
+                    final allMsgs = ref.read(casboxMessagesProvider);
+                    final targetIds = allMsgs
+                        .where((m) =>
+                            (msg.subject.trim().isNotEmpty &&
+                                m.subject.trim().toLowerCase() ==
+                                    msg.subject.trim().toLowerCase()) ||
+                            (m.sender == msg.sender && m.to == msg.to) ||
+                            m.id == msg.id)
+                        .map((m) => m.id)
+                        .toList();
                     await ref
                         .read(casboxMessagesProvider.notifier)
-                        .archiveMessage(msg.id, false);
+                        .batchArchiveMessages(targetIds, false);
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text('Message restored to Casbox.'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  }
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            msg.body.isNotEmpty
+                ? msg.body
+                : (msg.subject.isNotEmpty ? msg.subject : 'No content'),
+            style: TextStyle(
+              fontSize: 13,
+              color: isDark ? Colors.white60 : const Color(0xFF64748B),
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 14),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                dateText,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark ? Colors.white38 : const Color(0xFF94A3B8),
+                ),
+              ),
+              InkWell(
+                borderRadius: BorderRadius.circular(4),
+                onTap: () {
+                  ref.read(selectedCasboxThreadProvider.notifier).state = msg.id;
+                  ref.read(appUiProvider.notifier).selectFolder('Casbox');
+                },
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Open chat',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF195BAC),
+                      ),
+                    ),
+                    SizedBox(width: 4),
+                    Icon(
+                      Icons.arrow_forward_rounded,
+                      size: 14,
+                      color: Color(0xFF195BAC),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCasboxStarMessageCard(
+    BuildContext context,
+    WidgetRef ref,
+    CasboxMessage msg,
+    bool isDark, {
+    bool isMobile = false,
+  }) {
+    final activeAccount = ref.read(activeAccountProvider);
+    final currentUserEmail = activeAccount.email.toLowerCase().trim();
+    final mailboxEmails = ref.read(emailProvider).emails;
+    final aliases = ref.watch(casboxAliasesProvider);
+
+    final sentByMe = checkCasboxMessageSentByMe(msg, currentUserEmail, mailboxEmails);
+    final contactEmail = (sentByMe ? msg.to : msg.sender).trim();
+    final rawHandle = contactEmail.contains('@')
+        ? contactEmail.split('@').first
+        : (contactEmail.isNotEmpty ? contactEmail : 'Unknown');
+    final contactName = aliases[rawHandle] ??
+        aliases[contactEmail] ??
+        (msg.contactDisplayName != null &&
+                msg.contactDisplayName!.trim().isNotEmpty
+            ? msg.contactDisplayName!.trim()
+            : (msg.contactUsername != null &&
+                    msg.contactUsername!.trim().isNotEmpty
+                ? msg.contactUsername!.trim()
+                : rawHandle));
+
+    final initial = contactName.isNotEmpty ? contactName[0].toUpperCase() : 'C';
+    final (avatarBg, avatarFg) = _getCasboxAvatarColors(contactName, isDark);
+    final dateText = _formatGroupDate(
+        '${msg.timestamp.day.toString().padLeft(2, '0')}/${msg.timestamp.month.toString().padLeft(2, '0')}/${msg.timestamp.year}');
+
+    return Container(
+      width: isMobile ? double.infinity : 330,
+      margin: EdgeInsets.only(bottom: isMobile ? 12 : 0),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.02),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: avatarBg,
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  initial,
+                  style: TextStyle(
+                    color: avatarFg,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Flexible(
+                child: Text(
+                  contactName,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 7,
+                  vertical: 2.5,
+                ),
+                decoration: BoxDecoration(
+                  color: sentByMe
+                      ? const Color(0xFFDCFCE7)
+                      : const Color(0xFFDBEAFE),
+                  borderRadius: BorderRadius.circular(5),
+                ),
+                child: Text(
+                  sentByMe ? 'SENT' : 'RECEIVED',
+                  style: TextStyle(
+                    color: sentByMe
+                        ? const Color(0xFF15803D)
+                        : const Color(0xFF1E40AF),
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+              const Spacer(),
+              Tooltip(
+                message: 'Unstar message',
+                child: InkWell(
+                  onTap: () async {
+                    await ref
+                        .read(casboxMessagesProvider.notifier)
+                        .toggleStar(msg.id);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Removed from starred.'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(6),
+                  child: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF3C7),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Icon(
+                      Icons.star_rounded,
+                      color: Color(0xFFF59E0B),
+                      size: 17,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              PopupMenuButton<String>(
+                icon: Icon(
+                  Icons.more_vert_rounded,
+                  size: 18,
+                  color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                itemBuilder: (ctx) => [
+                  const PopupMenuItem<String>(
+                    value: 'unstar',
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.star_border_rounded,
+                          size: 16,
+                          color: Color(0xFFF59E0B),
+                        ),
+                        SizedBox(width: 8),
+                        Text('Unstar'),
+                      ],
+                    ),
+                  ),
+                ],
+                onSelected: (val) async {
+                  if (val == 'unstar') {
+                    await ref
+                        .read(casboxMessagesProvider.notifier)
+                        .toggleStar(msg.id);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Removed from starred.'),
                           duration: Duration(seconds: 2),
                         ),
                       );
@@ -2319,6 +2729,34 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
               );
             },
             tooltip: 'Print',
+          ),
+          IconButton(
+            icon: Icon(
+              group.isStarred ? Icons.star_rounded : Icons.star_border_rounded,
+              size: 20,
+              color: group.isStarred
+                  ? const Color(0xFFF59E0B)
+                  : (isDark ? Colors.white70 : const Color(0xFF64748B)),
+            ),
+            tooltip: group.isStarred ? 'Unstar Group' : 'Star Group',
+            onPressed: () async {
+              final wasStarred = group.isStarred;
+              await ref
+                  .read(colabListProvider.notifier)
+                  .toggleStarGroup(group.id);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      wasStarred
+                          ? 'Removed "${group.name}" from starred.'
+                          : 'Starred "${group.name}".',
+                    ),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              }
+            },
           ),
           PopupMenuButton<String>(
             icon: Icon(
@@ -4264,6 +4702,8 @@ class _CasboxInteractiveWidgetState
       final isArchived = m.isArchived;
       if (_activeTab == 'Archive' || _activeTab == 'Archived') {
         if (!isArchived) return false;
+      } else if (_activeTab == 'Starred' || _activeTab == 'Star') {
+        if (!m.isStarred) return false;
       } else {
         if (isArchived) return false;
         // Filter by active tab
@@ -4703,8 +5143,8 @@ class _CasboxInteractiveWidgetState
                             _clearSelection();
                           });
                           ref
-                                  .read(selectedCasboxThreadProvider.notifier)
-                                  .state =
+                              .read(selectedCasboxThreadProvider.notifier)
+                              .state =
                               null;
                         },
                         isDark,
@@ -5905,6 +6345,19 @@ class _CasboxInteractiveWidgetState
           }
         } else if (val == 'edit_name') {
           _showEditContactNameDialog(rawHandle, displayName);
+        } else if (val == 'star' || val == 'unstar') {
+          final wasStarred = msg.isStarred;
+          await ref.read(casboxMessagesProvider.notifier).toggleStar(msg.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  wasStarred ? 'Removed from starred' : 'Added to starred',
+                ),
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
         } else if (val == 'archive') {
           await ref
               .read(casboxMessagesProvider.notifier)
@@ -5958,6 +6411,25 @@ class _CasboxInteractiveWidgetState
               ),
               const SizedBox(width: 10),
               const Text('Edit Name', style: TextStyle(fontSize: 13)),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: msg.isStarred ? 'unstar' : 'star',
+          child: Row(
+            children: [
+              Icon(
+                msg.isStarred ? Icons.star_rounded : Icons.star_border_rounded,
+                size: 16,
+                color: msg.isStarred
+                    ? const Color(0xFFF59E0B)
+                    : (isDark ? Colors.white70 : const Color(0xFF64748B)),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                msg.isStarred ? 'Unstar' : 'Star',
+                style: const TextStyle(fontSize: 13),
+              ),
             ],
           ),
         ),
@@ -6056,21 +6528,27 @@ class _CasboxInteractiveWidgetState
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              _activeTab == 'Combine' || _activeTab == 'Combined Chat'
-                  ? Icons.mark_email_read_outlined
-                  : (_activeTab == 'Archive' || _activeTab == 'Archived'
-                        ? Icons.archive_outlined
-                        : Icons.mail_outline_rounded),
+              _activeTab == 'Starred' || _activeTab == 'Star'
+                  ? Icons.star_border_rounded
+                  : (_activeTab == 'Combine' || _activeTab == 'Combined Chat'
+                      ? Icons.mark_email_read_outlined
+                      : (_activeTab == 'Archive' || _activeTab == 'Archived'
+                            ? Icons.archive_outlined
+                            : Icons.mail_outline_rounded)),
               size: 40,
-              color: isDark ? Colors.white24 : Colors.grey.shade300,
+              color: (_activeTab == 'Starred' || _activeTab == 'Star')
+                  ? const Color(0xFFF59E0B)
+                  : (isDark ? Colors.white24 : Colors.grey.shade300),
             ),
             const SizedBox(height: 12),
             Text(
-              _activeTab == 'Combine' || _activeTab == 'Combined Chat'
-                  ? 'No incoming messages in Combine'
-                  : (_activeTab == 'Archive' || _activeTab == 'Archived'
-                        ? 'No archived messages'
-                        : 'No messages in Casbox'),
+              _activeTab == 'Starred' || _activeTab == 'Star'
+                  ? 'No starred messages'
+                  : (_activeTab == 'Combine' || _activeTab == 'Combined Chat'
+                      ? 'No incoming messages in Combine'
+                      : (_activeTab == 'Archive' || _activeTab == 'Archived'
+                            ? 'No archived messages'
+                            : 'No messages in Casbox')),
               style: TextStyle(
                 color: isDark ? Colors.white54 : Colors.grey.shade600,
                 fontSize: 13,
@@ -6332,6 +6810,45 @@ class _CasboxInteractiveWidgetState
                             ],
                           ),
                         ),
+                        Tooltip(
+                          message: msg.isStarred ? 'Unstar' : 'Star',
+                          child: InkWell(
+                            onTap: () async {
+                              final wasStarred = msg.isStarred;
+                              await ref
+                                  .read(casboxMessagesProvider.notifier)
+                                  .toggleStar(msg.id);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      wasStarred
+                                          ? 'Removed from starred'
+                                          : 'Added to starred',
+                                    ),
+                                    duration: const Duration(seconds: 2),
+                                  ),
+                                );
+                              }
+                            },
+                            borderRadius: BorderRadius.circular(6),
+                            child: Padding(
+                              padding: const EdgeInsets.all(2.0),
+                              child: Icon(
+                                msg.isStarred
+                                    ? Icons.star_rounded
+                                    : Icons.star_border_rounded,
+                                size: 16,
+                                color: msg.isStarred
+                                    ? const Color(0xFFF59E0B)
+                                    : (isDark
+                                        ? Colors.white38
+                                        : const Color(0xFF94A3B8)),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 2),
                         _buildMessageRowPopupMenu(
                           msg: msg,
                           isDark: isDark,
@@ -6515,6 +7032,45 @@ class _CasboxInteractiveWidgetState
                           _buildStatusTick(msg, isDark),
                         ],
                         const SizedBox(width: 10),
+                        Tooltip(
+                          message: msg.isStarred ? 'Unstar' : 'Star',
+                          child: InkWell(
+                            onTap: () async {
+                              final wasStarred = msg.isStarred;
+                              await ref
+                                  .read(casboxMessagesProvider.notifier)
+                                  .toggleStar(msg.id);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      wasStarred
+                                          ? 'Removed from starred'
+                                          : 'Added to starred',
+                                    ),
+                                    duration: const Duration(seconds: 2),
+                                  ),
+                                );
+                              }
+                            },
+                            borderRadius: BorderRadius.circular(6),
+                            child: Padding(
+                              padding: const EdgeInsets.all(2.0),
+                              child: Icon(
+                                msg.isStarred
+                                    ? Icons.star_rounded
+                                    : Icons.star_border_rounded,
+                                size: 16,
+                                color: msg.isStarred
+                                    ? const Color(0xFFF59E0B)
+                                    : (isDark
+                                        ? Colors.white38
+                                        : const Color(0xFF94A3B8)),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 2),
                         _buildMessageRowPopupMenu(
                           msg: msg,
                           isDark: isDark,
@@ -6675,6 +7231,36 @@ class _CasboxInteractiveWidgetState
                 ),
               ),
               const Spacer(),
+              IconButton(
+                icon: Icon(
+                  selectedMsg.isStarred
+                      ? Icons.star_rounded
+                      : Icons.star_outline_rounded,
+                  size: 20,
+                  color: selectedMsg.isStarred
+                      ? const Color(0xFFF59E0B)
+                      : (isDark ? Colors.white70 : const Color(0xFF475569)),
+                ),
+                tooltip: selectedMsg.isStarred ? 'Unstar' : 'Star',
+                onPressed: () async {
+                  final wasStarred = selectedMsg.isStarred;
+                  await ref
+                      .read(casboxMessagesProvider.notifier)
+                      .toggleStar(selectedMsg.id);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          wasStarred
+                              ? 'Conversation unstarred'
+                              : 'Conversation starred',
+                        ),
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                  }
+                },
+              ),
               IconButton(
                 icon: Icon(
                   isArchivedMsg
@@ -7380,12 +7966,33 @@ class _CasboxInteractiveWidgetState
               ),
               IconButton(
                 icon: Icon(
-                  Icons.star_outline_rounded,
+                  selectedMsg.isStarred
+                      ? Icons.star_rounded
+                      : Icons.star_outline_rounded,
                   size: 20,
-                  color: isDark ? Colors.white70 : const Color(0xFF64748B),
+                  color: selectedMsg.isStarred
+                      ? const Color(0xFFF59E0B)
+                      : (isDark ? Colors.white70 : const Color(0xFF64748B)),
                 ),
-                tooltip: 'Star',
-                onPressed: () {},
+                tooltip: selectedMsg.isStarred ? 'Unstar' : 'Star',
+                onPressed: () async {
+                  final wasStarred = selectedMsg.isStarred;
+                  await ref
+                      .read(casboxMessagesProvider.notifier)
+                      .toggleStar(selectedMsg.id);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          wasStarred
+                              ? 'Conversation unstarred'
+                              : 'Conversation starred',
+                        ),
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                  }
+                },
               ),
               IconButton(
                 icon: Icon(
@@ -9403,6 +10010,36 @@ class _CasboxDetailPageState extends ConsumerState<_CasboxDetailPage> {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        initialMsg.isStarred
+                            ? Icons.star_rounded
+                            : Icons.star_outline_rounded,
+                        size: 22,
+                        color: initialMsg.isStarred
+                            ? const Color(0xFFF59E0B)
+                            : (isDark ? Colors.white70 : const Color(0xFF64748B)),
+                      ),
+                      tooltip: initialMsg.isStarred ? 'Unstar' : 'Star',
+                      onPressed: () async {
+                        final wasStarred = initialMsg.isStarred;
+                        await ref
+                            .read(casboxMessagesProvider.notifier)
+                            .toggleStar(initialMsg.id);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                wasStarred
+                                    ? 'Conversation unstarred'
+                                    : 'Conversation starred',
+                              ),
+                              duration: const Duration(seconds: 2),
+                            ),
+                          );
+                        }
+                      },
                     ),
                     IconButton(
                       icon: Icon(

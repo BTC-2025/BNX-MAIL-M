@@ -208,6 +208,200 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
+  Future<void> _onAddSignature() async {
+    // Save current active draft text before creating new
+    if (_selectedSignatureIndex >= 0 &&
+        _selectedSignatureIndex < _signatureItems.length) {
+      _signatureItems[_selectedSignatureIndex]['content'] =
+          _signatureContentController.text;
+      if (_signatureNameController.text.trim().isNotEmpty) {
+        _signatureItems[_selectedSignatureIndex]['name'] =
+            _signatureNameController.text.trim();
+      }
+    }
+
+    // If an empty unsaved draft already exists, switch to it rather than creating multiple empty tabs
+    final existingEmptyDraftIdx = _signatureItems.indexWhere(
+      (s) =>
+          (s['id'] == null || s['id'].toString().isEmpty) &&
+          (s['content'] == null || s['content'].toString().trim().isEmpty) &&
+          _signatureContentController.text.trim().isEmpty,
+    );
+    if (existingEmptyDraftIdx != -1) {
+      setState(() {
+        _selectedSignatureIndex = existingEmptyDraftIdx;
+        final cur = _signatureItems[existingEmptyDraftIdx];
+        _signatureNameController.text = cur['name']?.toString() ?? 'New Signature';
+        _signatureContentController.text =
+            _cleanHtmlForEditor(cur['content']?.toString() ?? '');
+      });
+      return;
+    }
+
+    final newIndexNum = _signatureItems.length + 1;
+    final newName = 'Signature $newIndexNum';
+    setState(() {
+      _signatureItems.add({
+        'id': '',
+        'name': newName,
+        'content': '',
+        'isDefault': _signatureItems.isEmpty,
+      });
+      _selectedSignatureIndex = _signatureItems.length - 1;
+      _signatureNameController.text = newName;
+      _signatureContentController.text = '';
+    });
+  }
+
+  Future<void> _saveCurrentSignatureInternal({bool silent = false}) async {
+    if (_selectedSignatureIndex < 0 ||
+        _selectedSignatureIndex >= _signatureItems.length) {
+      return;
+    }
+    final sig = _signatureItems[_selectedSignatureIndex];
+    final id = sig['id']?.toString() ?? '';
+    final name = _signatureNameController.text.trim().isNotEmpty
+        ? _signatureNameController.text.trim()
+        : (sig['name']?.toString() ?? 'Signature');
+    final content = _formatContentForBackend(_signatureContentController.text);
+    final isDefault = sig['isDefault'] == true;
+
+    if (id.isNotEmpty) {
+      final res = await ref.read(settingsProvider.notifier).updateSignature(
+            id: id,
+            name: name,
+            content: content,
+            isDefault: isDefault,
+          );
+      if (res.success) {
+        if (!mounted) return;
+        setState(() {
+          sig['name'] = name;
+          sig['content'] = content;
+        });
+        if (!silent) {
+          _showSnackBar('Signature "$name" saved successfully!');
+        }
+      } else {
+        if (!mounted) return;
+        if (!silent) {
+          _showSnackBar(
+            res.message ?? 'Failed to update signature',
+            isError: true,
+          );
+        }
+      }
+    } else {
+      final res = await ref.read(settingsProvider.notifier).createSignature(
+            name: name,
+            content: content,
+            isDefault: isDefault,
+          );
+      if (res.success && res.signature != null) {
+        if (!mounted) return;
+        setState(() {
+          sig['id'] = res.signature!.id;
+          sig['name'] = res.signature!.name;
+          sig['content'] = res.signature!.content;
+          sig['isDefault'] = res.signature!.isDefault;
+        });
+        if (!silent) {
+          _showSnackBar('Signature "$name" created successfully!');
+        }
+      } else {
+        if (!mounted) return;
+        if (!silent) {
+          _showSnackBar(
+            res.message ?? 'Failed to create signature',
+            isError: true,
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _onToggleDefaultCurrentSignature() async {
+    if (_selectedSignatureIndex < 0 ||
+        _selectedSignatureIndex >= _signatureItems.length) {
+      return;
+    }
+    final sig = _signatureItems[_selectedSignatureIndex];
+    final id = sig['id']?.toString() ?? '';
+    if (id.isNotEmpty) {
+      final res =
+          await ref.read(settingsProvider.notifier).setDefaultSignature(id);
+      if (res.success) {
+        if (!mounted) return;
+        setState(() {
+          for (var s in _signatureItems) {
+            s['isDefault'] = (s['id'] == id);
+          }
+        });
+        _showSnackBar('Default signature updated');
+      } else {
+        if (!mounted) return;
+        _showSnackBar(
+          res.message ?? 'Failed to set default signature',
+          isError: true,
+        );
+      }
+    } else {
+      setState(() {
+        for (int i = 0; i < _signatureItems.length; i++) {
+          _signatureItems[i]['isDefault'] = (i == _selectedSignatureIndex);
+        }
+      });
+    }
+  }
+
+  Future<void> _onDeleteCurrentSignature() async {
+    if (_selectedSignatureIndex < 0 ||
+        _selectedSignatureIndex >= _signatureItems.length) {
+      return;
+    }
+    final sig = _signatureItems[_selectedSignatureIndex];
+    final id = sig['id']?.toString() ?? '';
+    if (id.isNotEmpty) {
+      final res =
+          await ref.read(settingsProvider.notifier).deleteSignature(id);
+      if (!res.success) {
+        if (!mounted) return;
+        _showSnackBar(
+          res.message ?? 'Failed to delete signature',
+          isError: true,
+        );
+        return;
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      if (id.isNotEmpty) {
+        _signatureItems.removeWhere((s) => s['id']?.toString() == id);
+      } else if (_selectedSignatureIndex < _signatureItems.length) {
+        _signatureItems.removeAt(_selectedSignatureIndex);
+      }
+
+      if (_signatureItems.isEmpty) {
+        _selectedSignatureIndex = 0;
+        _signatureNameController.clear();
+        _signatureContentController.clear();
+      } else {
+        if (_selectedSignatureIndex >= _signatureItems.length) {
+          _selectedSignatureIndex = _signatureItems.length - 1;
+        }
+        if (_selectedSignatureIndex < 0) {
+          _selectedSignatureIndex = 0;
+        }
+        final nextSig = _signatureItems[_selectedSignatureIndex];
+        _signatureNameController.text =
+            nextSig['name']?.toString() ?? 'Signature';
+        _signatureContentController.text =
+            _cleanHtmlForEditor(nextSig['content']?.toString() ?? '');
+      }
+    });
+    _showSnackBar('Signature deleted');
+  }
+
   // ── Accounts & Mailboxes State ─────────────────────────────────────────────
   bool _enablePasswordRecovery = true;
   final TextEditingController _recoveryEmailAddressController =
@@ -375,31 +569,126 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
 
     if (state.signatures.isNotEmpty) {
-      _signatureItems.clear();
+      String? previouslySelectedId;
+      bool wasDraftSelected = false;
+      Map<String, dynamic>? activeDraft;
+
+      if (_selectedSignatureIndex >= 0 &&
+          _selectedSignatureIndex < _signatureItems.length) {
+        final currentItem = _signatureItems[_selectedSignatureIndex];
+        final id = currentItem['id']?.toString() ?? '';
+        if (id.isNotEmpty) {
+          previouslySelectedId = id;
+        } else {
+          wasDraftSelected = true;
+          activeDraft = Map<String, dynamic>.from(currentItem);
+          activeDraft['name'] = _signatureNameController.text.trim();
+          activeDraft['content'] = _signatureContentController.text;
+        }
+      } else {
+        final draftIdx = _signatureItems.indexWhere(
+          (s) => s['id'] == null || s['id'].toString().isEmpty,
+        );
+        if (draftIdx != -1) {
+          activeDraft = Map<String, dynamic>.from(_signatureItems[draftIdx]);
+        }
+      }
+
+      final List<Map<String, dynamic>> newItems = [];
+      final Set<String> seenIds = {};
+      bool foundDefault = false;
+
       for (final sig in state.signatures) {
-        _signatureItems.add({
+        if (sig.id.isNotEmpty && seenIds.contains(sig.id)) {
+          continue; // Prevent duplicate IDs from ever appearing
+        }
+        if (sig.id.isNotEmpty) {
+          seenIds.add(sig.id);
+        }
+        final isDef = sig.isDefault && !foundDefault;
+        if (isDef) foundDefault = true;
+        newItems.add({
           'id': sig.id,
           'name': sig.name,
           'content': sig.content,
-          'isDefault': sig.isDefault,
+          'isDefault': isDef,
         });
       }
-      if (_selectedSignatureIndex >= _signatureItems.length) {
-        _selectedSignatureIndex = _signatureItems.length - 1;
+
+      // Preserve active unsaved draft if not yet persisted to backend
+      if (activeDraft != null &&
+          (activeDraft['id'] == null || activeDraft['id'].toString().isEmpty)) {
+        final draftName = activeDraft['name']?.toString() ?? '';
+        final draftContent = activeDraft['content']?.toString() ?? '';
+        final matchedInServer = state.signatures.any((s) =>
+            s.name == draftName ||
+            _cleanHtmlForEditor(s.content) == _cleanHtmlForEditor(draftContent));
+        if (!matchedInServer) {
+          newItems.add(activeDraft);
+        }
       }
-      if (_selectedSignatureIndex < 0) {
-        _selectedSignatureIndex = 0;
+
+      _signatureItems.clear();
+      _signatureItems.addAll(newItems);
+
+      // Restore selected index
+      int newIndex = 0;
+      if (wasDraftSelected && activeDraft != null) {
+        final draftIdx = _signatureItems.indexWhere(
+          (s) => s['id'] == null || s['id'].toString().isEmpty,
+        );
+        if (draftIdx != -1) {
+          newIndex = draftIdx;
+        } else {
+          final draftName = activeDraft['name']?.toString() ?? '';
+          final matchingIdx = _signatureItems.indexWhere((s) => s['name'] == draftName);
+          newIndex = matchingIdx != -1 ? matchingIdx : _signatureItems.length - 1;
+        }
+      } else if (previouslySelectedId != null) {
+        final found = _signatureItems.indexWhere(
+          (s) => s['id']?.toString() == previouslySelectedId,
+        );
+        if (found != -1) {
+          newIndex = found;
+        }
       }
-      final cur = _signatureItems[_selectedSignatureIndex];
-      _signatureNameController.text = cur['name']?.toString() ?? 'New Signature';
-      _signatureContentController.text =
-          _cleanHtmlForEditor(cur['content']?.toString() ?? '');
+
+      if (newIndex >= _signatureItems.length) {
+        newIndex = _signatureItems.length - 1;
+      }
+      if (newIndex < 0) {
+        newIndex = 0;
+      }
+      _selectedSignatureIndex = newIndex;
+
+      if (_signatureItems.isNotEmpty) {
+        final cur = _signatureItems[_selectedSignatureIndex];
+        final expectedName = cur['name']?.toString() ?? 'New Signature';
+        final expectedContent =
+            _cleanHtmlForEditor(cur['content']?.toString() ?? '');
+        if (_signatureNameController.text != expectedName) {
+          _signatureNameController.text = expectedName;
+        }
+        if (_signatureContentController.text != expectedContent) {
+          _signatureContentController.text = expectedContent;
+        }
+      }
     } else {
       // Backend confirmed empty signature list for this account
-      _signatureItems.clear();
-      _selectedSignatureIndex = 0;
-      _signatureNameController.clear();
-      _signatureContentController.clear();
+      final draftIdx = _signatureItems.indexWhere(
+        (s) => s['id'] == null || s['id'].toString().isEmpty,
+      );
+      if (draftIdx != -1) {
+        final draft = _signatureItems[draftIdx];
+        _signatureItems.clear();
+        _signatureItems.add(draft);
+        _selectedSignatureIndex = 0;
+      } else {
+        _signatureItems.clear();
+        _selectedSignatureIndex = 0;
+        _signatureNameController.clear();
+        _signatureContentController.clear();
+      }
     }
   }
 
@@ -3045,6 +3334,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   // ── 2. General & Composing Tab ────────────────────────────────────────────
   Widget _buildGeneralComposingTab(bool isDark) {
+    final isMobile = MediaQuery.of(context).size.width < 600 ||
+        defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS;
     const undoOptions = [
       'Disabled (Send instantly)',
       '5 seconds',
@@ -3503,8 +3795,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
 
           // ── Email Signatures ───────────────────────────────────────────────
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
             children: [
               const Text(
                 'EMAIL SIGNATURES',
@@ -3526,51 +3821,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     vertical: 6,
                   ),
                 ),
-                onPressed: () async {
-                  // Save current draft before creating new
-                  if (_selectedSignatureIndex >= 0 &&
-                      _selectedSignatureIndex < _signatureItems.length) {
-                    _signatureItems[_selectedSignatureIndex]['content'] =
-                        _signatureContentController.text;
-                    if (_signatureNameController.text.trim().isNotEmpty) {
-                      _signatureItems[_selectedSignatureIndex]['name'] =
-                          _signatureNameController.text.trim();
-                    }
-                  }
-                  final newName = 'Signature ${_signatureItems.length + 1}';
-                  final res = await ref
-                      .read(settingsProvider.notifier)
-                      .createSignature(
-                        name: newName,
-                        content: '<p></p>',
-                        isDefault: _signatureItems.isEmpty,
-                      );
-                  if (res.success && res.signature != null) {
-                    setState(() {
-                      _signatureItems.add({
-                        'id': res.signature!.id,
-                        'name': res.signature!.name,
-                        'content': res.signature!.content,
-                        'isDefault': res.signature!.isDefault,
-                      });
-                      _selectedSignatureIndex = _signatureItems.length - 1;
-                      _signatureNameController.text = res.signature!.name;
-                      _signatureContentController.text = '';
-                    });
-                    _showSnackBar('New signature created');
-                  } else {
-                    setState(() {
-                      _signatureItems.add({
-                        'name': newName,
-                        'content': '',
-                        'isDefault': _signatureItems.isEmpty,
-                      });
-                      _selectedSignatureIndex = _signatureItems.length - 1;
-                      _signatureNameController.text = newName;
-                      _signatureContentController.text = '';
-                    });
-                  }
-                },
+                onPressed: _onAddSignature,
                 child: const Text(
                   '+ Add Signature',
                   style: TextStyle(
@@ -3704,306 +3955,292 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 children: [
                   // Signature Editor Header
                   Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isMobile ? 12 : 16,
                       vertical: 10,
                     ),
-                    child: Row(
-                      children: [
-                        // Editable Signature Name
-                        Expanded(
-                          child: Row(
+                    child: isMobile
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Icon(
-                                Icons.edit_note_rounded,
-                                size: 20,
-                                color: Color(0xFF195BAC),
+                              Row(
+                                children: [
+                                  const Icon(
+                                    Icons.edit_note_rounded,
+                                    size: 22,
+                                    color: Color(0xFF195BAC),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: TextField(
+                                      controller: _signatureNameController,
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w700,
+                                        color: isDark
+                                            ? Colors.white
+                                            : const Color(0xFF0F172A),
+                                      ),
+                                      decoration: const InputDecoration(
+                                        hintText:
+                                            'Signature Name (click to edit)',
+                                        isDense: true,
+                                        contentPadding:
+                                            EdgeInsets.symmetric(vertical: 4),
+                                        border: InputBorder.none,
+                                      ),
+                                      onChanged: (val) {
+                                        if (_selectedSignatureIndex >= 0 &&
+                                            _selectedSignatureIndex <
+                                                _signatureItems.length) {
+                                          _signatureItems[
+                                                  _selectedSignatureIndex]
+                                              ['name'] = val;
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                  InkWell(
+                                    onTap: _onDeleteCurrentSignature,
+                                    borderRadius: BorderRadius.circular(20),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(4.0),
+                                      child: Icon(
+                                        Icons.close_rounded,
+                                        color: Colors.red.shade400,
+                                        size: 20,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF195BAC),
+                                      foregroundColor: Colors.white,
+                                      elevation: 0,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 14,
+                                        vertical: 6,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                    ),
+                                    icon: const Icon(Icons.check_rounded,
+                                        size: 14),
+                                    label: const Text(
+                                      'Save',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    onPressed: () =>
+                                        _saveCurrentSignatureInternal(),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  InkWell(
+                                    onTap: _onToggleDefaultCurrentSignature,
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: (_selectedSignatureIndex >= 0 &&
+                                                _selectedSignatureIndex <
+                                                    _signatureItems.length &&
+                                                _signatureItems[
+                                                        _selectedSignatureIndex]
+                                                    ['isDefault'] ==
+                                                    true)
+                                            ? const Color(0xFFDCFCE7)
+                                            : (isDark
+                                                ? Colors.white12
+                                                : const Color(0xFFF1F5F9)),
+                                        borderRadius:
+                                            BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        (_selectedSignatureIndex >= 0 &&
+                                                _selectedSignatureIndex <
+                                                    _signatureItems.length &&
+                                                _signatureItems[
+                                                        _selectedSignatureIndex]
+                                                    ['isDefault'] ==
+                                                    true)
+                                            ? 'Default ✓'
+                                            : 'Set Default',
+                                        style: TextStyle(
+                                          color: (_selectedSignatureIndex >=
+                                                      0 &&
+                                                  _selectedSignatureIndex <
+                                                      _signatureItems.length &&
+                                                  _signatureItems[
+                                                          _selectedSignatureIndex]
+                                                      ['isDefault'] ==
+                                                      true)
+                                              ? const Color(0xFF15803D)
+                                              : (isDark
+                                                  ? Colors.white70
+                                                  : const Color(0xFF475569)),
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 11.5,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          )
+                        : Row(
+                            children: [
+                              // Editable Signature Name
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.edit_note_rounded,
+                                      size: 20,
+                                      color: Color(0xFF195BAC),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: TextField(
+                                        controller: _signatureNameController,
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w700,
+                                          color: isDark
+                                              ? Colors.white
+                                              : const Color(0xFF0F172A),
+                                        ),
+                                        decoration: const InputDecoration(
+                                          hintText:
+                                              'Signature Name (click to edit)',
+                                          isDense: true,
+                                          contentPadding:
+                                              EdgeInsets.symmetric(vertical: 4),
+                                          border: InputBorder.none,
+                                        ),
+                                        onChanged: (val) {
+                                          if (_selectedSignatureIndex >= 0 &&
+                                              _selectedSignatureIndex <
+                                                  _signatureItems.length) {
+                                            _signatureItems[
+                                                _selectedSignatureIndex]['name'] = val;
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                               const SizedBox(width: 8),
-                              Expanded(
-                                child: TextField(
-                                  controller: _signatureNameController,
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w700,
-                                    color: isDark
-                                        ? Colors.white
-                                        : const Color(0xFF0F172A),
+                              Row(
+                                children: [
+                                  // Save Signature Button
+                                  ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF195BAC),
+                                      foregroundColor: Colors.white,
+                                      elevation: 0,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 6,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                    ),
+                                    icon: const Icon(Icons.check_rounded,
+                                        size: 14),
+                                    label: const Text(
+                                      'Save',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    onPressed: () =>
+                                        _saveCurrentSignatureInternal(),
                                   ),
-                                  decoration: const InputDecoration(
-                                    hintText: 'Signature Name (click to edit)',
-                                    isDense: true,
-                                    contentPadding:
-                                        EdgeInsets.symmetric(vertical: 4),
-                                    border: InputBorder.none,
+                                  const SizedBox(width: 8),
+                                  InkWell(
+                                    onTap: _onToggleDefaultCurrentSignature,
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: (_selectedSignatureIndex >= 0 &&
+                                                _selectedSignatureIndex <
+                                                    _signatureItems.length &&
+                                                _signatureItems[
+                                                        _selectedSignatureIndex]
+                                                    ['isDefault'] ==
+                                                    true)
+                                            ? const Color(0xFFDCFCE7)
+                                            : (isDark
+                                                ? Colors.white12
+                                                : const Color(0xFFF1F5F9)),
+                                        borderRadius:
+                                            BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        (_selectedSignatureIndex >= 0 &&
+                                                _selectedSignatureIndex <
+                                                    _signatureItems.length &&
+                                                _signatureItems[
+                                                        _selectedSignatureIndex]
+                                                    ['isDefault'] ==
+                                                    true)
+                                            ? 'Default ✓'
+                                            : 'Set Default',
+                                        style: TextStyle(
+                                          color: (_selectedSignatureIndex >=
+                                                      0 &&
+                                                  _selectedSignatureIndex <
+                                                      _signatureItems.length &&
+                                                  _signatureItems[
+                                                          _selectedSignatureIndex]
+                                                      ['isDefault'] ==
+                                                      true)
+                                              ? const Color(0xFF15803D)
+                                              : (isDark
+                                                  ? Colors.white70
+                                                  : const Color(0xFF475569)),
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 11.5,
+                                        ),
+                                      ),
+                                    ),
                                   ),
-                                  onChanged: (val) {
-                                    if (_selectedSignatureIndex >= 0 &&
-                                        _selectedSignatureIndex <
-                                            _signatureItems.length) {
-                                      _signatureItems[_selectedSignatureIndex]
-                                          ['name'] = val;
-                                    }
-                                  },
-                                ),
+                                  const SizedBox(width: 10),
+                                  InkWell(
+                                    onTap: _onDeleteCurrentSignature,
+                                    borderRadius: BorderRadius.circular(20),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(4.0),
+                                      child: Icon(
+                                        Icons.close_rounded,
+                                        color: Colors.red.shade400,
+                                        size: 20,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Row(
-                          children: [
-                            // Save Signature Button
-                            ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF195BAC),
-                                foregroundColor: Colors.white,
-                                elevation: 0,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 6,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                              icon: const Icon(Icons.check_rounded, size: 14),
-                              label: const Text(
-                                'Save',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              onPressed: () async {
-                                if (_selectedSignatureIndex < 0 ||
-                                    _selectedSignatureIndex >=
-                                        _signatureItems.length) {
-                                  return;
-                                }
-                                final sig =
-                                    _signatureItems[_selectedSignatureIndex];
-                                final id = sig['id']?.toString();
-                                final name = _signatureNameController.text
-                                        .trim()
-                                        .isNotEmpty
-                                    ? _signatureNameController.text.trim()
-                                    : (sig['name']?.toString() ?? 'Signature');
-                                final content = _formatContentForBackend(
-                                  _signatureContentController.text,
-                                );
-                                final isDefault = sig['isDefault'] == true;
-
-                                if (id != null && id.isNotEmpty) {
-                                  final res = await ref
-                                      .read(settingsProvider.notifier)
-                                      .updateSignature(
-                                        id: id,
-                                        name: name,
-                                        content: content,
-                                        isDefault: isDefault,
-                                      );
-                                  if (res.success) {
-                                    setState(() {
-                                      sig['name'] = name;
-                                      sig['content'] = content;
-                                    });
-                                    _showSnackBar(
-                                        'Signature "$name" saved successfully!');
-                                  } else {
-                                    _showSnackBar(
-                                      res.message ??
-                                          'Failed to update signature',
-                                      isError: true,
-                                    );
-                                  }
-                                } else {
-                                  final res = await ref
-                                      .read(settingsProvider.notifier)
-                                      .createSignature(
-                                        name: name,
-                                        content: content,
-                                        isDefault: isDefault,
-                                      );
-                                  if (res.success && res.signature != null) {
-                                    setState(() {
-                                      sig['id'] = res.signature!.id;
-                                      sig['name'] = res.signature!.name;
-                                      sig['content'] = res.signature!.content;
-                                    });
-                                    _showSnackBar(
-                                        'Signature "$name" created successfully!');
-                                  } else {
-                                    _showSnackBar(
-                                      res.message ??
-                                          'Failed to create signature',
-                                      isError: true,
-                                    );
-                                  }
-                                }
-                              },
-                            ),
-                            const SizedBox(width: 8),
-                            InkWell(
-                              onTap: () async {
-                                if (_selectedSignatureIndex < 0 ||
-                                    _selectedSignatureIndex >=
-                                        _signatureItems.length) {
-                                  return;
-                                }
-                                final sig =
-                                    _signatureItems[_selectedSignatureIndex];
-                                final id = sig['id']?.toString();
-                                if (id != null && id.isNotEmpty) {
-                                  final res = await ref
-                                      .read(settingsProvider.notifier)
-                                      .setDefaultSignature(id);
-                                  if (res.success) {
-                                    setState(() {
-                                      for (var s in _signatureItems) {
-                                        s['isDefault'] = (s['id'] == id);
-                                      }
-                                    });
-                                    _showSnackBar('Default signature updated');
-                                  } else {
-                                    _showSnackBar(res.message ??
-                                        'Failed to set default signature');
-                                  }
-                                } else {
-                                  setState(() {
-                                    for (int i = 0;
-                                        i < _signatureItems.length;
-                                        i++) {
-                                      _signatureItems[i]['isDefault'] =
-                                          (i == _selectedSignatureIndex);
-                                    }
-                                  });
-                                }
-                              },
-                              borderRadius: BorderRadius.circular(12),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: (_selectedSignatureIndex >= 0 &&
-                                          _selectedSignatureIndex <
-                                              _signatureItems.length &&
-                                          _signatureItems[
-                                                  _selectedSignatureIndex]
-                                              ['isDefault'] ==
-                                              true)
-                                      ? const Color(0xFFDCFCE7)
-                                      : (isDark
-                                          ? Colors.white12
-                                          : const Color(0xFFF1F5F9)),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  (_selectedSignatureIndex >= 0 &&
-                                          _selectedSignatureIndex <
-                                              _signatureItems.length &&
-                                          _signatureItems[
-                                                  _selectedSignatureIndex]
-                                              ['isDefault'] ==
-                                              true)
-                                      ? 'Default ✓'
-                                      : 'Set Default',
-                                  style: TextStyle(
-                                    color: (_selectedSignatureIndex >= 0 &&
-                                            _selectedSignatureIndex <
-                                                _signatureItems.length &&
-                                            _signatureItems[
-                                                    _selectedSignatureIndex]
-                                                ['isDefault'] ==
-                                                true)
-                                        ? const Color(0xFF15803D)
-                                        : (isDark
-                                            ? Colors.white70
-                                            : const Color(0xFF475569)),
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 11.5,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            InkWell(
-                              onTap: () async {
-                                if (_selectedSignatureIndex < 0 ||
-                                    _selectedSignatureIndex >=
-                                        _signatureItems.length) {
-                                  return;
-                                }
-                                final sig =
-                                    _signatureItems[_selectedSignatureIndex];
-                                final id = sig['id']?.toString();
-                                if (id != null && id.isNotEmpty) {
-                                  final res = await ref
-                                      .read(settingsProvider.notifier)
-                                      .deleteSignature(id);
-                                  if (!res.success) {
-                                    _showSnackBar(
-                                      res.message ??
-                                          'Failed to delete signature',
-                                      isError: true,
-                                    );
-                                    return;
-                                  }
-                                }
-                                if (!mounted) return;
-                                setState(() {
-                                  if (id != null && id.isNotEmpty) {
-                                    _signatureItems.removeWhere(
-                                      (s) => s['id']?.toString() == id,
-                                    );
-                                  } else if (_selectedSignatureIndex <
-                                      _signatureItems.length) {
-                                    _signatureItems
-                                        .removeAt(_selectedSignatureIndex);
-                                  }
-
-                                  if (_signatureItems.isEmpty) {
-                                    _selectedSignatureIndex = 0;
-                                    _signatureNameController.clear();
-                                    _signatureContentController.clear();
-                                  } else {
-                                    if (_selectedSignatureIndex >=
-                                        _signatureItems.length) {
-                                      _selectedSignatureIndex =
-                                          _signatureItems.length - 1;
-                                    }
-                                    if (_selectedSignatureIndex < 0) {
-                                      _selectedSignatureIndex = 0;
-                                    }
-                                    final nextSig =
-                                        _signatureItems[_selectedSignatureIndex];
-                                    _signatureNameController.text =
-                                        nextSig['name']?.toString() ??
-                                            'Signature';
-                                    _signatureContentController.text =
-                                        _cleanHtmlForEditor(
-                                      nextSig['content']?.toString() ?? '',
-                                    );
-                                  }
-                                });
-                                _showSnackBar('Signature deleted');
-                              },
-                              borderRadius: BorderRadius.circular(20),
-                              child: Padding(
-                                padding: const EdgeInsets.all(4.0),
-                                child: Icon(
-                                  Icons.close_rounded,
-                                  color: Colors.red.shade400,
-                                  size: 20,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
                   ),
                   Divider(
                     height: 1,
@@ -4193,36 +4430,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
               if (_selectedSignatureIndex >= 0 &&
                   _selectedSignatureIndex < _signatureItems.length) {
-                final currentSig = _signatureItems[_selectedSignatureIndex];
-                final sigId = currentSig['id']?.toString();
-                final sigContent = _formatContentForBackend(
-                  _signatureContentController.text,
-                );
-                final sigName = _signatureNameController.text.trim().isNotEmpty
-                    ? _signatureNameController.text.trim()
-                    : (currentSig['name']?.toString() ?? 'Default');
-                final sigIsDefault = currentSig['isDefault'] == true;
-
-                if (sigId != null && sigId.isNotEmpty) {
-                  await ref.read(settingsProvider.notifier).updateSignature(
-                        id: sigId,
-                        name: sigName,
-                        content: sigContent,
-                        isDefault: sigIsDefault,
-                      );
-                } else if (_signatureContentController.text.isNotEmpty ||
-                    sigName.isNotEmpty) {
-                  final created = await ref
-                      .read(settingsProvider.notifier)
-                      .createSignature(
-                        name: sigName,
-                        content: sigContent,
-                        isDefault: sigIsDefault,
-                      );
-                  if (created.signature != null) {
-                    currentSig['id'] = created.signature!.id;
-                  }
-                }
+                await _saveCurrentSignatureInternal(silent: true);
               }
 
               await ref.read(settingsProvider.notifier).updateTextStyle(
