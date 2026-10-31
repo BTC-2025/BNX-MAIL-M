@@ -34,6 +34,7 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.13.1
   flutter_native_splash: ^2.4.0
+  msix: 3.16.7
 
 flutter_launcher_icons:
   image_path: "assets/bnx_mail_logo.png"
@@ -60,6 +61,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/logo.jpg
+    - assets/logo.png
     - assets/bit_tool_logo.png
     - assets/bnx_mail_logo.png
     - assets/beta_logo.jpg
@@ -67,3 +69,14 @@ flutter:
     - assets/cliks_business_img.png
     - lib/standalone_macos_storage/assets/
     - .env
+
+msix_config:
+  display_name: Bnx Mail
+  publisher_display_name: Bnx Mail
+  identity_name: com.bnx.mail
+  msix_version: 1.0.0.0
+  logo_path: assets/logo.png
+  capabilities: internetClient
+  install_certificate: false
+  output_name: BnxMail
+  signtool_options: /v /fd SHA256 /f assets/test_cert.pfx /p 1234
