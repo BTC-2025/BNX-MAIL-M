@@ -45,7 +45,8 @@ class DashboardShell extends ConsumerWidget {
     final bool isDesktopOS =
         !kIsWeb &&
         (defaultTargetPlatform == TargetPlatform.macOS ||
-            defaultTargetPlatform == TargetPlatform.windows);
+            defaultTargetPlatform == TargetPlatform.windows ||
+            defaultTargetPlatform == TargetPlatform.linux);
     final bool isMobileDevice = !kIsWeb &&
         (defaultTargetPlatform == TargetPlatform.android ||
             defaultTargetPlatform == TargetPlatform.iOS);
@@ -507,13 +508,19 @@ class DashboardShell extends ConsumerWidget {
     final activeAccount = ref.watch(activeAccountProvider);
     final isColab = currentRoute == '/colab';
 
-    return Container(
-      height: 58,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      color: const Color(0xFF195BAC),
-      child: Row(
-        children: [
-          // 1. Logo + Brand
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double maxW = constraints.maxWidth;
+        final bool isCompact = maxW < 960;
+        final bool isVeryCompact = maxW < 800;
+
+        return Container(
+          height: 58,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          color: const Color(0xFF195BAC),
+          child: Row(
+            children: [
+              // 1. Logo + Brand
           Container(
             width: 34,
             height: 34,
@@ -540,7 +547,7 @@ class DashboardShell extends ConsumerWidget {
           ),
           const SizedBox(width: 10),
           const Text(
-            'Bnx mail',
+            'Bnx Mail',
             style: TextStyle(
               color: Colors.white,
               fontSize: 19,
@@ -548,7 +555,7 @@ class DashboardShell extends ConsumerWidget {
               letterSpacing: -0.5,
             ),
           ),
-          const SizedBox(width: 48),
+          SizedBox(width: isVeryCompact ? 10 : (isCompact ? 20 : 48)),
 
           // 2. Compose Pill Button
           Material(
@@ -675,9 +682,10 @@ class DashboardShell extends ConsumerWidget {
           const Spacer(),
 
           // 4. Search mail...
-          Container(
-            width: 200,
-            height: 34,
+          if (maxW >= 720)
+            Container(
+              width: maxW < 850 ? 120 : (isCompact ? 160 : 200),
+              height: 34,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.18),
@@ -860,6 +868,8 @@ class DashboardShell extends ConsumerWidget {
           ),
         ],
       ),
+    );
+      },
     );
   }
 
@@ -1085,7 +1095,7 @@ class DashboardShell extends ConsumerWidget {
               isDark: isDark,
             ),
             _buildBetaAppItem(
-              name: 'Bnx mail',
+              name: 'Bnx Mail',
               imageAsset: 'assets/bnx_mail_logo.png',
               fallbackIcon: Icons.mark_email_read_rounded,
               color: const Color(0xFF195BAC),
@@ -1169,7 +1179,7 @@ class DashboardShell extends ConsumerWidget {
               showCard: true,
             ),
             _buildBetaAppItem(
-              name: 'Bnx mail',
+              name: 'Bnx Mail',
               imageAsset: 'assets/bnx_mail_logo.png',
               fallbackIcon: Icons.mark_email_read_rounded,
               color: const Color(0xFF195BAC),

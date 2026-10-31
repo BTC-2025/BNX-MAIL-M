@@ -121,7 +121,8 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
     final bool isMobile = isMobileDevice ||
         (MediaQuery.of(context).size.width < 800 &&
             defaultTargetPlatform != TargetPlatform.macOS &&
-            defaultTargetPlatform != TargetPlatform.windows);
+            defaultTargetPlatform != TargetPlatform.windows &&
+            defaultTargetPlatform != TargetPlatform.linux);
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -213,7 +214,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
   Widget _buildMobileStorageTabBar() {
     final tabs = [
       (_StorageTab.home, LucideIcons.home, 'Home'),
-      (_StorageTab.bnxMail, LucideIcons.mail, 'Bnx mail'),
+      (_StorageTab.bnxMail, LucideIcons.mail, 'Bnx Mail'),
       (_StorageTab.cliks, LucideIcons.messageSquare, 'Cliks'),
       (_StorageTab.cliksBusiness, LucideIcons.briefcase, 'Cliks Business'),
       (_StorageTab.storageUsage, LucideIcons.pieChart, 'Usage'),
@@ -718,11 +719,11 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
           _buildSidebarItem(
             tab: _StorageTab.bnxMail,
             iconBuilder: (isSelected) => _buildAppIcon(
-              'Bnx mail',
+              'Bnx Mail',
               size: 18,
               tintColor: isSelected ? Colors.white : null,
             ),
-            title: 'Bnx mail',
+            title: 'Bnx Mail',
           ),
           _buildSidebarItem(
             tab: _StorageTab.cliks,
@@ -1637,7 +1638,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
                   _buildEcosystemRow(
                     dotColor: const Color(0xFF2563EB),
                     iconWidget: _buildBnxMailLogo(size: 18),
-                    name: 'Bnx mail',
+                    name: 'Bnx Mail',
                     sizeText: (isLoading || isError || quota == null) ? 'Loading...' : quota.usedFormatted,
                     pctText: (isLoading || isError || quota == null) ? '--' : '${quota.percentageFormatted} of total pool',
                   ),
@@ -1990,7 +1991,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
     final double bnxFraction = quota != null ? quota.fraction : (8.84 * 1048576 / limitBytes);
 
     final appCardBnx = _buildApplicationCard(
-      appName: 'Bnx mail',
+      appName: 'Bnx Mail',
       subTitle: 'Mail & Communication',
       quotaTag: '5 GB',
       usedText: '$bnxUsedStr Used',
@@ -2792,7 +2793,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
       children: [
         _buildLegendRow(
           color: const Color(0xFF2563EB),
-          title: 'Bnx mail',
+          title: 'Bnx Mail',
           value: '$bnxUsedStr (100%)',
         ),
         const SizedBox(height: 12),
@@ -3271,7 +3272,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
   // ═══════════════════════════════════════════════════════════════
   Widget _buildAppIcon(String appName, {double size = 18, Color? tintColor}) {
     switch (appName) {
-      case 'Bnx mail':
+      case 'Bnx Mail':
         return Image.asset(
           'assets/bnx_mail_logo.png',
           width: size,
@@ -3406,7 +3407,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
               style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
             ),
             Text(
-              'Bnx mail',
+              'Bnx Mail',
               style: GoogleFonts.inter(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -3422,7 +3423,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Bnx mail Storage',
+                'Bnx Mail Storage',
                 style: GoogleFonts.inter(
                   fontSize: isMobile ? 22 : 24,
                   fontWeight: FontWeight.w800,
@@ -3437,7 +3438,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
         ),
         const SizedBox(height: 3),
         Text(
-          'Track how your ${quota?.limitFormatted ?? '...'} storage is used in Bnx mail.',
+          'Track how your ${quota?.limitFormatted ?? '...'} storage is used in Bnx Mail.',
           style: GoogleFonts.inter(
             fontSize: 13,
             color: const Color(0xFF64748B),
@@ -4628,7 +4629,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
       return _RecycleBinItem(
         id: e.id,
         name: e.subject.isNotEmpty ? e.subject : 'Untitled Email',
-        app: 'Bnx mail',
+        app: 'Bnx Mail',
         type: type,
         deletedDate: 'Deleted recently',
         sizeMb: double.parse(sizeMb.toStringAsFixed(2)),
@@ -4641,8 +4642,8 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
       ..._recycleItems,
     ];
 
-    final bnxCount = allItems.where((i) => i.app == 'Bnx mail').length;
-    final bnxSize = allItems.where((i) => i.app == 'Bnx mail').fold<double>(0.0, (s, i) => s + i.sizeMb);
+    final bnxCount = allItems.where((i) => i.app == 'Bnx Mail').length;
+    final bnxSize = allItems.where((i) => i.app == 'Bnx Mail').fold<double>(0.0, (s, i) => s + i.sizeMb);
 
     final cliksBizCount = allItems.where((i) => i.app == 'Cliks Business').length;
     final cliksBizSize = allItems.where((i) => i.app == 'Cliks Business').fold<double>(0.0, (s, i) => s + i.sizeMb);
@@ -4653,7 +4654,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
     List<_RecycleBinItem> filtered;
     switch (_selectedRecycleFilter) {
       case 'BNX MAIL':
-        filtered = allItems.where((i) => i.app == 'Bnx mail').toList();
+        filtered = allItems.where((i) => i.app == 'Bnx Mail').toList();
         break;
       case 'CLIKS BUSINESS':
         filtered = allItems.where((i) => i.app == 'Cliks Business').toList();
@@ -4705,7 +4706,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
           builder: (context, constraints) {
             final isNarrow = isMobile || constraints.maxWidth < 650;
             final cardBnx = _buildRecycleSummaryCard(
-              title: 'Bnx mail',
+              title: 'Bnx Mail',
               iconWidget: _buildBnxMailLogo(size: 20),
               iconBgColor: const Color(0xFFEFF6FF),
               deletedCount: bnxCount,
@@ -5037,7 +5038,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
 
   Widget _buildRecycleItemCard(_RecycleBinItem item) {
     final bool isExpiringSoon = item.daysRemaining <= 10;
-    final Color appColor = item.app == 'Bnx mail'
+    final Color appColor = item.app == 'Bnx Mail'
         ? const Color(0xFF2563EB)
         : item.app == 'Cliks Business'
             ? const Color(0xFF7C3AED)
@@ -5219,7 +5220,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
             children: [
               InkWell(
                 onTap: () {
-                  if (item.app == 'Bnx mail') {
+                  if (item.app == 'Bnx Mail') {
                     ref.read(emailProvider.notifier).restoreEmail(item.id);
                   }
                   setState(() {
@@ -5258,7 +5259,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 onSelected: (val) {
                   if (val == 'delete') {
-                    if (item.app == 'Bnx mail') {
+                    if (item.app == 'Bnx Mail') {
                       ref.read(emailProvider.notifier).permanentlyDeleteEmail(item.id);
                     }
                     setState(() {
@@ -5273,7 +5274,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
                       ),
                     );
                   } else if (val == 'restore') {
-                    if (item.app == 'Bnx mail') {
+                    if (item.app == 'Bnx Mail') {
                       ref.read(emailProvider.notifier).restoreEmail(item.id);
                     }
                     setState(() {
@@ -5437,7 +5438,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
       const _RecycleBinItem(
         id: 'bnx-1',
         name: 'invoice.pdf',
-        app: 'Bnx mail',
+        app: 'Bnx Mail',
         type: 'PDF',
         deletedDate: 'Deleted today',
         sizeMb: 4.20,
@@ -5446,7 +5447,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
       const _RecycleBinItem(
         id: 'bnx-2',
         name: 'customer_feedback_call.mp3',
-        app: 'Bnx mail',
+        app: 'Bnx Mail',
         type: 'Audio',
         deletedDate: 'Deleted Aug 20',
         sizeMb: 12.00,
@@ -5455,7 +5456,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
       const _RecycleBinItem(
         id: 'bnx-3',
         name: 'notes_todo.txt',
-        app: 'Bnx mail',
+        app: 'Bnx Mail',
         type: 'Text',
         deletedDate: 'Deleted Aug 10',
         sizeMb: 1.50,
@@ -5464,7 +5465,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
       const _RecycleBinItem(
         id: 'bnx-4',
         name: 'contract_draft_final.docx',
-        app: 'Bnx mail',
+        app: 'Bnx Mail',
         type: 'Document',
         deletedDate: 'Deleted Aug 05',
         sizeMb: 14.00,
@@ -5473,7 +5474,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
       const _RecycleBinItem(
         id: 'bnx-5',
         name: 'annual_audit_draft.pdf',
-        app: 'Bnx mail',
+        app: 'Bnx Mail',
         type: 'PDF',
         deletedDate: 'Deleted Jul 28',
         sizeMb: 50.30,
@@ -5482,7 +5483,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
       const _RecycleBinItem(
         id: 'bnx-6',
         name: 'archive_part_1.zip',
-        app: 'Bnx mail',
+        app: 'Bnx Mail',
         type: 'Archive',
         deletedDate: 'Deleted Jul 25',
         sizeMb: 0.00,
@@ -5491,7 +5492,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
       const _RecycleBinItem(
         id: 'bnx-7',
         name: 'marketing_q3_brief.docx',
-        app: 'Bnx mail',
+        app: 'Bnx Mail',
         type: 'Document',
         deletedDate: 'Deleted Jul 22',
         sizeMb: 1.20,
@@ -5500,7 +5501,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
       const _RecycleBinItem(
         id: 'bnx-8',
         name: 'weekly_sync_recording.mp3',
-        app: 'Bnx mail',
+        app: 'Bnx Mail',
         type: 'Audio',
         deletedDate: 'Deleted Jul 20',
         sizeMb: 8.40,
@@ -5509,7 +5510,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
       const _RecycleBinItem(
         id: 'bnx-9',
         name: 'sales_newsletter_template.html',
-        app: 'Bnx mail',
+        app: 'Bnx Mail',
         type: 'Document',
         deletedDate: 'Deleted Jul 19',
         sizeMb: 0.80,
@@ -5518,7 +5519,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
       const _RecycleBinItem(
         id: 'bnx-10',
         name: 'onboarding_deck_v3.pdf',
-        app: 'Bnx mail',
+        app: 'Bnx Mail',
         type: 'PDF',
         deletedDate: 'Deleted Jul 18',
         sizeMb: 5.10,
@@ -5527,7 +5528,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
       const _RecycleBinItem(
         id: 'bnx-11',
         name: 'customer_tickets_export.csv',
-        app: 'Bnx mail',
+        app: 'Bnx Mail',
         type: 'Spreadsheet',
         deletedDate: 'Deleted Jul 17',
         sizeMb: 1.30,
@@ -5536,7 +5537,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
       const _RecycleBinItem(
         id: 'bnx-12',
         name: 'server_log_incident.txt',
-        app: 'Bnx mail',
+        app: 'Bnx Mail',
         type: 'Text',
         deletedDate: 'Deleted Jul 16',
         sizeMb: 0.40,
@@ -5545,7 +5546,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
       const _RecycleBinItem(
         id: 'bnx-13',
         name: 'branding_assets_pack.zip',
-        app: 'Bnx mail',
+        app: 'Bnx Mail',
         type: 'Archive',
         deletedDate: 'Deleted Jul 15',
         sizeMb: 6.20,
@@ -5554,7 +5555,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
       const _RecycleBinItem(
         id: 'bnx-14',
         name: 'voicemail_lead_gen.m4a',
-        app: 'Bnx mail',
+        app: 'Bnx Mail',
         type: 'Audio',
         deletedDate: 'Deleted Jul 14',
         sizeMb: 2.50,
@@ -6061,7 +6062,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
           builder: (context, constraints) {
             final isNarrow = isMobile || constraints.maxWidth < 650;
             final cardBnx = _buildConnectedAppCard(
-              title: 'Bnx mail',
+              title: 'Bnx Mail',
               iconWidget: _buildBnxMailLogo(size: 22),
               iconBgColor: const Color(0xFFEFF6FF),
               onTap: () => setState(() => _activeTab = _StorageTab.bnxMail),
@@ -7399,7 +7400,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
           child: Column(
             children: [
               _buildAppAccessRow(
-                title: 'Bnx mail',
+                title: 'Bnx Mail',
                 subtitle: 'Emails & attachments',
                 iconWidget: _buildBnxMailLogo(size: 22),
                 iconBgColor: const Color(0xFFEFF6FF),
@@ -8638,7 +8639,7 @@ class _MacOsStoragePageState extends ConsumerState<MacOsStoragePage> {
   }
 
   Widget _buildAppTinyBadge(String app) {
-    if (app == 'Bnx mail') {
+    if (app == 'Bnx Mail') {
       return _buildBnxMailLogo(size: 15);
     } else if (app == 'Cliks Business') {
       return _buildCliksBusinessLogo(size: 14);

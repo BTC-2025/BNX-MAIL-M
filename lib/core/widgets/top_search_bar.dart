@@ -318,10 +318,17 @@ class TopSearchBar extends ConsumerWidget implements PreferredSizeWidget {
         children: [
           SizedBox(
             height: 56,
-            child: Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_back_rounded),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minWidth: MediaQuery.of(context).size.width - (isMobile ? 8 : 24),
+                ),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back_rounded),
                   onPressed: () =>
                       ref.read(appUiProvider.notifier).clearSelection(),
                   tooltip: 'Clear selection',
@@ -546,6 +553,8 @@ class TopSearchBar extends ConsumerWidget implements PreferredSizeWidget {
               ],
             ),
           ),
+        ),
+      ),
         ],
       ),
     );
@@ -568,10 +577,14 @@ class TopSearchBar extends ConsumerWidget implements PreferredSizeWidget {
           'Label as...',
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ...customLabels.map(
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 350, maxWidth: 360),
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ...customLabels.map(
               (l) => ListTile(
                 leading: Container(
                   width: 12,
@@ -616,6 +629,8 @@ class TopSearchBar extends ConsumerWidget implements PreferredSizeWidget {
             ),
           ],
         ),
+      ),
+    ),
       ),
     );
   }

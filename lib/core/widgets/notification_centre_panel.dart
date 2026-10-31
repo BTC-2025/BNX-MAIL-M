@@ -54,13 +54,16 @@ class NotificationCentrePanel extends ConsumerWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'NOTIFICATIONS',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white54 : Colors.grey.shade600,
-                  letterSpacing: 1.0,
+              Flexible(
+                child: Text(
+                  'NOTIFICATIONS',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white54 : Colors.grey.shade600,
+                    letterSpacing: 1.0,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               TextButton.icon(

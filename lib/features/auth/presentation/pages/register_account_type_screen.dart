@@ -4767,7 +4767,7 @@ class _RegisterAccountTypeScreenState
           ),
           const SizedBox(height: 8),
           Text(
-            'Choose how you want to use Bnx mail',
+            'Choose how you want to use Bnx Mail',
             style: TextStyle(
               fontSize: 13,
               color: Colors.grey.shade500,

@@ -5,7 +5,7 @@
     <uses-permission android:name="android.permission.VIBRATE"/>
 
     <application
-        android:label="Bnx mail"
+        android:label="Bnx Mail"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon"
         android:usesCleartextTraffic="true">

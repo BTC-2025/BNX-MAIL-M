@@ -188,7 +188,8 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
     final bool isDesktopOS =
         !kIsWeb &&
         (defaultTargetPlatform == TargetPlatform.macOS ||
-            defaultTargetPlatform == TargetPlatform.windows);
+            defaultTargetPlatform == TargetPlatform.windows ||
+            defaultTargetPlatform == TargetPlatform.linux);
 
     // Ensure effectiveFolder on /home is strictly a Mail folder (never Casbox, Chat, Colab, or empty)
     final String effectiveFolder;
@@ -1075,7 +1076,8 @@ class _EmailListScreenState extends ConsumerState<EmailListScreen>
     final bool isDesktop =
         !kIsWeb &&
         (defaultTargetPlatform == TargetPlatform.macOS ||
-            defaultTargetPlatform == TargetPlatform.windows);
+            defaultTargetPlatform == TargetPlatform.windows ||
+            defaultTargetPlatform == TargetPlatform.linux);
     if (isDesktop) {
       return Center(
         child: Column(

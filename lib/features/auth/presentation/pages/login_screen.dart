@@ -181,7 +181,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   Widget build(BuildContext context) {
     final bool isDesktopOS = !kIsWeb &&
         (defaultTargetPlatform == TargetPlatform.macOS ||
-            defaultTargetPlatform == TargetPlatform.windows);
+            defaultTargetPlatform == TargetPlatform.windows ||
+            defaultTargetPlatform == TargetPlatform.linux);
 
     if (isDesktopOS) {
       return _buildDesktopLogin(context);
@@ -257,7 +258,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
                   // Subtitle
                   Text(
-                    'Securely access your Bnx mail account.',
+                    'Securely access your Bnx Mail account.',
                     style: GoogleFonts.inter(
                       fontSize: 13,
                       fontWeight: FontWeight.w400,
@@ -648,7 +649,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                               ),
                               const SizedBox(height: 24),
                               const Text(
-                                'Bnx mail',
+                                'Bnx Mail',
                                 style: TextStyle(
                                   fontSize: 32,
                                   fontWeight: FontWeight.bold,

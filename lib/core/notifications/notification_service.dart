@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -41,9 +42,17 @@ class NotificationService {
     if (_isInitialized) return;
     try {
       print('[NOTIFICATION] Service initializing...');
-      await _platformChannel.invokeMethod('createNotificationChannel');
+      final bool isMobile = !kIsWeb &&
+          (defaultTargetPlatform == TargetPlatform.android ||
+              defaultTargetPlatform == TargetPlatform.iOS);
 
-      // Initialize Firebase App if needed
+      if (isMobile) {
+        await _platformChannel.invokeMethod('createNotificationChannel');
+      } else {
+        print('[NOTIFICATION] Desktop platform active (Windows/Linux) - desktop mode ready');
+      }
+
+      // Initialize Firebase App if needed (mobile/web)
       try {
         await Firebase.initializeApp();
         print('[NOTIFICATION] Firebase Core initialized successfully');
@@ -178,19 +187,26 @@ class NotificationService {
       final preview = event.formattedPreview;
       final notifId = event.deterministicNotificationId;
 
-      try {
-        await _platformChannel.invokeMethod('showNotification', {
-          'id': notifId,
-          'title': title,
-          'subject': subject,
-          'preview': preview,
-          'emailId': event.effectiveEmailId ?? '',
-          'accountEmail': event.effectiveAccountIdentifier ?? '',
-        });
-        print('[NOTIFICATION] Notification displayed (ID: $notifId)');
-      } on PlatformException catch (e) {
-        print('[NOTIFICATION] Platform channel log: $e');
-        print('[NOTIFICATION] Notification event processed: $title - $subject');
+      final bool isMobile = !kIsWeb &&
+          (defaultTargetPlatform == TargetPlatform.android ||
+              defaultTargetPlatform == TargetPlatform.iOS);
+      if (isMobile) {
+        try {
+          await _platformChannel.invokeMethod('showNotification', {
+            'id': notifId,
+            'title': title,
+            'subject': subject,
+            'preview': preview,
+            'emailId': event.effectiveEmailId ?? '',
+            'accountEmail': event.effectiveAccountIdentifier ?? '',
+          });
+          print('[NOTIFICATION] Notification displayed (ID: $notifId)');
+        } on PlatformException catch (e) {
+          print('[NOTIFICATION] Platform channel log: $e');
+          print('[NOTIFICATION] Notification event processed: $title - $subject');
+        }
+      } else {
+        print('[NOTIFICATION] Desktop notification processed: $title - $subject');
       }
     } catch (e) {
       print('[NOTIFICATION] Failed to display notification: $e');

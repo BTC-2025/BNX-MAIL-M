@@ -191,7 +191,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
               FadeTransition(
                 opacity: _fadeController,
                 child: const Text(
-                  'Bnx mail',
+                  'Bnx Mail',
                   style: TextStyle(
                     color: Color(0xFF195bac),
                     fontSize: 32,

@@ -57,7 +57,7 @@ class _HelpSupportScreenState extends ConsumerState<HelpSupportScreen> {
     {
       'question': 'Is my data secure?',
       'answer':
-          'Yes, Bnx mail uses end-to-end encryption for all email transmissions and zero-knowledge storage vault protocols to ensure your communications remain confidential.',
+          'Yes, Bnx Mail uses end-to-end encryption for all email transmissions and zero-knowledge storage vault protocols to ensure your communications remain confidential.',
     },
     {
       'question': 'Can I use the app offline?',
@@ -303,7 +303,7 @@ class _HelpSupportScreenState extends ConsumerState<HelpSupportScreen> {
                   ),
                   const SizedBox(width: 10),
                   Text(
-                    'Bnx mail',
+                    'Bnx Mail',
                     style: TextStyle(
                       fontSize: 16.5,
                       fontWeight: FontWeight.w800,

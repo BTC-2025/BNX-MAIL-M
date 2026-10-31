@@ -37,7 +37,7 @@ class NotificationHandler {
       senderName: senderName ?? 'Test Sender',
       senderEmail: senderEmail ?? 'sender@example.com',
       subject: subject ?? 'Test Email Notification',
-      preview: preview ?? 'This is a test notification from Bnx mail.',
+      preview: preview ?? 'This is a test notification from Bnx Mail.',
       emailId: emailId ?? 'test-email-001',
       timestamp: DateTime.now(),
     );

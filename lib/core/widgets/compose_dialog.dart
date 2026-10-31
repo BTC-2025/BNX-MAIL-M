@@ -613,9 +613,10 @@ class _ComposeDialogState extends ConsumerState<ComposeDialog>
         ? sw
         : (isMobile ? sw - sideMargin * 2 : desktopCardW);
     // Compact floating card on mobile (~50% height), full only when maximised
+    final double desktopCardH = (sh - 60.0) < 500.0 ? (sh - 60.0).clamp(320.0, 500.0) : 500.0;
     final double cardH = (status == ComposeStatus.maximized || isComposeRoute)
         ? sh
-        : (isMobile ? sh * 0.50 : 500.0);
+        : (isMobile ? sh * 0.50 : desktopCardH);
 
     final br = (status == ComposeStatus.maximized || isComposeRoute)
         ? BorderRadius.zero

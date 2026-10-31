@@ -159,7 +159,8 @@ class _ColabScreenState extends ConsumerState<ColabScreen> {
         isMobileDevice ||
         (screenWidth < 800 &&
             defaultTargetPlatform != TargetPlatform.macOS &&
-            defaultTargetPlatform != TargetPlatform.windows);
+            defaultTargetPlatform != TargetPlatform.windows &&
+            defaultTargetPlatform != TargetPlatform.linux);
 
     Widget content;
     final selectedGroupId = ref.watch(selectedColabIdProvider);
@@ -9962,7 +9963,8 @@ class _CasboxDetailPageState extends ConsumerState<_CasboxDetailPage> {
         isMobileDevice ||
         (screenWidth < 800 &&
             defaultTargetPlatform != TargetPlatform.macOS &&
-            defaultTargetPlatform != TargetPlatform.windows);
+            defaultTargetPlatform != TargetPlatform.windows &&
+            defaultTargetPlatform != TargetPlatform.linux);
 
     final subjectText = initialMsg.subject.trim().isNotEmpty
         ? initialMsg.subject

@@ -1426,7 +1426,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           ),
                           const SizedBox(height: 3),
                           Text(
-                            'Bnx mail Account',
+                            'Bnx Mail Account',
                             style: TextStyle(
                               fontSize: 12.5,
                               color: isDark
@@ -2044,7 +2044,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         children: [
           LayoutBuilder(
             builder: (context, headerConstraints) {
-              final isNarrow = defaultTargetPlatform != TargetPlatform.macOS || headerConstraints.maxWidth < 650;
+              final isNarrow = headerConstraints.maxWidth < 650;
               final infoWidget = Row(
                 children: [
                   Container(
@@ -2249,10 +2249,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     required Widget child,
     required bool isDark,
   }) {
-    final isMobile = defaultTargetPlatform != TargetPlatform.macOS &&
-        (MediaQuery.of(context).size.width < 600 ||
-            defaultTargetPlatform == TargetPlatform.android ||
+    final bool isMobileOS = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.android ||
             defaultTargetPlatform == TargetPlatform.iOS);
+    final isMobile = isMobileOS || MediaQuery.of(context).size.width < 600;
     return Container(
       width: double.infinity,
       margin: EdgeInsets.only(bottom: isMobile ? 12 : 16),
@@ -3094,7 +3094,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               : const Color(0xFFF1F5F9),
                         ),
                         Text(
-                          'Add your Bnx mail account to an authenticator app (such as Google Authenticator, Authy, or 1Password) using the secret key below:',
+                          'Add your Bnx Mail account to an authenticator app (such as Google Authenticator, Authy, or 1Password) using the secret key below:',
                           style: TextStyle(
                             fontSize: 13.5,
                             color: isDark
@@ -3426,7 +3426,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Bnx mail display language preference.',
+            'Bnx Mail display language preference.',
             style: TextStyle(
               fontSize: 12.5,
               color: isDark ? Colors.white38 : const Color(0xFF94A3B8),
@@ -6166,10 +6166,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             children: [
               LayoutBuilder(
                 builder: (context, headerConstraints) {
-                  final isMobile = defaultTargetPlatform != TargetPlatform.macOS &&
-                      (headerConstraints.maxWidth < 550 ||
-                          defaultTargetPlatform == TargetPlatform.android ||
-                          defaultTargetPlatform == TargetPlatform.iOS);
+                  final isMobile = headerConstraints.maxWidth < 550 ||
+                      (!kIsWeb &&
+                          (defaultTargetPlatform == TargetPlatform.android ||
+                              defaultTargetPlatform == TargetPlatform.iOS));
                   final textBlock = Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [

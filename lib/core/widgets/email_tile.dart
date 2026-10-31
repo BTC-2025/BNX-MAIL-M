@@ -104,9 +104,9 @@ class _EmailTileState extends ConsumerState<EmailTile> {
                 : 'Draft')
             : isSentItem
                 ? (email.recipient.isNotEmpty ? 'To: ${email.recipient}' : email.senderName)
-                : (email.senderName.isNotEmpty && email.senderName != 'Bnx mail'
+                : (email.senderName.isNotEmpty && email.senderName != 'Bnx Mail' && email.senderName != 'Bnx mail'
                     ? email.senderName
-                    : (email.senderEmail.isNotEmpty ? email.senderEmail : 'Bnx mail'));
+                    : (email.senderEmail.isNotEmpty ? email.senderEmail : 'Bnx Mail'));
 
     final String avatarName = isScheduledItem
         ? (email.recipient.trim().isNotEmpty ? email.recipient.trim() : 'Scheduled')
@@ -114,9 +114,9 @@ class _EmailTileState extends ConsumerState<EmailTile> {
             ? (email.recipient.trim().isNotEmpty ? email.recipient.trim() : 'Draft')
             : isSentItem
                 ? (email.recipient.isNotEmpty ? email.recipient : email.senderName)
-                : (email.senderName.isNotEmpty && email.senderName != 'Bnx mail'
+                : (email.senderName.isNotEmpty && email.senderName != 'Bnx Mail' && email.senderName != 'Bnx mail'
                     ? email.senderName
-                    : (email.senderEmail.isNotEmpty ? email.senderEmail : 'Bnx mail'));
+                    : (email.senderEmail.isNotEmpty ? email.senderEmail : 'Bnx Mail'));
 
     if (isMobile) {
       return MouseRegion(
@@ -386,7 +386,8 @@ class _EmailTileState extends ConsumerState<EmailTile> {
 
     final bool isDesktopOS = !kIsWeb &&
         (defaultTargetPlatform == TargetPlatform.macOS ||
-            defaultTargetPlatform == TargetPlatform.windows);
+            defaultTargetPlatform == TargetPlatform.windows ||
+            defaultTargetPlatform == TargetPlatform.linux);
 
     if (isDesktopOS) {
       return _buildDesktopEmailTile(

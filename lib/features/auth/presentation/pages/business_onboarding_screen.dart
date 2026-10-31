@@ -413,7 +413,7 @@ class _BusinessOnboardingScreenState
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Welcome to Bnx mail for Business! Setup complete.'),
+          content: Text('Welcome to Bnx Mail for Business! Setup complete.'),
           backgroundColor: Color(0xFF10B981),
           behavior: SnackBarBehavior.floating,
         ),
@@ -493,7 +493,7 @@ class _BusinessOnboardingScreenState
                   children: [
                     // Header Title
                     const Text(
-                      'Welcome to Bnx mail for Business',
+                      'Welcome to Bnx Mail for Business',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 23,

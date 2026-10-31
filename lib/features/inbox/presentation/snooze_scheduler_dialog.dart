@@ -131,15 +131,23 @@ class _SnoozeSchedulerDialogState extends ConsumerState<SnoozeSchedulerDialog> {
       ),
     ];
 
-    return NeumorphicContainer(
-      borderRadius: 24,
-      color: isDark ? const Color(0xFF1E293B) : Colors.white,
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    return Center(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 480,
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        child: NeumorphicContainer(
+          borderRadius: 24,
+          color: isDark ? const Color(0xFF1E293B) : Colors.white,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
           // Handle bar
           Center(
             child: Container(
@@ -201,6 +209,9 @@ class _SnoozeSchedulerDialogState extends ConsumerState<SnoozeSchedulerDialog> {
           // Custom date option
           _buildCustomOption(isDark, now),
         ],
+      ),
+    ),
+        ),
       ),
     );
   }

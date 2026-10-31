@@ -521,7 +521,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
                         ),
                         const Divider(height: 24),
                         Text(
-                          'Add your Bnx mail account to an authenticator app (such as Google Authenticator or Authy) using the secret key below:',
+                          'Add your Bnx Mail account to an authenticator app (such as Google Authenticator or Authy) using the secret key below:',
                           style: TextStyle(
                             fontSize: 13,
                             color: isDark ? Colors.white70 : const Color(0xFF5F6368),
@@ -1260,7 +1260,8 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
     final isMobile = isMobileDevice ||
         (screenWidth < 800 &&
             defaultTargetPlatform != TargetPlatform.macOS &&
-            defaultTargetPlatform != TargetPlatform.windows);
+            defaultTargetPlatform != TargetPlatform.windows &&
+            defaultTargetPlatform != TargetPlatform.linux);
 
     final bgColor = isDark ? const Color(0xFF1E2022) : Colors.white;
 
@@ -1996,7 +1997,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
       icon: Icons.inventory_2_outlined,
       title: 'Account storage',
       subtitle:
-          'Your account storage is shared across BNX services, like Bnx mail and Drive',
+          'Your account storage is shared across BNX services, like Bnx Mail and Drive',
       middleWidget: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2604,7 +2605,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'To add a new email address, you can create a mailbox alias above or register it through Bnx mail.',
+                        'To add a new email address, you can create a mailbox alias above or register it through Bnx Mail.',
                         style: TextStyle(
                           fontSize: 13.5,
                           color: isDark
@@ -4667,7 +4668,7 @@ class _ManageAccountScreenState extends ConsumerState<ManageAccountScreen> {
             _SettingRow(
               isDark: isDark,
               icon: Icons.mail_outline_rounded,
-              label: 'Bnx mail',
+              label: 'Bnx Mail',
               value: mailValue,
             ),
             _SettingRow(

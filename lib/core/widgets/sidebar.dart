@@ -180,7 +180,8 @@ class _SidebarState extends ConsumerState<Sidebar> {
     final bool isDesktopOS =
         !kIsWeb &&
         (defaultTargetPlatform == TargetPlatform.macOS ||
-            defaultTargetPlatform == TargetPlatform.windows);
+            defaultTargetPlatform == TargetPlatform.windows ||
+            defaultTargetPlatform == TargetPlatform.linux);
     // On macOS and Windows desktop, the sidebar is always fully elaborated
     final bool isCollapsed = isDesktopOS
         ? false
@@ -467,7 +468,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
                           ),
                           const SizedBox(width: 12),
                           const Text(
-                            'Bnx mail',
+                            'Bnx Mail',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 23,
@@ -675,7 +676,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
                               const SizedBox(width: 12),
                               const Expanded(
                                 child: Text(
-                                  'Bnx mail',
+                                  'Bnx Mail',
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 23,
@@ -826,7 +827,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
                 const SizedBox(height: 32),
                 const Center(
                   child: Text(
-                    'Bnx mail v1.1.0',
+                    'Bnx Mail v1.1.0',
                     style: TextStyle(color: Colors.grey, fontSize: 11),
                   ),
                 ),
@@ -2514,7 +2515,7 @@ class _SidebarNewsWidgetState extends State<SidebarNewsWidget> {
   int _expandedIndex = -1;
   final List<Map<String, String>> _news = [
     {
-      'title': 'Bnx mail v1.1.0 Released!',
+      'title': 'Bnx Mail v1.1.0 Released!',
       'summary':
           'The next-generation neumorphic email client now boasts inline widgets, customizable dynamic bit rails, and improved state synchronizations.',
       'time': '2h ago',

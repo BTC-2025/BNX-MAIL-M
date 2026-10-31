@@ -165,7 +165,7 @@ class EmailModel {
           : senderEmail;
     }
     if (senderName.isEmpty) {
-      senderName = 'Bnx mail';
+      senderName = 'Bnx Mail';
     }
 
     // ── Recipient ────────────────────────────────────────────────────────

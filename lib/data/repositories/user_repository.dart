@@ -690,7 +690,7 @@ class UserRepository {
           final ua = map['userAgent']?.toString() ?? '';
           String deviceTitle = 'Web Browser Session';
           if (ua.contains('Dart')) {
-            deviceTitle = 'Bnx mail Desktop App';
+            deviceTitle = 'Bnx Mail Desktop App';
           } else if (ua.contains('Macintosh') || ua.contains('Mac OS')) {
             deviceTitle = 'macOS Browser';
           } else if (ua.contains('Windows')) {

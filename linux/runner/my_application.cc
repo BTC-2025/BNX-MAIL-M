@@ -45,14 +45,22 @@ static void my_application_activate(GApplication* application) {
   if (use_header_bar) {
     GtkHeaderBar* header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
     gtk_widget_show(GTK_WIDGET(header_bar));
-    gtk_header_bar_set_title(header_bar, "Bnx mail");
+    gtk_header_bar_set_title(header_bar, "Bnx Mail");
     gtk_header_bar_set_show_close_button(header_bar, TRUE);
     gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
   } else {
-    gtk_window_set_title(window, "Bnx mail");
+    gtk_window_set_title(window, "Bnx Mail");
   }
 
   gtk_window_set_default_size(window, 1280, 720);
+
+  g_autoptr(GError) icon_err = nullptr;
+  if (!gtk_window_set_icon_from_file(window, "data/flutter_assets/assets/bnx_mail_logo.png", &icon_err)) {
+    if (icon_err != nullptr) {
+      g_clear_error(&icon_err);
+    }
+    gtk_window_set_icon_from_file(window, "data/flutter_bnx_mail.png", nullptr);
+  }
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(
