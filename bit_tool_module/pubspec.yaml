@@ -1,0 +1,25 @@
+name: bit_tool_module
+description: Complete self-contained Right Bit Tool suite for desktop and web applications, including UI, API client, models, and reactive state management.
+version: 1.0.0
+homepage: https://bit-tool.com
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: ">=3.10.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_riverpod: ^2.5.1
+  http: ^1.2.1
+  lucide_icons_flutter: ^1.1.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  assets:
+    - assets/images/
