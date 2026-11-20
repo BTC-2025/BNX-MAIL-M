@@ -134,6 +134,13 @@ class DashboardShell extends ConsumerWidget {
           ref.read(appUiProvider.notifier).selectFolder('Manage Labels');
         }
       });
+    } else if (currentRoute == '/help' &&
+        uiState.activeFolder != 'Help') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) {
+          ref.read(appUiProvider.notifier).selectFolder('Help');
+        }
+      });
     }
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -402,7 +409,6 @@ class DashboardShell extends ConsumerWidget {
                                     currentRoute != '/manage-account' &&
                                     currentRoute != '/colab' &&
                                     currentRoute != '/settings' &&
-                                    currentRoute != '/help' &&
                                     currentRoute != '/compose'))
                               const TopSearchBar(),
 

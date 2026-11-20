@@ -587,8 +587,9 @@ class _SidebarState extends ConsumerState<Sidebar> {
                       ),
                       _buildPillTile(
                         icon: Icons.help_outline_rounded,
-                        title: 'Help & Support',
-                        isSelected: uiState.activeFolder == 'Help',
+                        iconColor: const Color(0xFF195BAC),
+                        title: 'Support & Help',
+                        isSelected: uiState.activeFolder == 'Help' || currentRoute == '/help',
                         collapsed: isCollapsed,
                         onTap: () => navigateToFolder('Help', '/help'),
                       ),
@@ -826,8 +827,9 @@ class _SidebarState extends ConsumerState<Sidebar> {
               ),
               _buildPillTile(
                 icon: Icons.help_outline_rounded,
-                title: 'Help & Support',
-                isSelected: uiState.activeFolder == 'Help',
+                iconColor: const Color(0xFF195BAC),
+                title: 'Support & Help',
+                isSelected: uiState.activeFolder == 'Help' || currentRoute == '/help',
                 collapsed: isCollapsed,
                 onTap: () => navigateToFolder('Help', '/help'),
               ),
