@@ -18,6 +18,7 @@ import '../widgets/email_body.dart';
 import '../../features/dashboard/presentation/connect_settings_screen.dart';
 import '../../features/profile/presentation/manage_account_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
+import '../../features/labels/presentation/manage_labels_screen.dart';
 import '../../standalone_macos_storage/standalone_macos_storage.dart';
 
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>(
@@ -260,6 +261,12 @@ final goRouter = GoRouter(
           path: '/manage-account',
           builder: (context, state) {
             return const ManageAccountScreen();
+          },
+        ),
+        GoRoute(
+          path: '/manage-labels',
+          builder: (context, state) {
+            return const ManageLabelsScreen();
           },
         ),
       ],

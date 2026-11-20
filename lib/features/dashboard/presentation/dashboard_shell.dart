@@ -83,6 +83,7 @@ class DashboardShell extends ConsumerWidget {
         (currentRoute == '/help' ||
                 currentRoute == '/settings' ||
                 currentRoute == '/manage-account' ||
+                currentRoute == '/manage-labels' ||
                 currentRoute == '/profile')
             ? false
             : (isDesktopOS || defaultTargetPlatform == TargetPlatform.macOS
@@ -124,6 +125,13 @@ class DashboardShell extends ConsumerWidget {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (context.mounted) {
           ref.read(appUiProvider.notifier).selectFolder('Casbox');
+        }
+      });
+    } else if (currentRoute == '/manage-labels' &&
+        uiState.activeFolder != 'Manage Labels') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) {
+          ref.read(appUiProvider.notifier).selectFolder('Manage Labels');
         }
       });
     }

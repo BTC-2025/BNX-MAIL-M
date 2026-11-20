@@ -21,17 +21,20 @@ class CreateLabelDialog extends ConsumerStatefulWidget {
 
 class _CreateLabelDialogState extends ConsumerState<CreateLabelDialog> {
   final TextEditingController _nameController = TextEditingController();
-  String _parentLabel = 'Top Level (No Parent)';
+  String _parentLabel = 'Top level (no parent)';
   late Color _selectedColor;
 
   final List<Color> _colorOptions = const [
     Color(0xFF2563EB), // Blue
     Color(0xFFEF4444), // Red
-    Color(0xFF10B981), // Green
-    Color(0xFFF59E0B), // Amber/Orange
+    Color(0xFF10B981), // Emerald Green
+    Color(0xFFF59E0B), // Amber/Yellow
     Color(0xFF8B5CF6), // Purple
     Color(0xFFEC4899), // Pink
+    Color(0xFF06B6D4), // Cyan
+    Color(0xFFF97316), // Orange
     Color(0xFF64748B), // Slate/Grey
+    Color(0xFF3B82F6), // Royal Blue
   ];
 
   @override
@@ -74,17 +77,23 @@ class _CreateLabelDialogState extends ConsumerState<CreateLabelDialog> {
     final isEditing = widget.labelToEdit != null;
 
     final List<String> parentOptions = [
-      'Top Level (No Parent)',
-      ...customLabels.map((l) => l.name),
+      'Top level (no parent)',
+      ...customLabels
+          .where((l) => widget.labelToEdit == null || l.id != widget.labelToEdit!.id)
+          .map((l) => l.name),
     ];
+
+    if (!parentOptions.contains(_parentLabel)) {
+      _parentLabel = 'Top level (no parent)';
+    }
 
     return Dialog(
       backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 440),
         child: Padding(
-          padding: const EdgeInsets.all(24.0),
+          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 22.0),
           child: SingleChildScrollView(
             physics: const BouncingScrollPhysics(),
             child: Column(
@@ -96,18 +105,18 @@ class _CreateLabelDialogState extends ConsumerState<CreateLabelDialog> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      isEditing ? 'Edit Label' : 'New Label',
+                      isEditing ? 'Edit label' : 'New label',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: isDark ? Colors.white : Colors.black87,
+                        color: isDark ? Colors.white : const Color(0xFF1E293B),
                       ),
                     ),
                     IconButton(
                       icon: Icon(
                         Icons.close_rounded,
                         size: 20,
-                        color: isDark ? Colors.white60 : Colors.black54,
+                        color: isDark ? Colors.white60 : Colors.black45,
                       ),
                       onPressed: () => Navigator.of(context).pop(),
                       padding: EdgeInsets.zero,
@@ -119,11 +128,11 @@ class _CreateLabelDialogState extends ConsumerState<CreateLabelDialog> {
 
                 // Field 1: Label Name
                 Text(
-                  'Label Name',
+                  'Please enter a new label name:',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: isDark ? Colors.white70 : Colors.black87,
+                    color: isDark ? Colors.white70 : const Color(0xFF334155),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -131,13 +140,13 @@ class _CreateLabelDialogState extends ConsumerState<CreateLabelDialog> {
                   controller: _nameController,
                   autofocus: true,
                   style: TextStyle(
-                    color: isDark ? Colors.white : Colors.black87,
+                    color: isDark ? Colors.white : const Color(0xFF1E293B),
                     fontSize: 14,
                   ),
                   decoration: InputDecoration(
-                    hintText: 'e.g. Work, Personal, Receipts',
+                    hintText: 'e.g. Finance, Projects, Work',
                     hintStyle: TextStyle(
-                      color: isDark ? Colors.white38 : Colors.grey.shade400,
+                      color: isDark ? Colors.white38 : const Color(0xFF94A3B8),
                       fontSize: 14,
                     ),
                     filled: true,
@@ -151,7 +160,7 @@ class _CreateLabelDialogState extends ConsumerState<CreateLabelDialog> {
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                       borderSide: BorderSide(
-                        color: isDark ? Colors.white12 : Colors.grey.shade300,
+                        color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
                       ),
                     ),
                     focusedBorder: OutlineInputBorder(
@@ -163,71 +172,15 @@ class _CreateLabelDialogState extends ConsumerState<CreateLabelDialog> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 18),
 
-                // Field 2: Nest label under
+                // Field 2: Label color
                 Text(
-                  'Nest label under',
+                  'Label color:',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: isDark ? Colors.white70 : Colors.black87,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<String>(
-                  initialValue: _parentLabel,
-                  dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-                  style: TextStyle(
-                    color: isDark ? Colors.white : Colors.black87,
-                    fontSize: 14,
-                  ),
-                  decoration: InputDecoration(
-                    filled: true,
-                    fillColor: isDark
-                        ? Colors.white.withValues(alpha: 0.05)
-                        : const Color(0xFFFAFAFA),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 12,
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(
-                        color: isDark ? Colors.white12 : Colors.grey.shade300,
-                      ),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(
-                        color: Color(0xFF2563EB),
-                        width: 1.5,
-                      ),
-                    ),
-                  ),
-                  items: parentOptions
-                      .map(
-                        (opt) => DropdownMenuItem(
-                          value: opt,
-                          child: Text(opt),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (val) {
-                    if (val != null) {
-                      setState(() => _parentLabel = val);
-                    }
-                  },
-                ),
-                const SizedBox(height: 16),
-
-                // Field 3: Color Palette
-                Text(
-                  'Color',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: isDark ? Colors.white70 : Colors.black87,
+                    color: isDark ? Colors.white70 : const Color(0xFF334155),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -238,7 +191,7 @@ class _CreateLabelDialogState extends ConsumerState<CreateLabelDialog> {
                     children: _colorOptions.map((c) {
                       final isSelected = c.toARGB32() == _selectedColor.toARGB32();
                       return Padding(
-                        padding: const EdgeInsets.only(right: 12.0),
+                        padding: const EdgeInsets.only(right: 8.0),
                         child: GestureDetector(
                           onTap: () => setState(() => _selectedColor = c),
                           child: Container(
@@ -270,9 +223,65 @@ class _CreateLabelDialogState extends ConsumerState<CreateLabelDialog> {
                     }).toList(),
                   ),
                 ),
-                const SizedBox(height: 28),
+                const SizedBox(height: 18),
 
-                // Actions: Cancel & Save / Create Label
+                // Field 3: Nest label under
+                Text(
+                  'Nest label under: (optional)',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white70 : const Color(0xFF334155),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  initialValue: _parentLabel,
+                  dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+                  style: TextStyle(
+                    color: isDark ? Colors.white : const Color(0xFF1E293B),
+                    fontSize: 14,
+                  ),
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: isDark
+                        ? Colors.white.withValues(alpha: 0.05)
+                        : const Color(0xFFFAFAFA),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(
+                        color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(
+                        color: Color(0xFF2563EB),
+                        width: 1.5,
+                      ),
+                    ),
+                  ),
+                  items: parentOptions
+                      .map(
+                        (opt) => DropdownMenuItem(
+                          value: opt,
+                          child: Text(opt),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() => _parentLabel = val);
+                    }
+                  },
+                ),
+                const SizedBox(height: 26),
+
+                // Actions: Cancel & Create / Save
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
@@ -281,10 +290,10 @@ class _CreateLabelDialogState extends ConsumerState<CreateLabelDialog> {
                       style: TextButton.styleFrom(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 16,
-                          vertical: 12,
+                          vertical: 11,
                         ),
                         foregroundColor:
-                            isDark ? Colors.white70 : Colors.black87,
+                            isDark ? Colors.white70 : const Color(0xFF64748B),
                       ),
                       child: const Text(
                         'Cancel',
@@ -299,15 +308,15 @@ class _CreateLabelDialogState extends ConsumerState<CreateLabelDialog> {
                         foregroundColor: Colors.white,
                         elevation: 0,
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 12,
+                          horizontal: 22,
+                          vertical: 11,
                         ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
                       child: Text(
-                        isEditing ? 'Save Label' : 'Create Label',
+                        isEditing ? 'Save' : 'Create',
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 14,

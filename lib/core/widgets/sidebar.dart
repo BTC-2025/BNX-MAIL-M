@@ -187,6 +187,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
         ? false
         : (!isMobile && uiState.isSidebarCollapsed);
 
+    final currentRoute = GoRouterState.of(context).uri.toString();
     final labelsVis = uiState.sidebarLabelVisibility;
 
     final List<Widget> importantFolderTiles = [
@@ -366,13 +367,6 @@ class _SidebarState extends ConsumerState<Sidebar> {
           onTap: () => navigateToFolder('Trash', '/'),
         ),
       _buildPillTile(
-        icon: Icons.bar_chart_outlined,
-        title: 'Analytics',
-        isSelected: uiState.activeFolder == 'Analytics',
-        collapsed: isCollapsed,
-        onTap: () => navigateToFolder('Analytics', '/analytics'),
-      ),
-      _buildPillTile(
         icon: Icons.assignment_outlined,
         title: 'Templates',
         isSelected: uiState.activeFolder == 'Templates',
@@ -385,6 +379,22 @@ class _SidebarState extends ConsumerState<Sidebar> {
         isSelected: uiState.activeFolder == 'Subscriptions',
         collapsed: isCollapsed,
         onTap: () => navigateToFolder('Subscriptions', '/home'),
+      ),
+      _buildPillTile(
+        icon: Icons.label_outline_rounded,
+        title: 'Manage Labels',
+        isSelected: uiState.activeFolder == 'Manage Labels' ||
+            currentRoute == '/manage-labels',
+        hasLeftBar: true,
+        collapsed: isCollapsed,
+        onTap: () => navigateToFolder('Manage Labels', '/manage-labels'),
+      ),
+      _buildPillTile(
+        icon: Icons.bar_chart_outlined,
+        title: 'Analytics',
+        isSelected: uiState.activeFolder == 'Analytics',
+        collapsed: isCollapsed,
+        onTap: () => navigateToFolder('Analytics', '/analytics'),
       ),
       _buildPillTile(
         icon: Icons.cloud_upload_outlined,
@@ -405,8 +415,6 @@ class _SidebarState extends ConsumerState<Sidebar> {
         allInboxesCount: allInboxesCount,
       );
     }
-
-    final currentRoute = GoRouterState.of(context).uri.toString();
 
     // If Chat/Colab section is active, show the specialized sidebar as per the screenshot
     if (currentRoute == '/colab') {
@@ -1083,14 +1091,6 @@ class _SidebarState extends ConsumerState<Sidebar> {
                             collapsed: isCollapsed,
                             onTap: () => navigateToFolder('Templates', '/home'),
                           ),
-                          _buildPillTile(
-                            icon: Icons.bar_chart_outlined,
-                            title: 'Analytics',
-                            isSelected: uiState.activeFolder == 'Analytics',
-                            collapsed: isCollapsed,
-                            onTap: () =>
-                                navigateToFolder('Analytics', '/analytics'),
-                          ),
                           if ((labelsVis['Subscriptions'] ?? true) && (labelsVis['Notifications'] ?? true))
                             _buildPillTile(
                               icon: Icons.notifications_none_rounded,
@@ -1100,6 +1100,24 @@ class _SidebarState extends ConsumerState<Sidebar> {
                               onTap: () =>
                                   navigateToFolder('Subscriptions', '/home'),
                             ),
+                          _buildPillTile(
+                            icon: Icons.label_outline_rounded,
+                            title: 'Manage Labels',
+                            isSelected: uiState.activeFolder == 'Manage Labels' ||
+                                currentRoute == '/manage-labels',
+                            hasLeftBar: true,
+                            collapsed: isCollapsed,
+                            onTap: () =>
+                                navigateToFolder('Manage Labels', '/manage-labels'),
+                          ),
+                          _buildPillTile(
+                            icon: Icons.bar_chart_outlined,
+                            title: 'Analytics',
+                            isSelected: uiState.activeFolder == 'Analytics',
+                            collapsed: isCollapsed,
+                            onTap: () =>
+                                navigateToFolder('Analytics', '/analytics'),
+                          ),
                           _buildPillTile(
                             icon: Icons.cloud_upload_outlined,
                             title: 'Mail Backup',
