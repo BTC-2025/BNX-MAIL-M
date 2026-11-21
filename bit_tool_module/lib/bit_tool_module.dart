@@ -1,4 +1,4 @@
-library bit_tool_module;
+library;
 
 // API Facade, Client, and Configuration
 export 'src/api/facade/bit_tool_api_facade.dart';

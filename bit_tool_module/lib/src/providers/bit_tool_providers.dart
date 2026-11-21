@@ -122,7 +122,8 @@ class BitToolConnectionNotifier extends StateNotifier<BitToolConnectionState> {
     try {
       final activeAcc = ref.read(bitToolActiveAccountProvider);
       final email = activeAcc.email;
-      final name = activeAcc.name.isNotEmpty ? activeAcc.name : email.split('@').first;
+      final name =
+          activeAcc.name.isNotEmpty ? activeAcc.name : email.split('@').first;
       final tokenCb = ref.read(bitToolTokenProvider);
       final token = tokenCb != null ? await tokenCb() : null;
       final hasToken = token != null && token.isNotEmpty;
@@ -148,8 +149,8 @@ class BitToolConnectionNotifier extends StateNotifier<BitToolConnectionState> {
           displayName: name.isNotEmpty
               ? name
               : ((profile.fullName != null && profile.fullName!.isNotEmpty)
-                    ? profile.fullName!
-                    : (profile.email.isNotEmpty ? profile.email : email)),
+                  ? profile.fullName!
+                  : (profile.email.isNotEmpty ? profile.email : email)),
           accountType: profile.accountType,
           isLoading: false,
         );
@@ -170,7 +171,8 @@ class BitToolConnectionNotifier extends StateNotifier<BitToolConnectionState> {
 }
 
 final bitToolConnectionProvider =
-    StateNotifierProvider<BitToolConnectionNotifier, BitToolConnectionState>((ref) {
+    StateNotifierProvider<BitToolConnectionNotifier, BitToolConnectionState>(
+        (ref) {
   ref.watch(bitToolActiveAccountProvider);
   return BitToolConnectionNotifier(ref);
 });
@@ -227,7 +229,8 @@ class BitToolContactsNotifier extends StateNotifier<ContactsState> {
 
   Future<void> loadContacts() async {
     if (!mounted) return;
-    state = state.copyWith(contacts: const [], isLoading: true, errorMessage: null);
+    state =
+        state.copyWith(contacts: const [], isLoading: true, errorMessage: null);
     try {
       final module = ref.read(bitToolApiModuleProvider);
       final list = await module.contacts.getAllContacts();
@@ -236,7 +239,8 @@ class BitToolContactsNotifier extends StateNotifier<ContactsState> {
     } catch (e) {
       if (kDebugMode) debugPrint('[BitToolContactsNotifier] Error: $e');
       if (!mounted) return;
-      state = state.copyWith(contacts: const [], isLoading: false, errorMessage: e.toString());
+      state = state.copyWith(
+          contacts: const [], isLoading: false, errorMessage: e.toString());
     }
   }
 
@@ -297,8 +301,8 @@ class BitToolContactsNotifier extends StateNotifier<ContactsState> {
 final bitToolContactsProvider =
     StateNotifierProvider<BitToolContactsNotifier, ContactsState>((ref) {
   ref.watch(bitToolActiveAccountProvider);
-      return BitToolContactsNotifier(ref);
-    });
+  return BitToolContactsNotifier(ref);
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. Notes Provider
@@ -337,7 +341,8 @@ class BitToolNotesNotifier extends StateNotifier<NotesState> {
 
   Future<void> loadNotes() async {
     if (!mounted) return;
-    state = state.copyWith(notes: const [], isLoading: true, errorMessage: null);
+    state =
+        state.copyWith(notes: const [], isLoading: true, errorMessage: null);
     try {
       final module = ref.read(bitToolApiModuleProvider);
       final list = await module.notes.getNotes(allApps: true);
@@ -346,7 +351,8 @@ class BitToolNotesNotifier extends StateNotifier<NotesState> {
     } catch (e) {
       if (kDebugMode) debugPrint('[BitToolNotesNotifier] Error: $e');
       if (!mounted) return;
-      state = state.copyWith(notes: const [], isLoading: false, errorMessage: e.toString());
+      state = state.copyWith(
+          notes: const [], isLoading: false, errorMessage: e.toString());
     }
   }
 
@@ -437,8 +443,8 @@ class BitToolNotesNotifier extends StateNotifier<NotesState> {
 final bitToolNotesProvider =
     StateNotifierProvider<BitToolNotesNotifier, NotesState>((ref) {
   ref.watch(bitToolActiveAccountProvider);
-      return BitToolNotesNotifier(ref);
-    });
+  return BitToolNotesNotifier(ref);
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 4. Calendar Provider
@@ -480,18 +486,23 @@ class BitToolCalendarNotifier extends StateNotifier<CalendarState> {
   final Ref ref;
 
   BitToolCalendarNotifier(this.ref)
-    : super(
-        CalendarState(
-          selectedDate: DateTime.now(),
-          events: const [],
-        ),
-      ) {
+      : super(
+          CalendarState(
+            selectedDate: DateTime.now(),
+            events: const [],
+          ),
+        ) {
     loadForMonth(DateTime.now());
   }
 
   Future<void> loadForMonth(DateTime date) async {
     if (!mounted) return;
-    state = state.copyWith(selectedDate: date, events: const [], reminders: const [], isLoading: true, errorMessage: null);
+    state = state.copyWith(
+        selectedDate: date,
+        events: const [],
+        reminders: const [],
+        isLoading: true,
+        errorMessage: null);
     try {
       final module = ref.read(bitToolApiModuleProvider);
       final events = await module.calendar.getMonthEvents(
@@ -616,8 +627,8 @@ class BitToolCalendarNotifier extends StateNotifier<CalendarState> {
 final bitToolCalendarProvider =
     StateNotifierProvider<BitToolCalendarNotifier, CalendarState>((ref) {
   ref.watch(bitToolActiveAccountProvider);
-      return BitToolCalendarNotifier(ref);
-    });
+  return BitToolCalendarNotifier(ref);
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 5. Calculator Provider
@@ -651,13 +662,14 @@ class BitToolCalculatorNotifier extends StateNotifier<CalculatorSessionsState> {
   final Ref ref;
 
   BitToolCalculatorNotifier(this.ref)
-    : super(const CalculatorSessionsState(sessions: [])) {
+      : super(const CalculatorSessionsState(sessions: [])) {
     loadSessions();
   }
 
   Future<void> loadSessions() async {
     if (!mounted) return;
-    state = state.copyWith(sessions: const [], isLoading: true, errorMessage: null);
+    state =
+        state.copyWith(sessions: const [], isLoading: true, errorMessage: null);
     try {
       final module = ref.read(bitToolApiModuleProvider);
       final list = await module.calculator.getHistory();
@@ -666,7 +678,8 @@ class BitToolCalculatorNotifier extends StateNotifier<CalculatorSessionsState> {
     } catch (e) {
       if (kDebugMode) debugPrint('[BitToolCalculatorNotifier] Error: $e');
       if (!mounted) return;
-      state = state.copyWith(sessions: const [], isLoading: false, errorMessage: e.toString());
+      state = state.copyWith(
+          sessions: const [], isLoading: false, errorMessage: e.toString());
     }
   }
 
@@ -704,8 +717,9 @@ class BitToolCalculatorNotifier extends StateNotifier<CalculatorSessionsState> {
         createdAt: DateTime.now(),
       );
     } catch (e) {
-      if (kDebugMode)
+      if (kDebugMode) {
         debugPrint('[BitToolCalculatorNotifier] saveSession API error: $e');
+      }
       created = CalculatorSession(
         id: 'local_calc_${DateTime.now().millisecondsSinceEpoch}',
         title: title,
@@ -747,7 +761,8 @@ class BitToolCalculatorNotifier extends StateNotifier<CalculatorSessionsState> {
 }
 
 final bitToolCalculatorProvider =
-    StateNotifierProvider<BitToolCalculatorNotifier, CalculatorSessionsState>((ref) {
+    StateNotifierProvider<BitToolCalculatorNotifier, CalculatorSessionsState>(
+        (ref) {
   ref.watch(bitToolActiveAccountProvider);
   return BitToolCalculatorNotifier(ref);
 });
@@ -813,7 +828,7 @@ class BitToolNotificationsNotifier extends StateNotifier<NotificationsState> {
   ];
 
   BitToolNotificationsNotifier(this.ref)
-    : super(NotificationsState(notifications: _fallbackNotifications)) {
+      : super(NotificationsState(notifications: _fallbackNotifications)) {
     loadNotifications();
   }
 
@@ -884,10 +899,10 @@ class BitToolNotificationsNotifier extends StateNotifier<NotificationsState> {
 
 final bitToolNotificationsProvider =
     StateNotifierProvider<BitToolNotificationsNotifier, NotificationsState>((
-      ref,
-    ) {
-      return BitToolNotificationsNotifier(ref);
-    });
+  ref,
+) {
+  return BitToolNotificationsNotifier(ref);
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 7. Weather & Currency Providers
@@ -925,130 +940,130 @@ final bitToolWeatherProvider = FutureProvider.autoDispose<WeatherDataModel?>((
 
 final bitToolCityWeatherProvider = FutureProvider.autoDispose
     .family<WeatherDataModel?, String>((ref, cityName) async {
-      final module = ref.read(bitToolApiModuleProvider);
+  final module = ref.read(bitToolApiModuleProvider);
 
-      double lat = 13.1439;
-      double lng = 79.9079;
-      String country = 'Tamil Nadu';
-      double fallbackTemp = 31.0;
-      double fallbackHumidity = 69.0;
-      double fallbackWind = 7.2;
+  double lat = 13.1439;
+  double lng = 79.9079;
+  String country = 'Tamil Nadu';
+  double fallbackTemp = 31.0;
+  double fallbackHumidity = 69.0;
+  double fallbackWind = 7.2;
 
-      switch (cityName.toLowerCase()) {
-        case 'chennai':
-          lat = 13.0827;
-          lng = 80.2707;
-          country = 'Tamil Nadu';
-          fallbackTemp = 32.5;
-          fallbackHumidity = 72.0;
-          fallbackWind = 11.0;
-          break;
-        case 'bengaluru':
-          lat = 12.9716;
-          lng = 77.5946;
-          country = 'Karnataka';
-          fallbackTemp = 27.0;
-          fallbackHumidity = 58.0;
-          fallbackWind = 6.4;
-          break;
-        case 'mumbai':
-          lat = 19.0760;
-          lng = 72.8777;
-          country = 'Maharashtra';
-          fallbackTemp = 30.0;
-          fallbackHumidity = 65.0;
-          fallbackWind = 9.8;
-          break;
-        case 'delhi':
-        case 'new delhi':
-          lat = 28.6139;
-          lng = 77.2090;
-          country = 'Delhi';
-          fallbackTemp = 28.5;
-          fallbackHumidity = 48.0;
-          fallbackWind = 8.5;
-          break;
-        case 'london':
-          lat = 51.5074;
-          lng = -0.1278;
-          country = 'United Kingdom';
-          fallbackTemp = 16.0;
-          fallbackHumidity = 75.0;
-          fallbackWind = 14.2;
-          break;
-        case 'new york':
-          lat = 40.7128;
-          lng = -74.0060;
-          country = 'United States';
-          fallbackTemp = 19.0;
-          fallbackHumidity = 60.0;
-          fallbackWind = 12.0;
-          break;
-        default: // Tiruvallur
-          lat = 13.1439;
-          lng = 79.9079;
-          country = 'Tamil Nadu';
-          fallbackTemp = 31.0;
-          fallbackHumidity = 69.0;
-          fallbackWind = 7.2;
-          break;
-      }
+  switch (cityName.toLowerCase()) {
+    case 'chennai':
+      lat = 13.0827;
+      lng = 80.2707;
+      country = 'Tamil Nadu';
+      fallbackTemp = 32.5;
+      fallbackHumidity = 72.0;
+      fallbackWind = 11.0;
+      break;
+    case 'bengaluru':
+      lat = 12.9716;
+      lng = 77.5946;
+      country = 'Karnataka';
+      fallbackTemp = 27.0;
+      fallbackHumidity = 58.0;
+      fallbackWind = 6.4;
+      break;
+    case 'mumbai':
+      lat = 19.0760;
+      lng = 72.8777;
+      country = 'Maharashtra';
+      fallbackTemp = 30.0;
+      fallbackHumidity = 65.0;
+      fallbackWind = 9.8;
+      break;
+    case 'delhi':
+    case 'new delhi':
+      lat = 28.6139;
+      lng = 77.2090;
+      country = 'Delhi';
+      fallbackTemp = 28.5;
+      fallbackHumidity = 48.0;
+      fallbackWind = 8.5;
+      break;
+    case 'london':
+      lat = 51.5074;
+      lng = -0.1278;
+      country = 'United Kingdom';
+      fallbackTemp = 16.0;
+      fallbackHumidity = 75.0;
+      fallbackWind = 14.2;
+      break;
+    case 'new york':
+      lat = 40.7128;
+      lng = -74.0060;
+      country = 'United States';
+      fallbackTemp = 19.0;
+      fallbackHumidity = 60.0;
+      fallbackWind = 12.0;
+      break;
+    default: // Tiruvallur
+      lat = 13.1439;
+      lng = 79.9079;
+      country = 'Tamil Nadu';
+      fallbackTemp = 31.0;
+      fallbackHumidity = 69.0;
+      fallbackWind = 7.2;
+      break;
+  }
 
-      try {
-        final live = await module.weather.fetchForecast(
-          latitude: lat,
-          longitude: lng,
-          city: cityName,
-          country: country,
-        );
-        if (live != null) return live;
-      } catch (_) {}
+  try {
+    final live = await module.weather.fetchForecast(
+      latitude: lat,
+      longitude: lng,
+      city: cityName,
+      country: country,
+    );
+    if (live != null) return live;
+  } catch (_) {}
 
-      // Fallback with realistic hourly and daily items
-      final now = DateTime.now();
-      final dailyList = List.generate(7, (i) {
-        final dayDate = now.add(Duration(days: i));
-        return WeatherDailyItem(
-          date: dayDate,
-          weatherCode: i == 4 ? 61 : (i == 2 ? 2 : 0),
-          maxTemp: fallbackTemp + 2 - (i % 3),
-          minTemp: fallbackTemp - 6 - (i % 2),
-        );
-      });
+  // Fallback with realistic hourly and daily items
+  final now = DateTime.now();
+  final dailyList = List.generate(7, (i) {
+    final dayDate = now.add(Duration(days: i));
+    return WeatherDailyItem(
+      date: dayDate,
+      weatherCode: i == 4 ? 61 : (i == 2 ? 2 : 0),
+      maxTemp: fallbackTemp + 2 - (i % 3),
+      minTemp: fallbackTemp - 6 - (i % 2),
+    );
+  });
 
-      final hourlyList = List.generate(12, (i) {
-        final hDate = DateTime(now.year, now.month, now.day, i * 2);
-        return WeatherHourlyItem(
-          time: hDate,
-          temperature: fallbackTemp - 3 + ((i * 3) % 7),
-        );
-      });
+  final hourlyList = List.generate(12, (i) {
+    final hDate = DateTime(now.year, now.month, now.day, i * 2);
+    return WeatherHourlyItem(
+      time: hDate,
+      temperature: fallbackTemp - 3 + ((i * 3) % 7),
+    );
+  });
 
-      return WeatherDataModel(
-        latitude: lat,
-        longitude: lng,
-        city: cityName,
-        country: country,
-        current: WeatherCurrentModel(
-          temperature: fallbackTemp,
-          isDay: 1,
-          weatherCode: 0,
-          humidity: fallbackHumidity,
-          windSpeed: fallbackWind,
-        ),
-        hourly: hourlyList,
-        daily: dailyList,
-      );
-    });
+  return WeatherDataModel(
+    latitude: lat,
+    longitude: lng,
+    city: cityName,
+    country: country,
+    current: WeatherCurrentModel(
+      temperature: fallbackTemp,
+      isDay: 1,
+      weatherCode: 0,
+      humidity: fallbackHumidity,
+      windSpeed: fallbackWind,
+    ),
+    hourly: hourlyList,
+    daily: dailyList,
+  );
+});
 
 final bitToolCurrencyRateProvider =
     FutureProvider.family<CurrencyRate?, ({String base, String quote})>((
-      ref,
-      arg,
-    ) async {
-      final module = ref.read(bitToolApiModuleProvider);
-      return await module.currency.getExchangeRate(
-        from: arg.base,
-        to: arg.quote,
-      );
-    });
+  ref,
+  arg,
+) async {
+  final module = ref.read(bitToolApiModuleProvider);
+  return await module.currency.getExchangeRate(
+    from: arg.base,
+    to: arg.quote,
+  );
+});

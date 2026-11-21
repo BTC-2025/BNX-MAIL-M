@@ -5,13 +5,14 @@ import 'package:flutter_bnx_mail/features/labels/presentation/manage_labels_scre
 import 'package:flutter_bnx_mail/core/widgets/create_label_dialog.dart';
 import 'package:flutter_bnx_mail/data/app_state_provider.dart';
 import 'package:flutter_bnx_mail/models/label_model.dart';
-import 'package:flutter_bnx_mail/core/widgets/sidebar.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('ManageLabelsScreen UI & Behavior Tests', () {
-    testWidgets('renders Header, System labels, Categories, and Labels cards', (tester) async {
+    testWidgets('renders Header, System labels, Categories, and Labels cards', (
+      tester,
+    ) async {
       final customLabels = [
         const LabelModel(id: '1', name: 'Innewacc', color: Color(0xFFEC4899)),
         const LabelModel(id: '2', name: 'iutyfgyg', color: Color(0xFF10B981)),
@@ -21,13 +22,11 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            customLabelsProvider.overrideWith((ref) => _MockCustomLabelsNotifier(ref, customLabels)),
-          ],
-          child: const MaterialApp(
-            home: Scaffold(
-              body: ManageLabelsScreen(),
+            customLabelsProvider.overrideWith(
+              (ref) => _MockCustomLabelsNotifier(ref, customLabels),
             ),
-          ),
+          ],
+          child: const MaterialApp(home: Scaffold(body: ManageLabelsScreen())),
         ),
       );
       await tester.pumpAndSettle();
@@ -35,7 +34,9 @@ void main() {
       // Check header
       expect(find.text('Label management'), findsOneWidget);
       expect(
-        find.text('Create, edit, remove, and manage how labels appear in your BNXmail.'),
+        find.text(
+          'Create, edit, remove, and manage how labels appear in your BNXmail.',
+        ),
         findsOneWidget,
       );
 
@@ -72,14 +73,12 @@ void main() {
       expect(find.text('Create new label'), findsOneWidget);
     });
 
-    testWidgets('CreateLabelDialog renders 10 color swatches and inputs', (tester) async {
+    testWidgets('CreateLabelDialog renders 10 color swatches and inputs', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         const ProviderScope(
-          child: MaterialApp(
-            home: Scaffold(
-              body: CreateLabelDialog(),
-            ),
-          ),
+          child: MaterialApp(home: Scaffold(body: CreateLabelDialog())),
         ),
       );
       await tester.pumpAndSettle();
@@ -93,26 +92,25 @@ void main() {
       expect(find.text('Create'), findsOneWidget);
     });
 
-    testWidgets('Toggling checkbox updates state and Save triggers without error', (tester) async {
-      await tester.pumpWidget(
-        const ProviderScope(
-          child: MaterialApp(
-            home: Scaffold(
-              body: ManageLabelsScreen(),
-            ),
+    testWidgets(
+      'Toggling checkbox updates state and Save triggers without error',
+      (tester) async {
+        await tester.pumpWidget(
+          const ProviderScope(
+            child: MaterialApp(home: Scaffold(body: ManageLabelsScreen())),
           ),
-        ),
-      );
-      await tester.pumpAndSettle();
+        );
+        await tester.pumpAndSettle();
 
-      // Find Save button in header
-      final saveBtn = find.widgetWithText(ElevatedButton, 'Save').first;
-      expect(saveBtn, findsOneWidget);
+        // Find Save button in header
+        final saveBtn = find.widgetWithText(ElevatedButton, 'Save').first;
+        expect(saveBtn, findsOneWidget);
 
-      await tester.tap(saveBtn);
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-    });
+        await tester.tap(saveBtn);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+      },
+    );
   });
 }
 
@@ -134,12 +132,21 @@ class _MockCustomLabelsNotifier extends CustomLabelsNotifier {
 
   @override
   Future<void> addLabel(String name, Color color) async {
-    state = [...state, LabelModel(id: name.toLowerCase(), name: name, color: color)];
+    state = [
+      ...state,
+      LabelModel(id: name.toLowerCase(), name: name, color: color),
+    ];
   }
 
   @override
   Future<void> editLabel(String id, String newName, Color newColor) async {
-    state = state.map((l) => l.id == id ? LabelModel(id: id, name: newName, color: newColor) : l).toList();
+    state = state
+        .map(
+          (l) => l.id == id
+              ? LabelModel(id: id, name: newName, color: newColor)
+              : l,
+        )
+        .toList();
   }
 
   @override
